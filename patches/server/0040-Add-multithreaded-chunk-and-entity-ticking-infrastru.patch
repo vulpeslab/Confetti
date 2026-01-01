@@ -156,10 +156,10 @@ index 0000000000000000000000000000000000000000..0e99c74bae8740c74ff9391a7ac705ee
 +
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
-index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b117ccc20f 100644
+index 9d27e54bf0a41e403102896b02f279adee109d49..adfa6e7eba7255edca8e5d272b631ae14b368cd3 100644
 --- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 +++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
-@@ -1,10 +1,16 @@
+@@ -1,10 +1,17 @@
  package com.vulpeslab.confetti.region;
  
 +import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
@@ -167,6 +167,7 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b1
 +import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
  import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.Mob;
  import net.minecraft.world.level.chunk.LevelChunk;
  
  import java.util.ArrayList;
@@ -176,18 +177,19 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b1
  import java.util.function.Consumer;
  
  public class LevelChunkRegion {
-@@ -12,6 +18,10 @@ public class LevelChunkRegion {
+@@ -12,6 +19,11 @@ public class LevelChunkRegion {
      private final ServerLevel level;
      private final RegionPos regionPos;
      private final List<LevelChunk> levelChunks = new ArrayList<>(RegionPos.REGION_SIZE * RegionPos.REGION_SIZE);
 +    private final IteratorSafeOrderedReferenceSet<Entity> tickingEntities = new IteratorSafeOrderedReferenceSet<>(); // Use IteratorSafeOrderedReferenceSet to maintain entity tick order
 +    private final Set<Entity> trackedEntities = new ObjectOpenHashSet<>(); // Entities being tracked by players
++    private final ObjectOpenHashSet<Mob> navigatingMobs = new ObjectOpenHashSet<>(); // Mobs with active navigation
 +    private final ConcurrentLinkedQueue<DelayedTask> scheduledTasks = new ConcurrentLinkedQueue<>(); // Writable tasks
 +    private final PrioritisedThreadedTaskQueue internalTasks = new PrioritisedThreadedTaskQueue(); // Read-only tasks
  
      public LevelChunkRegion(ServerLevel level, RegionPos regionPos) {
          this.level = level;
-@@ -28,10 +38,57 @@ public class LevelChunkRegion {
+@@ -28,10 +40,69 @@ public class LevelChunkRegion {
          }
      }
  
@@ -230,6 +232,18 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b1
 +        this.trackedEntities.forEach(action);
 +    }
 +
++    public synchronized void addNavigatingMob(Mob mob) {
++        navigatingMobs.add(mob);
++    }
++
++    public synchronized void removeNavigatingMob(Mob mob) {
++        navigatingMobs.remove(mob);
++    }
++
++    public synchronized void collectNavigatingMobs(List<Mob> collection) {
++        collection.addAll(this.navigatingMobs);
++    }
++
      public ServerLevel getLevel() {
          return level;
      }
@@ -245,7 +259,7 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b1
      public RegionPos getRegionPos() {
          return regionPos;
      }
-@@ -50,8 +107,27 @@ public class LevelChunkRegion {
+@@ -50,8 +121,28 @@ public class LevelChunkRegion {
          }
      }
  
@@ -269,25 +283,29 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b1
 +        return levelChunks.isEmpty()
 +                && tickingEntities.size() == 0
 +                && trackedEntities.isEmpty()
++                && navigatingMobs.isEmpty()
 +                && scheduledTasks.isEmpty()
 +                && internalTasks.getTotalTasksExecuted() >= internalTasks.getTotalTasksScheduled();
      }
  
  }
 diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
-index 23adb09e80fa6faaab61d8de57362ece3c76c57b..1efaf037912bbe2138db7cfb36fcbade922cbd73 100644
+index 23adb09e80fa6faaab61d8de57362ece3c76c57b..fe3e4754a3919dc25b2c8b3e70d6c171198ad6cf 100644
 --- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 +++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
-@@ -2,6 +2,8 @@ package com.vulpeslab.confetti.region;
+@@ -1,7 +1,11 @@
+ package com.vulpeslab.confetti.region;
  
  import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
++import it.unimi.dsi.fastutil.objects.ObjectArrayList;
  import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.Mob;
 +import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.chunk.LevelChunk;
  import com.vulpeslab.confetti.util.SimpleStampedLock;
  
-@@ -43,6 +45,92 @@ public class LevelChunkRegionMap {
+@@ -43,6 +47,126 @@ public class LevelChunkRegionMap {
          });
      }
  
@@ -366,7 +384,41 @@ index 23adb09e80fa6faaab61d8de57362ece3c76c57b..1efaf037912bbe2138db7cfb36fcbade
 +            entity.previousTrackedChunkPosRegion = newChunkPos;
 +            getOrCreate(fromRegion).removeTrackedEntity(entity);
 +            getOrCreate(toRegion).addTrackedEntity(entity);
++
++            if (entity instanceof Mob mob) {
++                getOrCreate(fromRegion).removeNavigatingMob(mob);
++                getOrCreate(toRegion).addNavigatingMob(mob);
++            }
 +        }
++    }
++
++    public void addNavigatingMob(Mob mob) {
++        getOrCreate(RegionPos.forChunk(mob.chunkPosition())).addNavigatingMob(mob);
++    }
++
++    public void removeNavigatingMob(Mob mob) {
++        getOrCreate(RegionPos.forChunk(mob.chunkPosition())).removeNavigatingMob(mob);
++    }
++
++    /**
++     * Collect navigating mobs from nearby regions for path recalculation.
++     * This collects mobs from a 1-region radius around the given region.
++     */
++    public List<Mob> collectRelevantNavigatingMobs(RegionPos regionPos) {
++        ObjectArrayList<Mob> navigatingMobs = new ObjectArrayList<>();
++
++        // Collect from the target region and all adjacent regions
++        for (int x = -1; x <= 1; x++) {
++            for (int z = -1; z <= 1; z++) {
++                RegionPos i = new RegionPos(regionPos.x + x, regionPos.z + z);
++                LevelChunkRegion region = get(i);
++                if (region != null) {
++                    region.collectNavigatingMobs(navigatingMobs);
++                }
++            }
++        }
++
++        return navigatingMobs;
 +    }
 +
 +    public void scheduleTask(RegionPos regionPos, Runnable task) {
@@ -841,7 +893,7 @@ index bb5a991066214e48630b07d70d5360032bb7cfc0..9ecb7128303c2b9d221bca81a393c9a9
  
      private void getFullChunk(long pos, Consumer<LevelChunk> chunkConsumer) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3eca135ac88221098c29ec5d1e8fadf5441a445e..07479ed2e2df54745e5d0a06a4bca0f835dc8a47 100644
+index 3eca135ac88221098c29ec5d1e8fadf5441a445e..a9d67dd15b1000972bfc04f5ad8b9bdb26c46680 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -30,6 +30,7 @@ import java.util.Objects;
@@ -852,6 +904,15 @@ index 3eca135ac88221098c29ec5d1e8fadf5441a445e..07479ed2e2df54745e5d0a06a4bca0f8
  import java.util.concurrent.Executor;
  import java.util.function.BooleanSupplier;
  import java.util.function.Function;
+@@ -207,7 +208,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+     private final LevelTicks<Fluid> fluidTicks;
+     private final PathTypeCache pathTypesByPosCache;
+     final Set<Mob> navigatingMobs;
+-    volatile boolean isUpdatingNavigations;
++    final ThreadLocal<Boolean> isUpdatingNavigations = ThreadLocal.withInitial(() -> false); // Confetti - make thread local
+     protected final Raids raids;
+     private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents;
+     private final List<BlockEventData> blockEventsToReschedule;
 @@ -223,6 +224,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
      private boolean forceTime; // Purpur
      private final RandomSequences randomSequences;
@@ -909,6 +970,42 @@ index 3eca135ac88221098c29ec5d1e8fadf5441a445e..07479ed2e2df54745e5d0a06a4bca0f8
      }
  
      @Override
+@@ -1754,7 +1762,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+ 
+     @Override
+     public void sendBlockUpdated(BlockPos pos, BlockState oldState, BlockState newState, int flags) {
+-        if (this.isUpdatingNavigations) {
++        if (this.isUpdatingNavigations.get()) { // Confetti - use thread local
+             String s = "recursive call to sendBlockUpdated";
+ 
+             Util.logAndPauseIfInIde("recursive call to sendBlockUpdated", new IllegalStateException("recursive call to sendBlockUpdated"));
+@@ -1768,7 +1776,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+ 
+         if (Shapes.joinIsNotEmpty(voxelshape, voxelshape1, BooleanOp.NOT_SAME)) {
+             List<PathNavigation> list = new ObjectArrayList();
+-            Iterator iterator = this.navigatingMobs.iterator();
++            Iterator iterator = tickingRegions.collectRelevantNavigatingMobs(com.vulpeslab.confetti.region.RegionPos.forChunk(new ChunkPos(pos))).iterator(); // Confetti - use region-based mobs
+ 
+             while (iterator.hasNext()) {
+                 // CraftBukkit start - fix SPIGOT-6362
+@@ -1791,7 +1799,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             }
+ 
+             try {
+-                this.isUpdatingNavigations = true;
++                this.isUpdatingNavigations.set(true); // Confetti - use thread local
+                 iterator = list.iterator();
+ 
+                 while (iterator.hasNext()) {
+@@ -1800,7 +1808,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+                     navigationabstract1.recomputePath();
+                 }
+             } finally {
+-                this.isUpdatingNavigations = false;
++                this.isUpdatingNavigations.set(false); // Confetti - use thread local
+             }
+ 
+         }
 @@ -2581,10 +2589,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
          public void onTickingStart(Entity entity) {
              if (entity instanceof net.minecraft.world.entity.Marker && !paperConfig().entities.markers.tick) return; // Paper - Configurable marker ticking
@@ -922,6 +1019,38 @@ index 3eca135ac88221098c29ec5d1e8fadf5441a445e..07479ed2e2df54745e5d0a06a4bca0f8
              // Paper start - Reset pearls when they stop being ticked
              if (paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && entity instanceof net.minecraft.world.entity.projectile.ThrownEnderpearl pearl) {
                  pearl.cachedOwner = null;
+@@ -2602,13 +2612,13 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             }
+ 
+             if (entity instanceof Mob entityinsentient) {
+-                if (false && ServerLevel.this.isUpdatingNavigations) { // Paper - Remove unnecessary onTrackingStart during navigation warning
++                if (false && ServerLevel.this.isUpdatingNavigations.get()) { // Paper - Remove unnecessary onTrackingStart during navigation warning // Confetti - use thread local
+                     String s = "onTrackingStart called during navigation iteration";
+ 
+                     Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
+                 }
+ 
+-                ServerLevel.this.navigatingMobs.add(entityinsentient);
++                ServerLevel.this.tickingRegions.addNavigatingMob(entityinsentient); // Confetti - use region-based navigating mobs
+             }
+ 
+             if (entity instanceof EnderDragon entityenderdragon) {
+@@ -2683,13 +2693,13 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             }
+ 
+             if (entity instanceof Mob entityinsentient) {
+-                if (false && ServerLevel.this.isUpdatingNavigations) { // Paper - Remove unnecessary onTrackingStart during navigation warning
++                if (false && ServerLevel.this.isUpdatingNavigations.get()) { // Paper - Remove unnecessary onTrackingStart during navigation warning // Confetti - use thread local
+                     String s = "onTrackingStart called during navigation iteration";
+ 
+                     Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
+                 }
+ 
+-                ServerLevel.this.navigatingMobs.remove(entityinsentient);
++                ServerLevel.this.tickingRegions.removeNavigatingMob(entityinsentient); // Confetti - use region-based navigating mobs
+             }
+ 
+             if (entity instanceof EnderDragon entityenderdragon) {
 @@ -2717,6 +2727,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
  
          public void onSectionChange(Entity entity) {
