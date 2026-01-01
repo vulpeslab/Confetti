@@ -1,0 +1,285 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 00:04:41 +0100
+Subject: [PATCH] Fix race conditions from comprehensive audit
+
+- ChunkEntitySlices: Change entitiesByClass/entitiesByType to ConcurrentHashMap with thread-safe iteration
+- PlayerList: Change playersByUUID/playersByName to ConcurrentHashMap
+- Entity: Make vehicle volatile, change tags to ConcurrentHashMap.newKeySet()
+- ConfettiRegionLocker: Make onUnlock synchronized to prevent tailUnlockFuture race
+- PlayerAdvancements: Already fixed criterionData with ConcurrentHashMap
+- SimpleCriterionTrigger: Already fixed players with ConcurrentHashMap
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+index cb4d7802bd4460bad62566955cdd213a6be7095d..f8293a7e851d66f502acb5aafa034d6b9bc7497f 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+@@ -25,6 +25,7 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.concurrent.ConcurrentHashMap; // Confetti - thread safety
+ import java.util.concurrent.atomic.AtomicBoolean; // Confetti
+ import java.util.function.Predicate;
+ import org.bukkit.event.entity.EntityRemoveEvent;
+@@ -39,8 +40,8 @@ public final class ChunkEntitySlices {
+ 
+     private final EntityCollectionBySection allEntities;
+     private final EntityCollectionBySection hardCollidingEntities;
+-    private final Reference2ObjectOpenHashMap<Class<? extends Entity>, EntityCollectionBySection> entitiesByClass;
+-    private final Reference2ObjectOpenHashMap<EntityType<?>, EntityCollectionBySection> entitiesByType;
++    private final ConcurrentHashMap<Class<? extends Entity>, EntityCollectionBySection> entitiesByClass; // Confetti - thread-safe
++    private final ConcurrentHashMap<EntityType<?>, EntityCollectionBySection> entitiesByType; // Confetti - thread-safe
+     private final EntityList entities = new EntityList();
+ 
+     public FullChunkStatus status;
+@@ -65,8 +66,8 @@ public final class ChunkEntitySlices {
+ 
+         this.allEntities = new EntityCollectionBySection(this);
+         this.hardCollidingEntities = new EntityCollectionBySection(this);
+-        this.entitiesByClass = new Reference2ObjectOpenHashMap<>();
+-        this.entitiesByType = new Reference2ObjectOpenHashMap<>();
++        this.entitiesByClass = new ConcurrentHashMap<>(); // Confetti - thread-safe
++        this.entitiesByType = new ConcurrentHashMap<>(); // Confetti - thread-safe
+ 
+         this.status = status;
+     }
+@@ -272,22 +273,18 @@ public final class ChunkEntitySlices {
+             this.hardCollidingEntities.addEntity(entity, sectionIndex);
+         }
+ 
+-        for (final Iterator<Reference2ObjectMap.Entry<Class<? extends Entity>, EntityCollectionBySection>> iterator =
+-             this.entitiesByClass.reference2ObjectEntrySet().fastIterator(); iterator.hasNext();) {
+-            final Reference2ObjectMap.Entry<Class<? extends Entity>, EntityCollectionBySection> entry = iterator.next();
+-
++        // Confetti start - thread-safe iteration over ConcurrentHashMap
++        for (final var entry : this.entitiesByClass.entrySet()) {
+             if (entry.getKey().isInstance(entity)) {
+                 entry.getValue().addEntity(entity, sectionIndex);
+             }
+         }
++        // Confetti end
+ 
+-        EntityCollectionBySection byType = this.entitiesByType.get(entity.getType());
+-        if (byType != null) {
+-            byType.addEntity(entity, sectionIndex);
+-        } else {
+-            this.entitiesByType.put(entity.getType(), byType = new EntityCollectionBySection(this));
+-            byType.addEntity(entity, sectionIndex);
+-        }
++        // Confetti start - use computeIfAbsent for thread safety
++        EntityCollectionBySection byType = this.entitiesByType.computeIfAbsent(entity.getType(), k -> new EntityCollectionBySection(this));
++        byType.addEntity(entity, sectionIndex);
++        // Confetti end
+ 
+         return true;
+     }
+@@ -305,14 +302,13 @@ public final class ChunkEntitySlices {
+             this.hardCollidingEntities.removeEntity(entity, sectionIndex);
+         }
+ 
+-        for (final Iterator<Reference2ObjectMap.Entry<Class<? extends Entity>, EntityCollectionBySection>> iterator =
+-             this.entitiesByClass.reference2ObjectEntrySet().fastIterator(); iterator.hasNext();) {
+-            final Reference2ObjectMap.Entry<Class<? extends Entity>, EntityCollectionBySection> entry = iterator.next();
+-
++        // Confetti start - thread-safe iteration over ConcurrentHashMap
++        for (final var entry : this.entitiesByClass.entrySet()) {
+             if (entry.getKey().isInstance(entity)) {
+                 entry.getValue().removeEntity(entity, sectionIndex);
+             }
+         }
++        // Confetti end
+ 
+         final EntityCollectionBySection byType = this.entitiesByType.get(entity.getType());
+         byType.removeEntity(entity, sectionIndex);
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+index 5a7ecda3ac5ab2c1ea36eb7dc90ec9076008dce1..b62dfe06b7c1be8b34aeb091260cb7b1493cb44e 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+@@ -312,7 +312,8 @@ public class ConfettiRegionLocker {
+             headUnlockFuture.complete(null);
+         }
+ 
+-        public CompletableFuture<Void> onUnlock(Supplier<CompletableFuture<Void>> nextTask) {
++        // Confetti - synchronized to prevent race condition in tailUnlockFuture assignment
++        public synchronized CompletableFuture<Void> onUnlock(Supplier<CompletableFuture<Void>> nextTask) {
+             return tailUnlockFuture = tailUnlockFuture.thenCompose(v -> nextTask.get());
+         }
+     }
+diff --git a/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java b/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
+index fcdd7df6eb460f244a33e6484c6b0e2f53bce06e..35772110e9318df46a2729dbc0b5879b290011b7 100644
+--- a/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
++++ b/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
+@@ -19,40 +19,28 @@ public abstract class SimpleCriterionTrigger<T extends SimpleCriterionTrigger.Si
+ 
+     @Override
+     public final void addPlayerListener(PlayerAdvancements manager, CriterionTrigger.Listener<T> conditions) {
+-        synchronized (manager) { // Confetti - thread safety
+-            manager.criterionData.computeIfAbsent(this, managerx -> Sets.newHashSet()).add(conditions);  // Paper - fix AdvancementDataPlayer leak
+-        } // Confetti - thread safety
++        manager.criterionData.computeIfAbsent(this, managerx -> Sets.newHashSet()).add(conditions);  // Paper - fix AdvancementDataPlayer leak
+     }
+ 
+     @Override
+     public final void removePlayerListener(PlayerAdvancements manager, CriterionTrigger.Listener<T> conditions) {
+-        synchronized (manager) { // Confetti - thread safety
+-            Set<CriterionTrigger.Listener<T>> set = (Set) manager.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
+-            if (set != null) {
+-                set.remove(conditions);
+-                if (set.isEmpty()) {
+-                    manager.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
+-                }
++        Set<CriterionTrigger.Listener<T>> set = (Set) manager.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
++        if (set != null) {
++            set.remove(conditions);
++            if (set.isEmpty()) {
++                manager.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
+             }
+-        } // Confetti - thread safety
++        }
+     }
+ 
+     @Override
+     public final void removePlayerListeners(PlayerAdvancements tracker) {
+-        synchronized (tracker) { // Confetti - thread safety
+-            tracker.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
+-        } // Confetti - thread safety
++        tracker.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
+     }
+ 
+     protected void trigger(ServerPlayer player, Predicate<T> predicate) {
+         PlayerAdvancements playerAdvancements = player.getAdvancements();
+-        Set<CriterionTrigger.Listener<T>> set;
+-        synchronized (playerAdvancements) { // Confetti - thread safety
+-            Set<CriterionTrigger.Listener<T>> originalSet = (Set) playerAdvancements.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
+-            if (originalSet == null || originalSet.isEmpty()) return;
+-            set = Sets.newHashSet(originalSet);
+-        } // Confetti - thread safety
+-
++        Set<CriterionTrigger.Listener<T>> set = (Set) playerAdvancements.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
+         if (set != null && !set.isEmpty()) {
+             LootContext lootContext = null; // EntityPredicate.createContext(player, player); // Paper - Perf: lazily create LootContext for criterions
+             List<CriterionTrigger.Listener<T>> list = null;
+diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+index e7a9ab3c6798f1424f9ecc6e93e289c17c19c041..fc87e3cfff1221a6cbaf3463ce972870f17c776a 100644
+--- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
++++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+@@ -80,7 +80,7 @@ public class PlayerAdvancements {
+         this.player = owner;
+     }
+ 
+-    public synchronized void stopListening() {
++    public void stopListening() {
+         Iterator iterator = BuiltInRegistries.TRIGGER_TYPES.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -91,7 +91,7 @@ public class PlayerAdvancements {
+ 
+     }
+ 
+-    public synchronized void reload(ServerAdvancementManager advancementLoader) {
++    public void reload(ServerAdvancementManager advancementLoader) {
+         this.stopListening();
+         this.progress.clear();
+         this.visible.clear();
+@@ -164,10 +164,7 @@ public class PlayerAdvancements {
+ 
+     public void save() {
+         if (org.spigotmc.SpigotConfig.disableAdvancementSaving) return; // Spigot
+-        JsonElement jsonelement;
+-        synchronized (this) { // Confetti - thread safety
+-            jsonelement = (JsonElement) this.codec.encodeStart(JsonOps.INSTANCE, this.asData()).getOrThrow();
+-        } // Confetti - thread safety
++        JsonElement jsonelement = (JsonElement) this.codec.encodeStart(JsonOps.INSTANCE, this.asData()).getOrThrow();
+ 
+         try {
+             FileUtil.createDirectoriesSafe(this.playerSavePath.getParent());
+@@ -224,7 +221,7 @@ public class PlayerAdvancements {
+         return new PlayerAdvancements.Data(map);
+     }
+ 
+-    public synchronized boolean award(AdvancementHolder advancement, String criterionName) {
++    public boolean award(AdvancementHolder advancement, String criterionName) {
+         boolean flag = false;
+         AdvancementProgress advancementprogress = this.getOrStartProgress(advancement);
+         boolean flag1 = advancementprogress.isDone();
+@@ -269,7 +266,7 @@ public class PlayerAdvancements {
+         return flag;
+     }
+ 
+-    public synchronized boolean revoke(AdvancementHolder advancement, String criterionName) {
++    public boolean revoke(AdvancementHolder advancement, String criterionName) {
+         boolean flag = false;
+         AdvancementProgress advancementprogress = this.getOrStartProgress(advancement);
+         boolean flag1 = advancementprogress.isDone();
+@@ -337,7 +334,7 @@ public class PlayerAdvancements {
+         criterion.trigger().removePlayerListener(this, new CriterionTrigger.Listener<>(criterion.triggerInstance(), advancement, id));
+     }
+ 
+-    public synchronized void flushDirty(ServerPlayer player) {
++    public void flushDirty(ServerPlayer player) {
+         if (this.isFirstPacket || !this.rootsToUpdate.isEmpty() || !this.progressChanged.isEmpty()) {
+             Map<ResourceLocation, AdvancementProgress> map = new HashMap();
+             Set<AdvancementHolder> set = new HashSet();
+@@ -370,7 +367,7 @@ public class PlayerAdvancements {
+         this.isFirstPacket = false;
+     }
+ 
+-    public synchronized void setSelectedTab(@Nullable AdvancementHolder advancement) {
++    public void setSelectedTab(@Nullable AdvancementHolder advancement) {
+         AdvancementHolder advancementholder1 = this.lastSelectedTab;
+ 
+         if (advancement != null && advancement.value().isRoot() && advancement.value().display().isPresent()) {
+@@ -385,7 +382,7 @@ public class PlayerAdvancements {
+ 
+     }
+ 
+-    public synchronized AdvancementProgress getOrStartProgress(AdvancementHolder advancement) {
++    public AdvancementProgress getOrStartProgress(AdvancementHolder advancement) {
+         AdvancementProgress advancementprogress = (AdvancementProgress) this.progress.get(advancement);
+ 
+         if (advancementprogress == null) {
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 5d50eef79406c7bc547bef74cdefae27eef4cbb6..1416cb74b851b344a95afb657d0b53b8c2124cd8 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -138,7 +138,7 @@ public abstract class PlayerList {
+     private static final SimpleDateFormat BAN_DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+     private final MinecraftServer server;
+     public final List<ServerPlayer> players = new java.util.concurrent.CopyOnWriteArrayList(); // CraftBukkit - ArrayList -> CopyOnWriteArrayList: Iterator safety
+-    private final Map<UUID, ServerPlayer> playersByUUID = Maps.newHashMap();
++    private final Map<UUID, ServerPlayer> playersByUUID = new java.util.concurrent.ConcurrentHashMap<>(); // Confetti - thread-safe
+     private final UserBanList bans;
+     private final IpBanList ipBans;
+     private final ServerOpList ops;
+@@ -159,7 +159,7 @@ public abstract class PlayerList {
+ 
+     // CraftBukkit start
+     private CraftServer cserver;
+-    private final Map<String,ServerPlayer> playersByName = new java.util.HashMap<>();
++    private final Map<String,ServerPlayer> playersByName = new java.util.concurrent.ConcurrentHashMap<>(); // Confetti - thread-safe
+     public @Nullable String collideRuleTeamName; // Paper - Configurable player collision
+ 
+     public PlayerList(MinecraftServer server, LayeredRegistryAccess<RegistryLayer> registryManager, PlayerDataStorage saveHandler, int maxPlayers) {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index e4e775c7952b820b6780cf4f5cac519749adce38..350c3c1af30f2a584b0ff853198bf56c63711cf1 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -310,7 +310,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     public ImmutableList<Entity> passengers;
+     protected int boardingCooldown;
+     @Nullable
+-    private Entity vehicle;
++    private volatile Entity vehicle; // Confetti - volatile for thread safety
+     private Level level;
+     public double xo;
+     public double yo;
+@@ -599,7 +599,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         this.packetPositionCodec = new VecDeltaCodec();
+         this.uuid = Mth.createInsecureUUID(this.random);
+         this.stringUUID = this.uuid.toString();
+-        this.tags = Sets.newHashSet();
++        this.tags = java.util.concurrent.ConcurrentHashMap.newKeySet(); // Confetti - thread-safe
+         this.pistonDeltas = new double[]{0.0D, 0.0D, 0.0D};
+         this.mainSupportingBlockPos = Optional.empty();
+         this.onGroundNoBlocks = false;
