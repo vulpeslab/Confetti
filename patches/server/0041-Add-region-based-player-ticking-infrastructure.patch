@@ -1,0 +1,246 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 20:58:07 +0100
+Subject: [PATCH] Add region-based player ticking infrastructure
+
+- Add player tracking in LevelChunkRegion and LevelChunkRegionMap
+- Create ConfettiPlayerTicker to tick player connections and chunk loaders
+- Hook player ticking into ConfettiChunkTicker._tickRegion()
+- Disable global RegionizedPlayerChunkLoader.tick() in favor of per-region
+- Make PlayerChunkLoaderData.update() and updateQueues() public
+- Add Connection.tick() guard to only tick on owning thread
+- Add player add/remove hooks in ServerLevel EntityCallbacks
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+index ab18bbf87dfc1455ed185a5152dad6d236565ecc..203efe5925828be0d69ac08f6c306d11d360a12e 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+@@ -299,6 +299,7 @@ public final class RegionizedPlayerChunkLoader {
+     }
+ 
+     public void tick() {
++        if (true) return; // Confetti - disabled, player chunk loader is ticked per-region in ConfettiPlayerTicker
+         TickThread.ensureTickThread("Cannot tick player chunk loader async");
+         long currTime = System.nanoTime();
+         for (final ServerPlayer player : new java.util.ArrayList<>(this.world.players())) {
+@@ -632,7 +633,7 @@ public final class RegionizedPlayerChunkLoader {
+             return true;
+         }
+ 
+-        void updateQueues(final long time) {
++        public void updateQueues(final long time) { // Confetti - make public
+             TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async");
+             if (this.removed) {
+                 throw new IllegalStateException("Ticking removed player chunk loader");
+@@ -900,7 +901,7 @@ public final class RegionizedPlayerChunkLoader {
+             );
+         }
+ 
+-        void update() {
++        public void update() { // Confetti - make public
+             TickThread.ensureTickThread(this.player, "Cannot update player asynchronously");
+             if (this.removed) {
+                 throw new IllegalStateException("Updating removed player chunk loader");
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+index adfa6e7eba7255edca8e5d272b631ae14b368cd3..45e6240e990c1b0dfba293f6e22220e339bc8b6e 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -2,8 +2,10 @@ package com.vulpeslab.confetti.region;
+ 
+ import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
+ import ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet;
++import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.Mob;
+ import net.minecraft.world.level.chunk.LevelChunk;
+@@ -22,6 +24,7 @@ public class LevelChunkRegion {
+     private final IteratorSafeOrderedReferenceSet<Entity> tickingEntities = new IteratorSafeOrderedReferenceSet<>(); // Use IteratorSafeOrderedReferenceSet to maintain entity tick order
+     private final Set<Entity> trackedEntities = new ObjectOpenHashSet<>(); // Entities being tracked by players
+     private final ObjectOpenHashSet<Mob> navigatingMobs = new ObjectOpenHashSet<>(); // Mobs with active navigation
++    private final ObjectOpenHashSet<ServerPlayer> players = new ObjectOpenHashSet<>(); // Players in this region
+     private final ConcurrentLinkedQueue<DelayedTask> scheduledTasks = new ConcurrentLinkedQueue<>(); // Writable tasks
+     private final PrioritisedThreadedTaskQueue internalTasks = new PrioritisedThreadedTaskQueue(); // Read-only tasks
+ 
+@@ -91,6 +94,22 @@ public class LevelChunkRegion {
+         collection.addAll(this.navigatingMobs);
+     }
+ 
++    public synchronized void addPlayer(ServerPlayer player) {
++        if (!this.players.add(player)) {
++            throw new IllegalStateException("Tried to add a player that was already in the region: " + player.getUUID());
++        }
++    }
++
++    public synchronized void removePlayer(ServerPlayer player) {
++        if (!this.players.remove(player)) {
++            throw new IllegalStateException("Tried to remove a player that wasn't in the region: " + player.getUUID());
++        }
++    }
++
++    public synchronized List<ServerPlayer> getPlayers() {
++        return this.players.isEmpty() ? List.of() : new ObjectArrayList<>(this.players);
++    }
++
+     public ServerLevel getLevel() {
+         return level;
+     }
+@@ -141,6 +160,7 @@ public class LevelChunkRegion {
+                 && tickingEntities.size() == 0
+                 && trackedEntities.isEmpty()
+                 && navigatingMobs.isEmpty()
++                && players.isEmpty()
+                 && scheduledTasks.isEmpty()
+                 && internalTasks.getTotalTasksExecuted() >= internalTasks.getTotalTasksScheduled();
+     }
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+index fe3e4754a3919dc25b2c8b3e70d6c171198ad6cf..cd337b4cd2e43c31ee977b864bf75002eb6fbc90 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -3,6 +3,7 @@ package com.vulpeslab.confetti.region;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.Mob;
+ import net.minecraft.world.level.ChunkPos;
+@@ -159,6 +160,36 @@ public class LevelChunkRegionMap {
+         return navigatingMobs;
+     }
+ 
++    public void addPlayer(ServerPlayer player) {
++        player.previousChunkPosRegion = player.chunkPosition();
++        getOrCreate(RegionPos.forChunk(player.chunkPosition())).addPlayer(player);
++    }
++
++    public void removePlayer(ServerPlayer player) {
++        if (player.previousChunkPosRegion == null) {
++            // Not tracked, try using current position
++            getOrCreate(RegionPos.forChunk(player.chunkPosition())).removePlayer(player);
++            return;
++        }
++        getOrCreate(RegionPos.forChunk(player.previousChunkPosRegion)).removePlayer(player);
++        player.previousChunkPosRegion = null;
++    }
++
++    public void movePlayer(ServerPlayer player) {
++        if (player.previousChunkPosRegion == null) {
++            // Not tracked yet, ignore
++            return;
++        }
++        RegionPos fromRegion = RegionPos.forChunk(player.previousChunkPosRegion);
++        RegionPos toRegion = RegionPos.forChunk(player.chunkPosition());
++
++        if (!fromRegion.equals(toRegion)) {
++            player.previousChunkPosRegion = player.chunkPosition();
++            getOrCreate(fromRegion).removePlayer(player);
++            getOrCreate(toRegion).addPlayer(player);
++        }
++    }
++
+     public void scheduleTask(RegionPos regionPos, Runnable task) {
+         getOrCreate(regionPos).scheduleTask(task, 0);
+     }
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+index 2afdabdff540e8beadc1b854283dfb1d5a00ebe4..b17fd41bdc55a10801b2d8ec92e85d79fcbbe9f7 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -74,6 +74,9 @@ public class ConfettiChunkTicker {
+             // Process entity tracking queue for this region
+             region.forEachTrackedEntity(ConfettiEntityTicker::processTrackQueue);
+ 
++            // Tick players in this region (connection and chunk loader)
++            region.getPlayers().forEach(ConfettiPlayerTicker::tickPlayer);
++
+             // Remove empty regions
+             if (region.isEmpty()) {
+                 level.tickingRegions.remove(region.getRegionPos());
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiPlayerTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiPlayerTicker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6d96736c6704d65ac731f2b977f23d6507d9ea15
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiPlayerTicker.java
+@@ -0,0 +1,20 @@
++package com.vulpeslab.confetti.threading;
++
++import ca.spottedleaf.moonrise.patches.chunk_system.player.RegionizedPlayerChunkLoader;
++import net.minecraft.server.level.ServerPlayer;
++
++public class ConfettiPlayerTicker {
++
++    public static void tickPlayer(ServerPlayer serverPlayer) {
++        // Tick player connection to process packets
++        serverPlayer.connection.connection.tick();
++
++        // Update player chunk loader
++        final RegionizedPlayerChunkLoader.PlayerChunkLoaderData loader = serverPlayer.moonrise$getChunkLoader();
++        if (loader != null) {
++            loader.update(); // Updates view distances and chunk queues
++            loader.updateQueues(System.nanoTime()); // Processes load/gen/send queues
++        }
++    }
++
++}
+diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
+index 768b70e04af572804d66aa5bf02af36c2ff38877..94bdf8a7803002da1bb570c20b6b80bcf9e364de 100644
+--- a/src/main/java/net/minecraft/network/Connection.java
++++ b/src/main/java/net/minecraft/network/Connection.java
+@@ -629,6 +629,13 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+     private static int currTick; // Paper - Buffer joins to world
+     private static int tickSecond; // Purpur
+     public void tick() {
++        // Confetti start - only tick player connections on their owning thread
++        if (this.packetListener instanceof net.minecraft.server.network.ServerGamePacketListenerImpl serverGamePacketListener) {
++            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverGamePacketListener.player)) {
++                return;
++            }
++        }
++        // Confetti end
+         this.flushQueue();
+         // Paper start - Buffer joins to world
+         if (Connection.currTick != net.minecraft.server.MinecraftServer.currentTick) {
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index a9d67dd15b1000972bfc04f5ad8b9bdb26c46680..5485eed98617a92fcbb03fd21ebb3b11c751789f 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -2609,6 +2609,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             if (entity instanceof ServerPlayer entityplayer) {
+                 ServerLevel.this.players.add(entityplayer);
+                 ServerLevel.this.updateSleepingPlayerList();
++                ServerLevel.this.tickingRegions.addPlayer(entityplayer); // Confetti - add player to region
+             }
+ 
+             if (entity instanceof Mob entityinsentient) {
+@@ -2688,6 +2689,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             // Spigot End
+             ServerLevel.this.getChunkSource().removeEntity(entity);
+             if (entity instanceof ServerPlayer entityplayer) {
++                ServerLevel.this.tickingRegions.removePlayer(entityplayer); // Confetti - remove player from region
+                 ServerLevel.this.players.remove(entityplayer);
+                 ServerLevel.this.updateSleepingPlayerList();
+             }
+@@ -2729,6 +2731,9 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             entity.updateDynamicGameEventListener(DynamicGameEventListener::move);
+             ServerLevel.this.tickingRegions.moveTickingEntity(entity); // Confetti - move entity between regions if needed
+             ServerLevel.this.tickingRegions.moveTrackedEntity(entity); // Confetti - move tracked entity between regions if needed
++            if (entity instanceof ServerPlayer serverPlayer) {
++                ServerLevel.this.tickingRegions.movePlayer(serverPlayer); // Confetti - move player between regions if needed
++            }
+         }
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 94b0c8dc2b3488c6086759bf115743c74d5fe02a..9631e0582f9b478c3a0b65bcb619b01fb1f638e2 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -255,6 +255,7 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+     private boolean respawnForced;
+     private float respawnAngle;
+     public boolean hasMaximumTrackerBypassPermission; // Confetti
++    public @Nullable net.minecraft.world.level.ChunkPos previousChunkPosRegion; // Confetti - player region tracking
+     private final TextFilter textFilter;
+     private boolean textFilteringEnabled;
+     private boolean allowsListing;
