@@ -156,35 +156,38 @@ index 0000000000000000000000000000000000000000..0e99c74bae8740c74ff9391a7ac705ee
 +
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
-index 9d27e54bf0a41e403102896b02f279adee109d49..07f6657736fb59e965cc7da9ef7e866711f6261c 100644
+index 9d27e54bf0a41e403102896b02f279adee109d49..4faa14268cd6c1d257153a1e66f3d8b117ccc20f 100644
 --- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 +++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
-@@ -1,10 +1,14 @@
+@@ -1,10 +1,16 @@
  package com.vulpeslab.confetti.region;
  
 +import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
 +import ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet;
++import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
  import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
  import net.minecraft.world.level.chunk.LevelChunk;
  
  import java.util.ArrayList;
  import java.util.List;
++import java.util.Set;
 +import java.util.concurrent.ConcurrentLinkedQueue;
  import java.util.function.Consumer;
  
  public class LevelChunkRegion {
-@@ -12,6 +16,9 @@ public class LevelChunkRegion {
+@@ -12,6 +18,10 @@ public class LevelChunkRegion {
      private final ServerLevel level;
      private final RegionPos regionPos;
      private final List<LevelChunk> levelChunks = new ArrayList<>(RegionPos.REGION_SIZE * RegionPos.REGION_SIZE);
 +    private final IteratorSafeOrderedReferenceSet<Entity> tickingEntities = new IteratorSafeOrderedReferenceSet<>(); // Use IteratorSafeOrderedReferenceSet to maintain entity tick order
++    private final Set<Entity> trackedEntities = new ObjectOpenHashSet<>(); // Entities being tracked by players
 +    private final ConcurrentLinkedQueue<DelayedTask> scheduledTasks = new ConcurrentLinkedQueue<>(); // Writable tasks
 +    private final PrioritisedThreadedTaskQueue internalTasks = new PrioritisedThreadedTaskQueue(); // Read-only tasks
  
      public LevelChunkRegion(ServerLevel level, RegionPos regionPos) {
          this.level = level;
-@@ -28,10 +35,41 @@ public class LevelChunkRegion {
+@@ -28,10 +38,57 @@ public class LevelChunkRegion {
          }
      }
  
@@ -211,6 +214,22 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..07f6657736fb59e965cc7da9ef7e8667
 +        }
 +    }
 +
++    public synchronized void addTrackedEntity(Entity entity) {
++        if (!this.trackedEntities.add(entity)) {
++            throw new IllegalStateException("Tried to add an entity that was already tracked: " + entity);
++        }
++    }
++
++    public synchronized void removeTrackedEntity(Entity entity) {
++        if (!this.trackedEntities.remove(entity)) {
++            throw new IllegalStateException("Tried to remove an entity that wasn't tracked: " + entity);
++        }
++    }
++
++    public synchronized void forEachTrackedEntity(Consumer<Entity> action) {
++        this.trackedEntities.forEach(action);
++    }
++
      public ServerLevel getLevel() {
          return level;
      }
@@ -226,7 +245,7 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..07f6657736fb59e965cc7da9ef7e8667
      public RegionPos getRegionPos() {
          return regionPos;
      }
-@@ -50,8 +88,26 @@ public class LevelChunkRegion {
+@@ -50,8 +107,27 @@ public class LevelChunkRegion {
          }
      }
  
@@ -249,13 +268,14 @@ index 9d27e54bf0a41e403102896b02f279adee109d49..07f6657736fb59e965cc7da9ef7e8667
 -        return levelChunks.isEmpty();
 +        return levelChunks.isEmpty()
 +                && tickingEntities.size() == 0
++                && trackedEntities.isEmpty()
 +                && scheduledTasks.isEmpty()
 +                && internalTasks.getTotalTasksExecuted() >= internalTasks.getTotalTasksScheduled();
      }
  
  }
 diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
-index 23adb09e80fa6faaab61d8de57362ece3c76c57b..ec0ac3243b6e20e64ee1cd537c7e9e59a94d7270 100644
+index 23adb09e80fa6faaab61d8de57362ece3c76c57b..1efaf037912bbe2138db7cfb36fcbade922cbd73 100644
 --- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 +++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 @@ -2,6 +2,8 @@ package com.vulpeslab.confetti.region;
@@ -267,7 +287,7 @@ index 23adb09e80fa6faaab61d8de57362ece3c76c57b..ec0ac3243b6e20e64ee1cd537c7e9e59
  import net.minecraft.world.level.chunk.LevelChunk;
  import com.vulpeslab.confetti.util.SimpleStampedLock;
  
-@@ -43,6 +45,57 @@ public class LevelChunkRegionMap {
+@@ -43,6 +45,92 @@ public class LevelChunkRegionMap {
          });
      }
  
@@ -314,6 +334,41 @@ index 23adb09e80fa6faaab61d8de57362ece3c76c57b..ec0ac3243b6e20e64ee1cd537c7e9e59
 +        }
 +    }
 +
++    public void addTrackedEntity(Entity entity) {
++        if (entity.previousTrackedChunkPosRegion != null) {
++            throw new IllegalStateException("Entity is already tracked " + entity);
++        }
++
++        entity.previousTrackedChunkPosRegion = entity.chunkPosition();
++        getOrCreate(RegionPos.forChunk(entity.chunkPosition())).addTrackedEntity(entity);
++    }
++
++    public void removeTrackedEntity(Entity entity) {
++        if (entity.previousTrackedChunkPosRegion == null) {
++            throw new IllegalStateException("Entity is not being tracked " + entity);
++        }
++
++        getOrCreate(RegionPos.forChunk(entity.previousTrackedChunkPosRegion)).removeTrackedEntity(entity);
++        entity.previousTrackedChunkPosRegion = null;
++    }
++
++    public void moveTrackedEntity(Entity entity) {
++        if (entity.previousTrackedChunkPosRegion == null) {
++            // Not tracked, ignore
++            return;
++        }
++
++        ChunkPos newChunkPos = entity.chunkPosition();
++        RegionPos fromRegion = RegionPos.forChunk(entity.previousTrackedChunkPosRegion);
++        RegionPos toRegion = RegionPos.forChunk(newChunkPos);
++
++        if (!fromRegion.equals(toRegion)) {
++            entity.previousTrackedChunkPosRegion = newChunkPos;
++            getOrCreate(fromRegion).removeTrackedEntity(entity);
++            getOrCreate(toRegion).addTrackedEntity(entity);
++        }
++    }
++
 +    public void scheduleTask(RegionPos regionPos, Runnable task) {
 +        getOrCreate(regionPos).scheduleTask(task, 0);
 +    }
@@ -327,10 +382,10 @@ index 23adb09e80fa6faaab61d8de57362ece3c76c57b..ec0ac3243b6e20e64ee1cd537c7e9e59
      }
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3a6858bf94afe8905cda052409cabcc2af470892
+index 0000000000000000000000000000000000000000..2afdabdff540e8beadc1b854283dfb1d5a00ebe4
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,110 @@
 +package com.vulpeslab.confetti.threading;
 +
 +import com.mojang.logging.LogUtils;
@@ -404,6 +459,9 @@ index 0000000000000000000000000000000000000000..3a6858bf94afe8905cda052409cabcc2
 +            // Tick entities in this region
 +            region.forEachTickingEntity(ConfettiEntityTicker::tickEntity);
 +
++            // Process entity tracking queue for this region
++            region.forEachTrackedEntity(ConfettiEntityTicker::processTrackQueue);
++
 +            // Remove empty regions
 +            if (region.isEmpty()) {
 +                level.tickingRegions.remove(region.getRegionPos());
@@ -440,14 +498,17 @@ index 0000000000000000000000000000000000000000..3a6858bf94afe8905cda052409cabcc2
 +
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..01941a2610559409ddf052253e455d997001aaf1
+index 0000000000000000000000000000000000000000..df06ba01129c228ec58b174e98ed2e17a6771e7c
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,45 @@
 +package com.vulpeslab.confetti.threading;
 +
++import net.minecraft.server.level.ChunkMap;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++
++import java.util.Objects;
 +
 +public class ConfettiEntityTicker {
 +
@@ -473,6 +534,16 @@ index 0000000000000000000000000000000000000000..01941a2610559409ddf052253e455d99
 +                }
 +            }
 +        }
++    }
++
++    public static void processTrackQueue(Entity entity) {
++        ChunkMap.TrackedEntity tracker = ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerEntity) entity).moonrise$getTrackedEntity();
++        if (tracker == null) {
++            return;
++        }
++        ca.spottedleaf.moonrise.common.misc.NearbyPlayers nearbyPlayers = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel) entity.level()).moonrise$getNearbyPlayers();
++        ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerTrackedEntity) tracker).moonrise$tick(nearbyPlayers.getChunk(entity.chunkPosition()));
++        tracker.serverEntity.sendChanges();
 +    }
 +
 +}
@@ -530,6 +601,51 @@ index 1f87a1e4621a9dc3614111821b9439326b2a302a..ca1f933d7d7efc9eca76eeb84a0e9017
          //this.profiler.popPush("connection"); // Purpur
          // MinecraftTimings.connectionTimer.startTiming(); // Spigot // Paper // Purpur
          this.getConnection().tick();
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..ae8bd00ab97ac095254035a58950f39880343c44 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -880,6 +880,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                     }
+                     ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerEntity)entity).moonrise$setTrackedEntity(playerchunkmap_entitytracker);
+                     // Paper end - optimise entity tracker
++                    this.level.tickingRegions.addTrackedEntity(entity); // Confetti - add to tracked entities
+                     playerchunkmap_entitytracker.updatePlayers(this.level.players());
+                     if (entity instanceof ServerPlayer) {
+                         ServerPlayer entityplayer = (ServerPlayer) entity;
+@@ -917,6 +918,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) this.entityMap.remove(entity.getId());
+ 
+         if (playerchunkmap_entitytracker1 != null) {
++            this.level.tickingRegions.removeTrackedEntity(entity); // Confetti - remove from tracked entities (only if it existed)
+             playerchunkmap_entitytracker1.broadcastRemoved();
+         }
+ 
+@@ -956,6 +958,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+     // Paper end - optimise entity tracker
+ 
+     protected void tick() {
++        // Confetti start - handle entity tracking per-region
++        if (true) {
++            // Process unloads only - entity tracking is done per-region in ConfettiChunkTicker
++            final ca.spottedleaf.moonrise.patches.chunk_system.level.entity.server.ServerEntityLookup entityLookup = (ca.spottedleaf.moonrise.patches.chunk_system.level.entity.server.ServerEntityLookup)((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getEntityLookup();
++            final ca.spottedleaf.moonrise.common.list.ReferenceList<net.minecraft.world.entity.Entity> unloadedEntities = entityLookup.trackerUnloadedEntities;
++            final Entity[] unloadedEntitiesRaw = java.util.Arrays.copyOf(unloadedEntities.getRawDataUnchecked(), unloadedEntities.size());
++            unloadedEntities.clear();
++
++            for (final Entity entity : unloadedEntitiesRaw) {
++                final ChunkMap.TrackedEntity tracker = ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerEntity)entity).moonrise$getTrackedEntity();
++                if (tracker == null) {
++                    continue;
++                }
++                ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerTrackedEntity)tracker).moonrise$clearPlayers();
++            }
++            return;
++        }
++        // Confetti end - handle entity tracking per-region
+         // Paper start - optimise entity tracker
+         if (true) {
+             this.newTrackerTick();
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 index bb5a991066214e48630b07d70d5360032bb7cfc0..9ecb7128303c2b9d221bca81a393c9a98c2f7e79 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
@@ -725,7 +841,7 @@ index bb5a991066214e48630b07d70d5360032bb7cfc0..9ecb7128303c2b9d221bca81a393c9a9
  
      private void getFullChunk(long pos, Consumer<LevelChunk> chunkConsumer) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3eca135ac88221098c29ec5d1e8fadf5441a445e..b76dd956350c3fd98992345599aebfd8365b0cf1 100644
+index 3eca135ac88221098c29ec5d1e8fadf5441a445e..07479ed2e2df54745e5d0a06a4bca0f835dc8a47 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -30,6 +30,7 @@ import java.util.Objects;
@@ -806,25 +922,29 @@ index 3eca135ac88221098c29ec5d1e8fadf5441a445e..b76dd956350c3fd98992345599aebfd8
              // Paper start - Reset pearls when they stop being ticked
              if (paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && entity instanceof net.minecraft.world.entity.projectile.ThrownEnderpearl pearl) {
                  pearl.cachedOwner = null;
-@@ -2717,6 +2727,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+@@ -2717,6 +2727,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
  
          public void onSectionChange(Entity entity) {
              entity.updateDynamicGameEventListener(DynamicGameEventListener::move);
 +            ServerLevel.this.tickingRegions.moveTickingEntity(entity); // Confetti - move entity between regions if needed
++            ServerLevel.this.tickingRegions.moveTrackedEntity(entity); // Confetti - move tracked entity between regions if needed
          }
      }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 33b56febc5c0cceb01cabb030b97654d7a4d6bcd..77e2972a5b7275601d5aa9a6a278b6fd8355d450 100644
+index 33b56febc5c0cceb01cabb030b97654d7a4d6bcd..6b9901d28cd250dbfd38d537ca0f1298216beb52 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -555,6 +555,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -555,6 +555,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          }
      }
      // Paper end - optimise entity tracker
 +    // Confetti start - entity ticking region tracking
 +    public @Nullable net.minecraft.world.level.ChunkPos previousTickingChunkPosRegion;
 +    // Confetti end - entity ticking region tracking
++    // Confetti start - entity tracked region tracking
++    public @Nullable net.minecraft.world.level.ChunkPos previousTrackedChunkPosRegion;
++    // Confetti end - entity tracked region tracking
      // Purpur start
      public boolean canSaveToDisk() {
          return true;
