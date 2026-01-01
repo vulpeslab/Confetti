@@ -10,6 +10,7 @@ Subject: [PATCH] Add multithreaded chunk and entity ticking infrastructure
 - Create DelayedTask for scheduled task support
 - Create Confetti utility class with runSync/ensureSync APIs
 - Hook ChunkSystem to track ticking chunks in tickingRegions
+- Hook EntityCallbacks to track ticking entities in tickingRegions
 - Modify ServerChunkCache to use ConfettiChunkTicker
 - Modify ServerLevel to compose chunk tick futures
 - Modify MinecraftServer to wait for all world tick futures
@@ -724,7 +725,7 @@ index bb5a991066214e48630b07d70d5360032bb7cfc0..9ecb7128303c2b9d221bca81a393c9a9
  
      private void getFullChunk(long pos, Consumer<LevelChunk> chunkConsumer) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3eca135ac88221098c29ec5d1e8fadf5441a445e..c9fcee5bbc3f9c2f9d4efc9fac53b1c24a451f12 100644
+index 3eca135ac88221098c29ec5d1e8fadf5441a445e..b76dd956350c3fd98992345599aebfd8365b0cf1 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -30,6 +30,7 @@ import java.util.Objects;
@@ -792,6 +793,27 @@ index 3eca135ac88221098c29ec5d1e8fadf5441a445e..c9fcee5bbc3f9c2f9d4efc9fac53b1c2
      }
  
      @Override
+@@ -2581,10 +2589,12 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         public void onTickingStart(Entity entity) {
+             if (entity instanceof net.minecraft.world.entity.Marker && !paperConfig().entities.markers.tick) return; // Paper - Configurable marker ticking
+             ServerLevel.this.entityTickList.add(entity);
++            ServerLevel.this.tickingRegions.addTickingEntity(entity); // Confetti - add entity to region
+         }
+ 
+         public void onTickingEnd(Entity entity) {
+             ServerLevel.this.entityTickList.remove(entity);
++            ServerLevel.this.tickingRegions.removeTickingEntity(entity); // Confetti - remove entity from region
+             // Paper start - Reset pearls when they stop being ticked
+             if (paperConfig().fixes.disableUnloadedChunkEnderpearlExploit && entity instanceof net.minecraft.world.entity.projectile.ThrownEnderpearl pearl) {
+                 pearl.cachedOwner = null;
+@@ -2717,6 +2727,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+ 
+         public void onSectionChange(Entity entity) {
+             entity.updateDynamicGameEventListener(DynamicGameEventListener::move);
++            ServerLevel.this.tickingRegions.moveTickingEntity(entity); // Confetti - move entity between regions if needed
+         }
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
 index 33b56febc5c0cceb01cabb030b97654d7a4d6bcd..77e2972a5b7275601d5aa9a6a278b6fd8355d450 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
