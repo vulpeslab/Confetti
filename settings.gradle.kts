@@ -9,9 +9,9 @@ pluginManagement {
     }
 }
 
-rootProject.name = "shreddedpaper"
+rootProject.name = "confetti"
 
-for (name in listOf("shreddedpaper-api", "shreddedpaper-server")) {
+for (name in listOf("confetti-api", "confetti-server")) {
     val projName = name.toLowerCase(Locale.ENGLISH)
     include(projName)
     findProject(":$projName")!!.projectDir = file(name)

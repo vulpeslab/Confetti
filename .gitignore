@@ -46,11 +46,11 @@ out/
 # other stuff
 run/
 
-shreddedpaper-server
-shreddedpaper-api
+confetti-server
+confetti-api
 paper-api-generator
 
 *.sh
-shreddedpaper.jar
+confetti.jar
 
 !gradle/wrapper/gradle-wrapper.jar

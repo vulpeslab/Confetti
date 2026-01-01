@@ -23,8 +23,8 @@ index f180001493146ef0d54079a8b2b47ad7decc24ca..775666dbf839d184bd50b0cb91a79658
      private final MinecraftServer server;
 -    private final Set<Objective> trackedObjectives = Sets.newHashSet();
 -    private final List<Runnable> dirtyListeners = Lists.newArrayList();
-+    private final Set<Objective> trackedObjectives = ConcurrentHashMap.newKeySet(); // ShreddedPaper
-+    private final List<Runnable> dirtyListeners = new CopyOnWriteArrayList<>(); // ShreddedPaper - rarely modified, thus CopyOnWriteArrayList suffices
++    private final Set<Objective> trackedObjectives = ConcurrentHashMap.newKeySet(); // Confetti
++    private final List<Runnable> dirtyListeners = new CopyOnWriteArrayList<>(); // Confetti - rarely modified, thus CopyOnWriteArrayList suffices
  
      public ServerScoreboard(MinecraftServer server) {
          this.server = server;
@@ -45,7 +45,7 @@ index 9464054912e19fc78dd965b71fce20a18564b351..0304ebb48563f4e337855eb091b2c1a8
      private final Scoreboard scoreboard;
      private final String name;
 -    private final Set<String> players = Sets.newHashSet();
-+    private final Set<String> players = ConcurrentHashMap.newKeySet(); // ShreddedPaper
++    private final Set<String> players = ConcurrentHashMap.newKeySet(); // Confetti
      private Component displayName;
      private Component playerPrefix = CommonComponents.EMPTY;
      private Component playerSuffix = CommonComponents.EMPTY;
@@ -68,14 +68,14 @@ index 121b57ec018bffc05904e7596e0963e2bb545dc1..2af1dcad557607800e3742fd28668854
 -    private final Object2ObjectMap<String, Objective> objectivesByName = new Object2ObjectOpenHashMap<>(16, 0.5F);
 -    private final Reference2ObjectMap<ObjectiveCriteria, List<Objective>> objectivesByCriteria = new Reference2ObjectOpenHashMap<>();
 -    private final Map<String, PlayerScores> playerScores = new Object2ObjectOpenHashMap<>(16, 0.5F);
-+    private final Map<String, Objective> objectivesByName = new ConcurrentHashMap<>(); // ShreddedPaper
-+    private final Map<ObjectiveCriteria, List<Objective>> objectivesByCriteria = new ConcurrentHashMap<>(); // ShreddedPaper
-+    private final Map<String, PlayerScores> playerScores = new ConcurrentHashMap<>(); // ShreddedPaper
++    private final Map<String, Objective> objectivesByName = new ConcurrentHashMap<>(); // Confetti
++    private final Map<ObjectiveCriteria, List<Objective>> objectivesByCriteria = new ConcurrentHashMap<>(); // Confetti
++    private final Map<String, PlayerScores> playerScores = new ConcurrentHashMap<>(); // Confetti
      private final Map<DisplaySlot, Objective> displayObjectives = new EnumMap<>(DisplaySlot.class);
 -    private final Object2ObjectMap<String, PlayerTeam> teamsByName = new Object2ObjectOpenHashMap<>();
 -    private final Object2ObjectMap<String, PlayerTeam> teamsByPlayer = new Object2ObjectOpenHashMap<>();
-+    private final Map<String, PlayerTeam> teamsByName = new ConcurrentHashMap<>(); // ShreddedPaper
-+    private final Map<String, PlayerTeam> teamsByPlayer = new ConcurrentHashMap<>(); // ShreddedPaper
++    private final Map<String, PlayerTeam> teamsByName = new ConcurrentHashMap<>(); // Confetti
++    private final Map<String, PlayerTeam> teamsByPlayer = new ConcurrentHashMap<>(); // Confetti
  
      @Nullable
      public Objective getObjective(@Nullable String name) {
@@ -84,7 +84,7 @@ index 121b57ec018bffc05904e7596e0963e2bb545dc1..2af1dcad557607800e3742fd28668854
  
              @Override
 -            public void set(int score) {
-+            public void set(int newScoreValue) { // ShreddedPaper compile error - rename to newScoreValue
++            public void set(int newScoreValue) { // Confetti compile error - rename to newScoreValue
                  if (!bl) {
                      throw new IllegalStateException("Cannot modify read-only score");
                  } else {
@@ -94,8 +94,8 @@ index 121b57ec018bffc05904e7596e0963e2bb545dc1..2af1dcad557607800e3742fd28668854
  
 -                    if (score != score.value()) {
 -                        score.value(score);
-+                    if (newScoreValue != score.value()) { // ShreddedPaper compile error - rename to newScoreValue
-+                        score.value(newScoreValue); // ShreddedPaper compile error - rename to newScoreValue
++                    if (newScoreValue != score.value()) { // Confetti compile error - rename to newScoreValue
++                        score.value(newScoreValue); // Confetti compile error - rename to newScoreValue
                          bl = true;
                      }
  
@@ -104,7 +104,7 @@ index 121b57ec018bffc05904e7596e0963e2bb545dc1..2af1dcad557607800e3742fd28668854
      }
  
 -    public void setDisplayObjective(DisplaySlot slot, @Nullable Objective objective) {
-+    public synchronized void setDisplayObjective(DisplaySlot slot, @Nullable Objective objective) { // ShreddedPaper
++    public synchronized void setDisplayObjective(DisplaySlot slot, @Nullable Objective objective) { // Confetti
          this.displayObjectives.put(slot, objective);
      }
  
@@ -112,7 +112,7 @@ index 121b57ec018bffc05904e7596e0963e2bb545dc1..2af1dcad557607800e3742fd28668854
  
      @Nullable
      public PlayerTeam getPlayerTeam(String name) {
-+        if (name == null) return null; // ShreddedPaper
++        if (name == null) return null; // Confetti
          return this.teamsByName.get(name);
      }
  

@@ -15,7 +15,7 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..75370e6fe7894d4d33997ed872d022fb
 +import java.util.concurrent.CompletableFuture;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
 +import io.papermc.paper.util.TickThread;
  import net.minecraft.commands.CommandSourceStack;
  import net.minecraft.commands.arguments.EntityAnchorArgument;
@@ -32,8 +32,8 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..75370e6fe7894d4d33997ed872d022fb
  import org.bukkit.craftbukkit.CraftWorld;
  import org.bukkit.event.entity.EntityTeleportEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  // CraftBukkit end
  
  public class TeleportCommand {
@@ -42,15 +42,15 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..75370e6fe7894d4d33997ed872d022fb
  
              // CraftBukkit start - Teleport event
 -            boolean result;
-+            // ShreddedPaper start - Run teleports on the correct thread
++            // Confetti start - Run teleports on the correct thread
 +            CompletableFuture<Boolean> result = new CompletableFuture<>();
              if (target instanceof ServerPlayer player) {
 -                result = player.teleportTo(world, x, y, z, movementFlags, f2, f3, PlayerTeleportEvent.TeleportCause.COMMAND);
 +                ChunkPos toChunkPos = new ChunkPos(new BlockPos((int) x, (int) y, (int) z));
-+                ShreddedPaper.ensureSync(target, world, toChunkPos, () -> {
++                Confetti.ensureSync(target, world, toChunkPos, () -> {
 +                    result.complete(player.teleportTo(world, x, y, z, movementFlags, f2, f3, PlayerTeleportEvent.TeleportCause.COMMAND));
 +                });
-+                // ShreddedPaper end - Run teleports on the correct thread
++                // Confetti end - Run teleports on the correct thread
              } else {
                  Location to = new Location(world.getWorld(), x, y, z, f2, f3);
                  EntityTeleportEvent event = new EntityTeleportEvent(target.getBukkitEntity(), target.getBukkitEntity().getLocation(), to);
@@ -66,7 +66,7 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..75370e6fe7894d4d33997ed872d022fb
 -                world = ((CraftWorld) to.getWorld()).getHandle();
 -
 -                result = target.teleportTo(world, x, y, z, movementFlags, f2, f3);
-+                // ShreddedPaper start - Run teleports on the correct thread
++                // Confetti start - Run teleports on the correct thread
 +                double finalX = to.getX();
 +                double finalY = to.getY();
 +                double finalZ = to.getZ();
@@ -75,15 +75,15 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..75370e6fe7894d4d33997ed872d022fb
 +                ServerLevel finalWorld = ((CraftWorld) to.getWorld()).getHandle();
 +
 +                ChunkPos toChunkPos = new ChunkPos(new BlockPos((int) finalX, (int) finalY, (int) finalZ));
-+                ShreddedPaper.ensureSync(target, finalWorld, toChunkPos, () -> {
++                Confetti.ensureSync(target, finalWorld, toChunkPos, () -> {
 +                    result.complete(target.teleportTo(finalWorld, finalX, finalY, finalZ, movementFlags, finalF2, finalF3));
 +                });
-+                // ShreddedPaper end - Run teleports on the correct thread
++                // Confetti end - Run teleports on the correct thread
              }
  
 -            if (result) {
-+            result.thenAccept(success -> { // ShreddedPaper
-+                if (!success) return; // ShreddedPaper
++            result.thenAccept(success -> { // Confetti
++                if (!success) return; // Confetti
 +
                  // CraftBukkit end
                  if (facingLocation != null) {
@@ -94,7 +94,7 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..75370e6fe7894d4d33997ed872d022fb
                  }
 -
 -            }
-+            }); // ShreddedPaper
++            }); // Confetti
          }
      }
  
@@ -115,7 +115,7 @@ index 6542c67e753245cd131de872c28862f83e7ff2f3..073743301c2e70fcd148c33e97be2a30
              ServerEntity.removedPassengers(list, this.lastPassengers).forEach((entity) -> {
                  if (entity instanceof ServerPlayer entityplayer) {
 -                    entityplayer.connection.teleport(entityplayer.getX(), entityplayer.getY(), entityplayer.getZ(), entityplayer.getYRot(), entityplayer.getXRot());
-+                    entityplayer.getBukkitEntity().teleportAsync(new Location(entityplayer.getBukkitEntity().getWorld(), entityplayer.getX(), entityplayer.getY(), entityplayer.getZ(), entityplayer.getYRot(), entityplayer.getXRot())); // ShreddedPaper - teleport async
++                    entityplayer.getBukkitEntity().teleportAsync(new Location(entityplayer.getBukkitEntity().getWorld(), entityplayer.getX(), entityplayer.getY(), entityplayer.getZ(), entityplayer.getYRot(), entityplayer.getXRot())); // Confetti - teleport async
                  }
  
              });
@@ -129,13 +129,13 @@ index ca36526379158b027b3ccebb78c0a0f4978a2c40..509601a62a2bcbaefb7aed6856a4076e
              if (entity.isAlive()) {
 -                this.absMoveTo(entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot());
 -                this.serverLevel().getChunkSource().move(this);
-+                // ShreddedPaper start - ensure sync
++                // Confetti start - ensure sync
 +                final Vec3 toPosition = entity.position(); // The entity's position could change once the ensureSync method is called
-+                ShreddedPaper.ensureSync(this, (ServerLevel) entity.level(), entity.chunkPosition(), () -> {
++                Confetti.ensureSync(this, (ServerLevel) entity.level(), entity.chunkPosition(), () -> {
 +                    this.absMoveTo(toPosition.x(), toPosition.y(), toPosition.z(), entity.getYRot(), entity.getXRot());
 +                    this.serverLevel().getChunkSource().move(this);
 +                });
-+                // ShreddedPaper end - ensure sync
++                // Confetti end - ensure sync
                  if (this.wantsToStopRiding()) {
                      this.setCamera(this);
                  }
@@ -143,8 +143,8 @@ index ca36526379158b027b3ccebb78c0a0f4978a2c40..509601a62a2bcbaefb7aed6856a4076e
      }
  
      public boolean teleportTo(ServerLevel worldserver, double d0, double d1, double d2, Set<RelativeMovement> set, float f, float f1, TeleportCause cause) {
-+        TickThread.ensureTickThread(this, "Cannot teleport player async"); // ShreddedPaper
-+        TickThread.ensureTickThread(worldserver, d0, d2, "Cannot teleport player to async destination"); // ShreddedPaper
++        TickThread.ensureTickThread(this, "Cannot teleport player async"); // Confetti
++        TickThread.ensureTickThread(worldserver, d0, d2, "Cannot teleport player to async destination"); // Confetti
          // CraftBukkit end
          ChunkPos chunkcoordintpair = new ChunkPos(BlockPos.containing(d0, d1, d2));
  
@@ -155,7 +155,7 @@ index ca7895a57139352d2f1c522dc7b64b62dc679c4c..6189ba831a32dd61e32d52f61301ae01
 @@ -8,6 +8,7 @@ import com.mojang.brigadier.StringReader;
  import com.mojang.brigadier.suggestion.Suggestions;
  import com.mojang.logging.LogUtils;
- import io.multipaper.shreddedpaper.ShreddedPaper;
+ import com.vulpeslab.confetti.Confetti;
 +import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap.Entry;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
@@ -164,12 +164,12 @@ index ca7895a57139352d2f1c522dc7b64b62dc679c4c..6189ba831a32dd61e32d52f61301ae01
                  }
                  // Paper end - Prevent moving into unloaded chunks
  
-+                // ShreddedPaper start - Check we own the destination location
++                // Confetti start - Check we own the destination location
 +                if (!TickThread.isTickThreadFor(worldserver, new Vec3(toX, toY, toZ))) {
 +                    this.connection.send(new ClientboundMoveVehiclePacket(entity));
 +                    return;
 +                }
-+                // ShreddedPaper end - Check we own the destination location
++                // Confetti end - Check we own the destination location
 +
                  if (d10 - d9 > Math.max(100.0D, Math.pow((double) (org.spigotmc.SpigotConfig.movedTooQuicklyMultiplier * (float) i * speed), 2)) && !this.isSingleplayerOwner()) {
                  // CraftBukkit end
@@ -179,7 +179,7 @@ index ca7895a57139352d2f1c522dc7b64b62dc679c4c..6189ba831a32dd61e32d52f61301ae01
  
                  if (entity != null) {
 -                    this.player.teleportTo(worldserver, entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot(), org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE); // CraftBukkit
-+                    this.player.getBukkitEntity().teleportAsync(new Location(worldserver.getWorld(), entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot()), org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE); // CraftBukkit // ShreddedPaper - use teleportAsync
++                    this.player.getBukkitEntity().teleportAsync(new Location(worldserver.getWorld(), entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot()), org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE); // CraftBukkit // Confetti - use teleportAsync
                      return;
                  }
              }
@@ -190,13 +190,13 @@ index ca7895a57139352d2f1c522dc7b64b62dc679c4c..6189ba831a32dd61e32d52f61301ae01
 -                    this.player.wonGame = false;
 -                    this.player = this.server.getPlayerList().respawn(this.player, this.server.getLevel(this.player.getRespawnDimension()), true, null, true, RespawnReason.END_PORTAL, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag.END_PORTAL); // Paper - Expand PlayerRespawnEvent
 -                    CriteriaTriggers.CHANGED_DIMENSION.trigger(this.player, Level.END, Level.OVERWORLD);
-+                    // ShreddedPaper start - async respawn
++                    // Confetti start - async respawn
 +                    this.server.getPlayerList().respawnAsync(this.player, this.server.getLevel(this.player.getRespawnDimension()), true, null, true, RespawnReason.END_PORTAL, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag.END_PORTAL).thenAccept(player -> { // Paper - Expand PlayerRespawnEvent
 +                        this.player.wonGame = false;
 +                        this.player = player;
 +                        CriteriaTriggers.CHANGED_DIMENSION.trigger(this.player, Level.END, Level.OVERWORLD);
 +                    });
-+                    // ShreddedPaper end - async respawn
++                    // Confetti end - async respawn
                  } else {
                      if (this.player.getHealth() > 0.0F) {
                          return;
@@ -207,7 +207,7 @@ index ca7895a57139352d2f1c522dc7b64b62dc679c4c..6189ba831a32dd61e32d52f61301ae01
 -                        this.player.setGameMode(GameType.SPECTATOR, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.HARDCORE_DEATH, null); // Paper - Expand PlayerGameModeChangeEvent
 -                        ((GameRules.BooleanValue) this.player.level().getGameRules().getRule(GameRules.RULE_SPECTATORSGENERATECHUNKS)).set(false, this.player.serverLevel()); // CraftBukkit - per-world
 -                    }
-+                    // ShreddedPaper start - async respawn
++                    // Confetti start - async respawn
 +                    this.server.getPlayerList().respawnAsync(this.player, false, RespawnReason.DEATH).thenAccept(player -> {
 +                        this.player = player;
 +                        if (this.server.isHardcore()) {
@@ -215,7 +215,7 @@ index ca7895a57139352d2f1c522dc7b64b62dc679c4c..6189ba831a32dd61e32d52f61301ae01
 +                            ((GameRules.BooleanValue) this.player.level().getGameRules().getRule(GameRules.RULE_SPECTATORSGENERATECHUNKS)).set(false, this.player.serverLevel()); // CraftBukkit - per-world
 +                        }
 +                    });
-+                    // ShreddedPaper end - async respawn
++                    // Confetti end - async respawn
                  }
                  break;
              case REQUEST_STATS:
@@ -248,9 +248,9 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 @@ -123,6 +128,8 @@ import org.bukkit.event.player.PlayerRespawnEvent;
  import org.bukkit.event.player.PlayerRespawnEvent.RespawnReason;
  import org.bukkit.event.player.PlayerSpawnChangeEvent;
- import io.multipaper.shreddedpaper.ShreddedPaper;
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
+ import com.vulpeslab.confetti.Confetti;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  // CraftBukkit end
  
  public abstract class PlayerList {
@@ -258,7 +258,7 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
      }
  
      public ServerPlayer respawn(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
-+        // ShreddedPaper start - async respawn
++        // Confetti start - async respawn
 +        throw new UnsupportedOperationException("Cannot respawn player synchronously");
 +    }
 +
@@ -268,18 +268,18 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 +
 +    public CompletableFuture<ServerPlayer> respawnAsync(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
 +        CompletableFuture<ServerPlayer> future = new CompletableFuture<>();
-+        // ShreddedPaper end - async respawn
++        // Confetti end - async respawn
          // Paper end - Expand PlayerRespawnEvent
          entityplayer.stopRiding(); // CraftBukkit
 -        this.players.remove(entityplayer);
 -        this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
 -        entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED);
-+        // this.players.remove(entityplayer); // ShreddedPaper - don't do this, we're reusing the same entity
-+        // this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot // ShreddedPaper - don't do this, we're reusing the same entity
-+        // entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED); // ShreddedPaper - do later
++        // this.players.remove(entityplayer); // Confetti - don't do this, we're reusing the same entity
++        // this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot // Confetti - don't do this, we're reusing the same entity
++        // entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED); // Confetti - do later
          BlockPos blockposition = entityplayer.getRespawnPosition();
 +
-+        // ShreddedPaper start - run on respawn position thread
++        // Confetti start - run on respawn position thread
 +        Runnable task = () -> respawnAsyncGetRespawnPosition(future, entityplayer, blockposition, worldserver, flag, location, avoidSuffocation, reason, respawnFlags);
 +
 +        ServerLevel fromLevel = entityplayer.serverLevel();
@@ -295,13 +295,13 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 +        if (TickThread.isTickThreadFor(fromLevel, fromPos) && TickThread.isTickThreadFor(toLevel, toPos)) {
 +            task.run();
 +        } else {
-+            ShreddedPaperRegionScheduler.scheduleAcrossLevels(fromLevel, RegionPos.forChunk(fromPos), toLevel, RegionPos.forChunk(new ChunkPos(toPos)), task);
++            ConfettiRegionScheduler.scheduleAcrossLevels(fromLevel, RegionPos.forChunk(fromPos), toLevel, RegionPos.forChunk(new ChunkPos(toPos)), task);
 +        }
 +
 +        return future;
 +    }
 +    private void respawnAsyncGetRespawnPosition(CompletableFuture<ServerPlayer> future, ServerPlayer entityplayer, BlockPos blockposition, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
-+        // ShreddedPaper end - run on respawn position thread
++        // Confetti end - run on respawn position thread
 +
          float f = entityplayer.getRespawnAngle();
          boolean flag1 = entityplayer.isRespawnForced();
@@ -315,7 +315,7 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 -        entityplayer1.setId(entityplayer.getId());
 -        entityplayer1.setMainArm(entityplayer.getMainArm());
 -        Iterator iterator = entityplayer.getTags().iterator();
-+        // ShreddedPaper start - it's the same entity, just skip the copy process rather than figuring out how to rearrange it
++        // Confetti start - it's the same entity, just skip the copy process rather than figuring out how to rearrange it
 +        // entityplayer1.connection = entityplayer.connection;
 +        // entityplayer1.restoreFrom(entityplayer, flag);
 +        // entityplayer1.setId(entityplayer.getId());
@@ -331,7 +331,7 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 -        }
 +        //     entityplayer1.addTag(s);
 +        // }
-+        // ShreddedPaper end - it's the same entity, just skip the copy process rather than figuring out how to rearrange it
++        // Confetti end - it's the same entity, just skip the copy process rather than figuring out how to rearrange it
  
          boolean flag2 = false;
  
@@ -340,7 +340,7 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
              // Spigot Start
              if (entityplayer.connection.isDisconnected()) {
 -                return entityplayer;
-+                future.complete(entityplayer); return; // return entityplayer; // ShreddedPaper
++                future.complete(entityplayer); return; // return entityplayer; // Confetti
              }
              // Spigot End
  
@@ -349,7 +349,7 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
              location.setWorld(worldserver.getWorld());
          }
 +
-+        // ShreddedPaper start - run on new respawn position thread, in case a plugin modified it
++        // Confetti start - run on new respawn position thread, in case a plugin modified it
 +        BlockPos finalBlockposition = blockposition;
 +        Location finalLocation = location;
 +        boolean finalIsLocAltered = isLocAltered;
@@ -366,13 +366,13 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 +        if (TickThread.isTickThreadFor(fromLevel, fromPos) && TickThread.isTickThreadFor(toLevel, toPos)) {
 +            task.run();
 +        } else {
-+            ShreddedPaperRegionScheduler.scheduleAcrossLevels(fromLevel, RegionPos.forChunk(fromPos), toLevel, RegionPos.forChunk(new ChunkPos(toPos)), task);
++            ConfettiRegionScheduler.scheduleAcrossLevels(fromLevel, RegionPos.forChunk(fromPos), toLevel, RegionPos.forChunk(new ChunkPos(toPos)), task);
 +        }
 +    }
 +    private void respawnAsyncFinal(CompletableFuture<ServerPlayer> future, ServerPlayer entityplayer1, BlockPos blockposition, boolean flag, Location location, boolean avoidSuffocation, boolean isLocAltered, boolean flag1, boolean flag2, org.bukkit.World fromWorld, boolean isRespawn, boolean isBedSpawn) {
 +        ServerPlayer entityplayer = entityplayer1;
 +        entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED);
-+        // ShreddedPaper end - run on respawn position thread
++        // Confetti end - run on respawn position thread
 +
          ServerLevel worldserver1 = ((CraftWorld) location.getWorld()).getHandle();
          entityplayer1.spawnIn(worldserver1);
@@ -384,9 +384,9 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
 -            this.players.add(entityplayer1);
 -            this.playersByName.put(entityplayer1.getScoreboardName().toLowerCase(java.util.Locale.ROOT), entityplayer1); // Spigot
 -            this.playersByUUID.put(entityplayer1.getUUID(), entityplayer1);
-+            // this.players.add(entityplayer1); // ShreddedPaper - don't do this, we're reusing the same entity
-+            // this.playersByName.put(entityplayer1.getScoreboardName().toLowerCase(java.util.Locale.ROOT), entityplayer1); // Spigot // ShreddedPaper - don't do this, we're reusing the same entity
-+            // this.playersByUUID.put(entityplayer1.getUUID(), entityplayer1); // ShreddedPaper - don't do this, we're reusing the same entity
++            // this.players.add(entityplayer1); // Confetti - don't do this, we're reusing the same entity
++            // this.playersByName.put(entityplayer1.getScoreboardName().toLowerCase(java.util.Locale.ROOT), entityplayer1); // Spigot // Confetti - don't do this, we're reusing the same entity
++            // this.playersByUUID.put(entityplayer1.getUUID(), entityplayer1); // Confetti - don't do this, we're reusing the same entity
          }
          // entityplayer1.initInventoryMenu();
          entityplayer1.setHealth(entityplayer1.getHealth());
@@ -395,7 +395,7 @@ index 900891527ca401858d9c2678ae154928e5f64b08..ab96dcb873758f9d92eecb62b473b84d
  
          // CraftBukkit end
 -        return entityplayer1;
-+        future.complete(entityplayer1); // return entityplayer1; // ShreddedPaper
++        future.complete(entityplayer1); // return entityplayer1; // Confetti
      }
  
      public void sendPlayerPermissionLevel(ServerPlayer player) {
@@ -423,7 +423,7 @@ index 3304b486a0906dce96905d0fd63b4f87432ad646..6b89a13729c32d2b8ba1c11e1dd56c9e
      }
  
      public void moveTo(double x, double y, double z, float yaw, float pitch) {
-+        if (levelCallback != EntityInLevelCallback.NULL) TickThread.ensureTickThread((ServerLevel) level(), x, z, "Can't move entity to async destination"); // ShreddedPaper - can't teleport into other regions
++        if (levelCallback != EntityInLevelCallback.NULL) TickThread.ensureTickThread((ServerLevel) level(), x, z, "Can't move entity to async destination"); // Confetti - can't teleport into other regions
          // Paper start - Fix Entity Teleportation and cancel velocity if teleported
          if (!preserveMotion) {
              this.deltaMovement = Vec3.ZERO;
@@ -431,7 +431,7 @@ index 3304b486a0906dce96905d0fd63b4f87432ad646..6b89a13729c32d2b8ba1c11e1dd56c9e
                      this.setDeltaMovement(shapedetectorshape.speed);
                      return this;
                  }
-+                TickThread.ensureTickThread(worldserver, position.x, position.z, "Can't teleport entity to async destination"); // ShreddedPaper - can't teleport into other regions
++                TickThread.ensureTickThread(worldserver, position.x, position.z, "Can't teleport entity to async destination"); // Confetti - can't teleport into other regions
                  this.unRide();
                  // CraftBukkit end
  
@@ -440,7 +440,7 @@ index 3304b486a0906dce96905d0fd63b4f87432ad646..6b89a13729c32d2b8ba1c11e1dd56c9e
                      if (this.inWorld) {
                          worldserver.addDuringTeleport(entity);
 -                        if (worldserver.getTypeKey() == LevelStem.END) { // CraftBukkit
-+                        if (worldserver.getTypeKey() == LevelStem.END && location == null) { // CraftBukkit // ShreddedPaper - fix: don't make obsidian platform from CraftEntity.teleportAsync
++                        if (worldserver.getTypeKey() == LevelStem.END && location == null) { // CraftBukkit // Confetti - fix: don't make obsidian platform from CraftEntity.teleportAsync
                              ServerLevel.makeObsidianPlatform(worldserver, this); // CraftBukkit
                          }
                      }
@@ -453,7 +453,7 @@ index 7dd5e0b935d98d552c916f8412569ff4aa0e9b04..9a85983fac4cb14e19832d4921311107
  import java.util.List;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.advancements.CriteriaTriggers;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.particles.ParticleTypes;
@@ -462,12 +462,12 @@ index 7dd5e0b935d98d552c916f8412569ff4aa0e9b04..9a85983fac4cb14e19832d4921311107
                      if (this.hookedIn != null) {
                          if (!this.hookedIn.isRemoved() && this.hookedIn.level().dimension() == this.level().dimension()) {
 -                            this.setPos(this.hookedIn.getX(), this.hookedIn.getY(0.8D), this.hookedIn.getZ());
-+                            // ShreddedPaper start - ensure sync
++                            // Confetti start - ensure sync
 +                            final Vec3 toPosition = this.hookedIn.position(); // The entity's position could change once the ensureSync method is called
-+                            ShreddedPaper.ensureSync(this, (ServerLevel) this.hookedIn.level(), this.hookedIn.chunkPosition(), () -> {
++                            Confetti.ensureSync(this, (ServerLevel) this.hookedIn.level(), this.hookedIn.chunkPosition(), () -> {
 +                                this.setPos(toPosition.x(), this.hookedIn.getY(0.8D), toPosition.z());
 +                            });
-+                            // ShreddedPaper end - ensure sync
++                            // Confetti end - ensure sync
                          } else {
                              this.setHookedEntity((Entity) null);
                              this.currentState = FishingHook.FishHookState.FLYING;
@@ -494,7 +494,7 @@ index 61bd2459f2b9164dce90134103abaddce42b0621..39d3e08148f2bf3cee2ee6377e28df6f
  
 -                    PlayerTeleportEvent teleEvent = new PlayerTeleportEvent(player, player.getLocation(), location, PlayerTeleportEvent.TeleportCause.ENDER_PEARL);
 -                    Bukkit.getPluginManager().callEvent(teleEvent);
-+                    // ShreddedPaper start - teleport async
++                    // Confetti start - teleport async
 +                    // PlayerTeleportEvent teleEvent = new PlayerTeleportEvent(player, player.getLocation(), location, PlayerTeleportEvent.TeleportCause.ENDER_PEARL);
 +                    // Bukkit.getPluginManager().callEvent(teleEvent);
 +                    Location previousLocation = entityplayer.getBukkitEntity().getLocation();
@@ -503,14 +503,14 @@ index 61bd2459f2b9164dce90134103abaddce42b0621..39d3e08148f2bf3cee2ee6377e28df6f
 -                    if (!teleEvent.isCancelled() && entityplayer.connection.isAcceptingMessages()) {
 +                    teleFuture.thenAccept(wasTeleported -> {
 +                    if (wasTeleported && entityplayer.connection.isAcceptingMessages()) {
-+                    // ShreddedPaper end - teleport async
++                    // Confetti end - teleport async
                          if (this.random.nextFloat() < this.level().purpurConfig.enderPearlEndermiteChance && this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)) { // Purpur
                              Endermite entityendermite = (Endermite) EntityType.ENDERMITE.create(this.level());
  
                              if (entityendermite != null) {
                                  entityendermite.setPlayerSpawned(true); // Purpur
 -                                entityendermite.moveTo(entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot());
-+                                entityendermite.moveTo(previousLocation.getX(), previousLocation.getY(), previousLocation.getZ(), previousLocation.getYaw(), previousLocation.getPitch()); // ShreddedPaper - teleport async
++                                entityendermite.moveTo(previousLocation.getX(), previousLocation.getY(), previousLocation.getZ(), previousLocation.getYaw(), previousLocation.getPitch()); // Confetti - teleport async
                                  this.level().addFreshEntity(entityendermite, CreatureSpawnEvent.SpawnReason.ENDER_PEARL);
                              }
                          }
@@ -519,17 +519,17 @@ index 61bd2459f2b9164dce90134103abaddce42b0621..39d3e08148f2bf3cee2ee6377e28df6f
                          }
  
 -                        entityplayer.connection.teleport(teleEvent.getTo());
-+                        // entityplayer.connection.teleport(teleEvent.getTo()); // ShreddedPaper - teleport async
++                        // entityplayer.connection.teleport(teleEvent.getTo()); // Confetti - teleport async
                          entity.resetFallDistance();
                          entity.hurt(this.damageSources().fall().customEventDamager(this), this.level().purpurConfig.enderPearlDamage); // CraftBukkit // Paper - fix DamageSource API // Purpur
                      }
                      // CraftBukkit end
                      this.level().playSound((Player) null, this.getX(), this.getY(), this.getZ(), SoundEvents.PLAYER_TELEPORT, SoundSource.PLAYERS);
-+                    }); // ShreddedPaper - teleport async
++                    }); // Confetti - teleport async
                  }
              } else if (entity != null) {
 -                entity.teleportTo(this.getX(), this.getY(), this.getZ());
-+                entity.getBukkitEntity().teleportAsync(new Location(this.level().getWorld(), this.getX(), this.getY(), this.getZ(), entity.getBukkitYaw(), entity.getXRot())); // entity.teleportTo(this.getX(), this.getY(), this.getZ()); // ShreddedPaper - teleport async
++                entity.getBukkitEntity().teleportAsync(new Location(this.level().getWorld(), this.getX(), this.getY(), this.getZ(), entity.getBukkitYaw(), entity.getXRot())); // entity.teleportTo(this.getX(), this.getY(), this.getZ()); // Confetti - teleport async
                  entity.resetFallDistance();
              }
  
@@ -542,7 +542,7 @@ index ad53a7b2e4e58837ca13b05828442125c9280469..bd60758e8291821c66bd82a5d2368295
      public java.util.concurrent.CompletableFuture<Chunk> getChunkAtAsync(int x, int z, boolean gen, boolean urgent) {
          warnUnsafeChunk("getting a faraway chunk async", x, z); // Paper
 -        if (Bukkit.isPrimaryThread()) {
-+        if (TickThread.isTickThreadFor(getHandle(), x, z)) { // ShreddedPaper - ensure it's the chunk's thread
++        if (TickThread.isTickThreadFor(getHandle(), x, z)) { // Confetti - ensure it's the chunk's thread
              net.minecraft.world.level.chunk.LevelChunk immediate = this.world.getChunkSource().getChunkAtIfLoadedImmediately(x, z);
              if (immediate != null) {
                  return java.util.concurrent.CompletableFuture.completedFuture(new CraftChunk(immediate));
@@ -555,7 +555,7 @@ index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..67d7eede1543599497cd31b7de308e1c
  import java.util.Set;
  import java.util.UUID;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.Tag;
  import net.minecraft.network.chat.Component;
@@ -571,8 +571,8 @@ index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..67d7eede1543599497cd31b7de308e1c
  import org.bukkit.util.Vector;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  
  public abstract class CraftEntity implements org.bukkit.entity.Entity {
      private static PermissibleBase perm;
@@ -580,11 +580,11 @@ index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..67d7eede1543599497cd31b7de308e1c
          net.minecraft.server.level.ServerLevel world = ((CraftWorld)locationClone.getWorld()).getHandle();
          java.util.concurrent.CompletableFuture<Boolean> ret = new java.util.concurrent.CompletableFuture<>();
  
-+        // ShreddedPaper start - run sync if possible
++        // Confetti start - run sync if possible
 +        ChunkPos fromChunkPos = this.getHandle().chunkPosition();
 +        ChunkPos toChunkPos = CraftLocation.toChunkPosition(locationClone);
-+        if (ShreddedPaper.isSync((ServerLevel) this.getHandle().level(), fromChunkPos)
-+                && ShreddedPaper.isSync(world, toChunkPos)
++        if (Confetti.isSync((ServerLevel) this.getHandle().level(), fromChunkPos)
++                && Confetti.isSync(world, toChunkPos)
 +                && this.getHandle().level().hasChunk(fromChunkPos.x, fromChunkPos.z)
 +                && world.hasChunk(toChunkPos.x, toChunkPos.z)) {
 +            try {
@@ -598,7 +598,7 @@ index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..67d7eede1543599497cd31b7de308e1c
 +            }
 +            return ret;
 +        }
-+        // ShreddedPaper end
++        // Confetti end
 +
          world.loadChunksForMoveAsync(getHandle().getBoundingBoxAt(locationClone.getX(), locationClone.getY(), locationClone.getZ()),
              this instanceof CraftPlayer ? ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.HIGHER : ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor.Priority.NORMAL, (list) -> {
@@ -607,10 +607,10 @@ index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..67d7eede1543599497cd31b7de308e1c
                      chunkProviderServer.addTicketAtLevel(net.minecraft.server.level.TicketType.POST_TELEPORT, chunk.getPos(), 33, CraftEntity.this.getEntityId());
                  }
 -                net.minecraft.server.MinecraftServer.getServer().scheduleOnMain(() -> {
-+                ShreddedPaperRegionScheduler.scheduleAcrossLevels(
++                ConfettiRegionScheduler.scheduleAcrossLevels(
 +                        (ServerLevel) CraftEntity.this.getHandle().level(), RegionPos.forChunk(CraftEntity.this.getHandle().chunkPosition()),
 +                        world, RegionPos.forLocation(locationClone),
-+                        () -> { // ShreddedPaper - Run teleports on the correct threads
++                        () -> { // Confetti - Run teleports on the correct threads
                      try {
                          ret.complete(CraftEntity.this.teleport(locationClone, cause, teleportFlags) ? Boolean.TRUE : Boolean.FALSE);
                      } catch (Throwable throwable) {
@@ -631,8 +631,8 @@ index aac21ff5418f76b0d06b6a49a4021bde194cf1da..c12484e13ff2b06b9bad7c5b2bbf9e82
          } else {
              // The respawn reason should never be used if the passed location is non null.
 -            this.server.getHandle().respawn(entity, toWorld, true, to, !toWorld.paperConfig().environment.disableTeleportationSuffocationCheck, null); // Paper
-+            if (!TickThread.isTickThreadFor(entity.serverLevel(), entity.position()) || !TickThread.isTickThreadFor(toWorld, CraftLocation.toBlockPosition(to))) throw new UnsupportedOperationException("Cannot respawn player synchronously"); // ShreddedPaper - make sure following will be run on this thread
-+            this.server.getHandle().respawnAsync(entity, toWorld, true, to, !toWorld.paperConfig().environment.disableTeleportationSuffocationCheck, null).join(); // Paper // ShreddedPaper - will be run on this thread
++            if (!TickThread.isTickThreadFor(entity.serverLevel(), entity.position()) || !TickThread.isTickThreadFor(toWorld, CraftLocation.toBlockPosition(to))) throw new UnsupportedOperationException("Cannot respawn player synchronously"); // Confetti - make sure following will be run on this thread
++            this.server.getHandle().respawnAsync(entity, toWorld, true, to, !toWorld.paperConfig().environment.disableTeleportationSuffocationCheck, null).join(); // Paper // Confetti - will be run on this thread
          }
          return true;
      }
@@ -641,7 +641,7 @@ index aac21ff5418f76b0d06b6a49a4021bde194cf1da..c12484e13ff2b06b9bad7c5b2bbf9e82
              if ( CraftPlayer.this.getHealth() <= 0 && CraftPlayer.this.isOnline() )
              {
 -                CraftPlayer.this.server.getServer().getPlayerList().respawn( CraftPlayer.this.getHandle(), false, org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.PLUGIN );
-+                CraftPlayer.this.server.getServer().getPlayerList().respawnAsync( CraftPlayer.this.getHandle(), false, org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.PLUGIN ); // ShreddedPaper - async respawning
++                CraftPlayer.this.server.getServer().getPlayerList().respawnAsync( CraftPlayer.this.getHandle(), false, org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.PLUGIN ); // Confetti - async respawning
              }
          }
  
@@ -662,11 +662,11 @@ index 097996d3955ab5126b71f7bff1dd2c62becb5ffd..ebc362617934e90dece6fd35becdc155
          return new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ());
      }
  
-+    // ShreddedPaper start
++    // Confetti start
 +    public static ChunkPos toChunkPosition(Location location) {
 +        return new ChunkPos(SectionPos.blockToSectionCoord(location.getBlockX()), SectionPos.blockToSectionCoord(location.getBlockZ()));
 +    }
-+    // ShreddedPaper end
++    // Confetti end
 +
      public static Vec3 toVec3D(Location location) {
          return new Vec3(location.getX(), location.getY(), location.getZ());

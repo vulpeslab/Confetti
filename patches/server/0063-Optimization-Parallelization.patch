@@ -4,17 +4,17 @@ Date: Thu, 17 Jul 2025 01:45:27 +0900
 Subject: [PATCH] Optimization: Parallelization
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index 6a3932818caeddf930cf1b90f1400bc494914774..31d6b9bb6c24a949d079ccb03afefa37ce116fa0 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 @@ -1,6 +1,8 @@
- package io.multipaper.shreddedpaper.threading;
+ package com.vulpeslab.confetti.threading;
  
 +import com.google.common.collect.Lists;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
- import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
+ import com.vulpeslab.confetti.region.RegionPos;
  import io.papermc.paper.util.player.NearbyPlayers;
  import net.minecraft.server.MinecraftServer;
 @@ -8,6 +10,7 @@ import net.minecraft.server.level.ChunkMap;
@@ -25,24 +25,24 @@ index 6a3932818caeddf930cf1b90f1400bc494914774..31d6b9bb6c24a949d079ccb03afefa37
  import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.GameRules;
  import net.minecraft.world.level.Level;
-@@ -26,6 +29,8 @@ public class ShreddedPaperChunkTicker {
+@@ -26,6 +29,8 @@ public class ConfettiChunkTicker {
  
      private final ServerChunkCache serverChunkCache;
  
 +    private final List<Entity> trackedEntitiesWorkerList = new ArrayList<>(); // Re-usable list for processing tracked entities in parallel
 +
-     public ShreddedPaperChunkTicker(ServerChunkCache serverChunkCache) {
+     public ConfettiChunkTicker(ServerChunkCache serverChunkCache) {
          this.serverChunkCache = serverChunkCache;
      }
-@@ -38,6 +43,48 @@ public class ShreddedPaperChunkTicker {
+@@ -38,6 +43,48 @@ public class ConfettiChunkTicker {
                  region -> futures.add(this.tickRegion(level, region, spawnercreature_d))
          );
  
 +        CompletableFuture<Void> future = CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
 +
-+        if (ShreddedPaperConfiguration.get().optimizations.processTrackQueueInParallel) future = future.thenCompose(v -> this.processTrackQueueInParallel(level));
++        if (ConfettiConfiguration.get().optimizations.processTrackQueueInParallel) future = future.thenCompose(v -> this.processTrackQueueInParallel(level));
 +
-+        if (ShreddedPaperConfiguration.get().optimizations.flushQueueInParallel) future = future.thenCompose(v -> this.flushQueueInParallel(level));
++        if (ConfettiConfiguration.get().optimizations.flushQueueInParallel) future = future.thenCompose(v -> this.flushQueueInParallel(level));
 +
 +        return future;
 +    }
@@ -58,10 +58,10 @@ index 6a3932818caeddf930cf1b90f1400bc494914774..31d6b9bb6c24a949d079ccb03afefa37
 +                    region -> region.forEachTrackedEntity(trackedEntitiesWorkerList::add)
 +            );
 +
-+            List<List<Entity>> trackedEntitiesTasks = Lists.partition(trackedEntitiesWorkerList, Math.max(1, trackedEntitiesWorkerList.size() / ShreddedPaperTickThread.THREAD_COUNT / 3));
++            List<List<Entity>> trackedEntitiesTasks = Lists.partition(trackedEntitiesWorkerList, Math.max(1, trackedEntitiesWorkerList.size() / ConfettiTickThread.THREAD_COUNT / 3));
 +            for (List<Entity> trackedEntities : trackedEntitiesTasks) {
 +                if (trackedEntities.isEmpty()) continue;
-+                futures.add(CompletableFuture.runAsync(() -> trackedEntities.forEach(ShreddedPaperEntityTicker::processTrackQueue), ShreddedPaperTickThread.getExecutor()));
++                futures.add(CompletableFuture.runAsync(() -> trackedEntities.forEach(ConfettiEntityTicker::processTrackQueue), ConfettiTickThread.getExecutor()));
 +            }
 +
 +            allFuture = allFuture.thenCompose(v -> CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)));
@@ -74,28 +74,28 @@ index 6a3932818caeddf930cf1b90f1400bc494914774..31d6b9bb6c24a949d079ccb03afefa37
 +    private CompletableFuture<Void> flushQueueInParallel(ServerLevel level) {
 +        List<CompletableFuture<Void>> futures = new ArrayList<>();
 +
-+        List<List<ServerPlayer>> playersTasks = Lists.partition(new ArrayList<>(level.players()), Math.max(1, level.players().size() / ShreddedPaperTickThread.THREAD_COUNT / 3));
++        List<List<ServerPlayer>> playersTasks = Lists.partition(new ArrayList<>(level.players()), Math.max(1, level.players().size() / ConfettiTickThread.THREAD_COUNT / 3));
 +        for (List<ServerPlayer> players : playersTasks) {
 +            if (players.isEmpty()) continue;
-+            futures.add(CompletableFuture.runAsync(() -> players.forEach(player -> player.connection.connection.flushQueue()), ShreddedPaperTickThread.getExecutor()));
++            futures.add(CompletableFuture.runAsync(() -> players.forEach(player -> player.connection.connection.flushQueue()), ConfettiTickThread.getExecutor()));
 +        }
 +
          return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
      }
  
-@@ -92,7 +139,7 @@ public class ShreddedPaperChunkTicker {
+@@ -92,7 +139,7 @@ public class ConfettiChunkTicker {
  
-             region.forEachTickingEntity(ShreddedPaperEntityTicker::tickEntity);
+             region.forEachTickingEntity(ConfettiEntityTicker::tickEntity);
  
--            region.forEachTrackedEntity(ShreddedPaperEntityTicker::processTrackQueue);
-+            if (!ShreddedPaperConfiguration.get().optimizations.processTrackQueueInParallel) region.forEachTrackedEntity(ShreddedPaperEntityTicker::processTrackQueue);
+-            region.forEachTrackedEntity(ConfettiEntityTicker::processTrackQueue);
++            if (!ConfettiConfiguration.get().optimizations.processTrackQueueInParallel) region.forEachTrackedEntity(ConfettiEntityTicker::processTrackQueue);
  
              level.tickBlockEntities(region.tickingBlockEntities, region.pendingBlockEntityTickers);
  
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 index b30147827ffa329c09703f48f01733c34f5e63e3..6af35c73c60eb5e9c6b4ef165727a28632219762 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 @@ -14,6 +14,7 @@ import java.util.Set;
  import java.util.concurrent.CompletableFuture;
  import java.util.concurrent.ConcurrentHashMap;
@@ -104,7 +104,7 @@ index b30147827ffa329c09703f48f01733c34f5e63e3..6af35c73c60eb5e9c6b4ef165727a286
  import java.util.function.Supplier;
  
  /**
-@@ -31,6 +32,7 @@ public class ShreddedPaperRegionLocker {
+@@ -31,6 +32,7 @@ public class ConfettiRegionLocker {
      public static final int REGION_LOCK_RADIUS = 1;
  
      private final ConcurrentHashMap<RegionPos, LockedRegion> lockedRegions = new ConcurrentHashMap<>();
@@ -112,7 +112,7 @@ index b30147827ffa329c09703f48f01733c34f5e63e3..6af35c73c60eb5e9c6b4ef165727a286
  
      private final ThreadLocal<Set<RegionPos>> localLocks = ThreadLocal.withInitial(ObjectOpenHashSet::new);
      private final ThreadLocal<Set<RegionPos>> readOnlyLocks = ThreadLocal.withInitial(ObjectOpenHashSet::new);
-@@ -203,6 +205,13 @@ public class ShreddedPaperRegionLocker {
+@@ -203,6 +205,13 @@ public class ConfettiRegionLocker {
          return nextTask.get();
      }
  
@@ -126,7 +126,7 @@ index b30147827ffa329c09703f48f01733c34f5e63e3..6af35c73c60eb5e9c6b4ef165727a286
      public interface RegionLock {
          Collection<RegionPos> lockedRegions();
          Thread owner();
-@@ -212,6 +221,7 @@ public class ShreddedPaperRegionLocker {
+@@ -212,6 +221,7 @@ public class ConfettiRegionLocker {
      public class ReadOnlyRegionLock implements RegionLock {
          private final List<LockedRegion> readLocks;
          private final Thread thread;
@@ -134,24 +134,24 @@ index b30147827ffa329c09703f48f01733c34f5e63e3..6af35c73c60eb5e9c6b4ef165727a286
  
          private ReadOnlyRegionLock(int lockRadius) {
              this.thread = Thread.currentThread();
-@@ -223,6 +233,10 @@ public class ShreddedPaperRegionLocker {
+@@ -223,6 +233,10 @@ public class ConfettiRegionLocker {
                  throw new IllegalStateException("Cannot lock a region from a different thread [expected=%s,got=%s]".formatted(thread, Thread.currentThread()));
              }
  
-+            if (globalLockStamp == 0 && (globalLockStamp = ShreddedPaperRegionLocker.this.globalLock.tryReadLock()) == 0) {
++            if (globalLockStamp == 0 && (globalLockStamp = ConfettiRegionLocker.this.globalLock.tryReadLock()) == 0) {
 +                return false;
 +            }
 +
-             LockedRegion lockedRegion = ShreddedPaperRegionLocker.this.lockedRegions.compute(regionPos, (k, prevValue) -> {
+             LockedRegion lockedRegion = ConfettiRegionLocker.this.lockedRegions.compute(regionPos, (k, prevValue) -> {
                  if (prevValue == null) {
                      // This region is unlocked, let's lock it
-@@ -262,6 +276,10 @@ public class ShreddedPaperRegionLocker {
+@@ -262,6 +276,10 @@ public class ConfettiRegionLocker {
              for (LockedRegion lockedRegion : this.readLocks) {
                  lockedRegion.complete();
              }
 +
 +            if (this.globalLockStamp != 0) {
-+                ShreddedPaperRegionLocker.this.globalLock.unlockRead(this.globalLockStamp);
++                ConfettiRegionLocker.this.globalLock.unlockRead(this.globalLockStamp);
 +            }
          }
  
@@ -165,16 +165,16 @@ index 51f67289fcf62614a5fd610474ab423544f84ebe..d7374a603bd1d9a8dfc0fd1755a0c779
  
      // Paper start - Optimize network: Rewrite this to be safer if ran off main thread
 -    private boolean flushQueue() {
-+    public boolean flushQueue() { // ShreddedPaper - make public
++    public boolean flushQueue() { // Confetti - make public
          if (!this.isConnected()) {
              return true;
          }
 @@ -627,7 +627,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
      private static int tickSecond; // Purpur
      public void tick() {
-         if (this.packetListener instanceof ServerGamePacketListenerImpl serverGamePacketListener && !TickThread.isTickThreadFor(serverGamePacketListener.player)) return; // ShreddedPaper
+         if (this.packetListener instanceof ServerGamePacketListenerImpl serverGamePacketListener && !TickThread.isTickThreadFor(serverGamePacketListener.player)) return; // Confetti
 -        this.flushQueue();
-+        if (!ShreddedPaperConfiguration.get().optimizations.flushQueueInParallel) this.flushQueue(); // ShreddedPaper - Add option to flush queue in parallel
++        if (!ConfettiConfiguration.get().optimizations.flushQueueInParallel) this.flushQueue(); // Confetti - Add option to flush queue in parallel
          // Paper start - Buffer joins to world
          if (Connection.currTick != net.minecraft.server.MinecraftServer.currentTick) {
              Connection.currTick = net.minecraft.server.MinecraftServer.currentTick;

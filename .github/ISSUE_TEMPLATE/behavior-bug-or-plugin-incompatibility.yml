@@ -34,7 +34,7 @@ body:
 
   - type: textarea
     attributes:
-      label: ShreddedPaper version
+      label: Confetti version
       description: |
         Run `/version` on your server and **paste** the full, unmodified output here.
         "latest" is *not* a version; we require the output of `/version` so we can adequately track down the issue.
@@ -68,7 +68,7 @@ body:
       value: |
         Before submitting this issue, please ensure the following:
 
-        1. You are running the latest version of ShreddedPaper from [our downloads page](https://shreddedpaper.io/download.html).
+        1. You are running the latest version of Confetti from [our downloads page](https://vulpeslab.com/confetti/downloads).
         2. You searched for and ensured there isn't already an open issue regarding this.
-        3. Your version of Minecraft is supported by ShreddedPaper.
+        3. Your version of Minecraft is supported by Confetti.
         4. The bug is not reproducible on Paper.

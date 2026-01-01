@@ -13,15 +13,15 @@ index 15ee41452992714108efe53b708b5a4e1da7c1ff..e22012b5854c9e7725780cf8f3173949
  
      @Override
      public Iterable<Entity> getAll() {
-+        synchronized (this.accessibleEntities) { // ShreddedPaper
++        synchronized (this.accessibleEntities) { // Confetti
          return new ArrayIterable<>(this.accessibleEntities.getRawData(), 0, this.accessibleEntities.size());
-+        } // ShreddedPaper
++        } // Confetti
      }
  
      public Entity[] getAllCopy() {
-+        synchronized (this.accessibleEntities) { // ShreddedPaper
++        synchronized (this.accessibleEntities) { // Confetti
          return Arrays.copyOf(this.accessibleEntities.getRawData(), this.accessibleEntities.size(), Entity[].class);
-+        } // ShreddedPaper
++        } // Confetti
      }
  
      @Override
@@ -29,9 +29,9 @@ index 15ee41452992714108efe53b708b5a4e1da7c1ff..e22012b5854c9e7725780cf8f3173949
                      if (newVisibility.ordinal() > oldVisibility.ordinal()) {
                          // status upgrade
                          if (!oldVisibility.isAccessible() && newVisibility.isAccessible()) {
-+                            synchronized (this.accessibleEntities) { // ShreddedPaper
++                            synchronized (this.accessibleEntities) { // Confetti
                              this.accessibleEntities.add(entity);
-+                            } // ShreddedPaper
++                            } // Confetti
                              EntityLookup.this.worldCallback.onTrackingStart(entity);
                          }
  
@@ -39,9 +39,9 @@ index 15ee41452992714108efe53b708b5a4e1da7c1ff..e22012b5854c9e7725780cf8f3173949
                          }
  
                          if (oldVisibility.isAccessible() && !newVisibility.isAccessible()) {
-+                            synchronized (this.accessibleEntities) { // ShreddedPaper
++                            synchronized (this.accessibleEntities) { // Confetti
                              this.accessibleEntities.remove(entity);
-+                            } // ShreddedPaper
++                            } // Confetti
                              EntityLookup.this.worldCallback.onTrackingEnd(entity);
                          }
                      }
@@ -53,7 +53,7 @@ index 777b789fdcdf297309cfb36fc7f77e3fdb6327ca..b35cd0b4434c8f0cf078fc1cdf7c6835
              Map<ResourceLocation, Integer> nonEntityTicking = Maps.newHashMap();
              ServerChunkCache chunkProviderServer = world.getChunkSource();
              world.getAllEntities().forEach(e -> {
-+                if (e == null) return; // ShreddedPaper - Concurrent modification
++                if (e == null) return; // Confetti - Concurrent modification
 +
                  ResourceLocation key = EntityType.getKey(e.getType());
  
@@ -66,7 +66,7 @@ index 0f90a6803851eba51e164772c984b1cd1193d882..d483c94b8afd624af4c0c165a809d3a5
          while (iterator.hasNext()) {
              Entity entity = (Entity) iterator.next();
  
-+            if (entity == null) continue; // ShreddedPaper - concurrent modification
++            if (entity == null) continue; // Confetti - concurrent modification
 +
              if (entity instanceof Mob entityinsentient) {
                  if (entityinsentient.isPersistenceRequired() || entityinsentient.requiresCustomPersistence()) {

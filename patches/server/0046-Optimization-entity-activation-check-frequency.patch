@@ -11,7 +11,7 @@ index c9a10c0b952f7590a48d0b96cacd8e012543d805..ad566654e2e09a5f47de558335355326
 @@ -1,5 +1,6 @@
  package org.spigotmc;
  
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
  import net.minecraft.core.BlockPos;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerChunkCache;
@@ -20,8 +20,8 @@ index c9a10c0b952f7590a48d0b96cacd8e012543d805..ad566654e2e09a5f47de558335355326
          for ( Player player : world.players() )
          {
 -            player.activatedTick = MinecraftServer.currentTick;
-+            if (ShreddedPaperConfiguration.get().optimizations.entityActivationCheckFrequency > 1 && (player.getId() + MinecraftServer.currentTick) % ShreddedPaperConfiguration.get().optimizations.entityActivationCheckFrequency != 0) continue; // ShreddedPaper - Configurable entity activation check frequency
-+            player.activatedTick = MinecraftServer.currentTick + Math.max(0, ShreddedPaperConfiguration.get().optimizations.entityActivationCheckFrequency); // ShreddedPaper - Configurable entity activation check frequency
++            if (ConfettiConfiguration.get().optimizations.entityActivationCheckFrequency > 1 && (player.getId() + MinecraftServer.currentTick) % ConfettiConfiguration.get().optimizations.entityActivationCheckFrequency != 0) continue; // Confetti - Configurable entity activation check frequency
++            player.activatedTick = MinecraftServer.currentTick + Math.max(0, ConfettiConfiguration.get().optimizations.entityActivationCheckFrequency); // Confetti - Configurable entity activation check frequency
              if ( world.spigotConfig.ignoreSpectatorActivation && player.isSpectator() )
              {
                  continue;
@@ -30,18 +30,18 @@ index c9a10c0b952f7590a48d0b96cacd8e012543d805..ad566654e2e09a5f47de558335355326
      private static void activateEntity(Entity entity)
      {
 -        if ( MinecraftServer.currentTick > entity.activatedTick )
-+        if ( MinecraftServer.currentTick + Math.max(0, ShreddedPaperConfiguration.get().optimizations.entityActivationCheckFrequency) > entity.activatedTick ) // ShreddedPaper - Configurable entity activation check frequency
++        if ( MinecraftServer.currentTick + Math.max(0, ConfettiConfiguration.get().optimizations.entityActivationCheckFrequency) > entity.activatedTick ) // Confetti - Configurable entity activation check frequency
          {
              if ( entity.defaultActivationState )
              { // Pufferfish - diff on change
 -                entity.activatedTick = MinecraftServer.currentTick;
-+                entity.activatedTick = MinecraftServer.currentTick + Math.max(0, ShreddedPaperConfiguration.get().optimizations.entityActivationCheckFrequency); // ShreddedPaper - Configurable entity activation check frequency
++                entity.activatedTick = MinecraftServer.currentTick + Math.max(0, ConfettiConfiguration.get().optimizations.entityActivationCheckFrequency); // Confetti - Configurable entity activation check frequency
                  return;
              }
              if ( entity.activationType.boundingBox.intersects( entity.getBoundingBox() ) )
              {  // Pufferfish - diff on change
 -                entity.activatedTick = MinecraftServer.currentTick;
-+                entity.activatedTick = MinecraftServer.currentTick + Math.max(0, ShreddedPaperConfiguration.get().optimizations.entityActivationCheckFrequency); // ShreddedPaper - Configurable entity activation check frequency
++                entity.activatedTick = MinecraftServer.currentTick + Math.max(0, ConfettiConfiguration.get().optimizations.entityActivationCheckFrequency); // Confetti - Configurable entity activation check frequency
              }
          }
      }

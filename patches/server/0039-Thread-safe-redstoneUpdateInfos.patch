@@ -4,10 +4,10 @@ Date: Tue, 18 Jun 2024 17:01:01 +0900
 Subject: [PATCH] Thread-safe redstoneUpdateInfos
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 index 99680a983da4c64b709cae624348992cdc83e7f3..ee00dd2ea0d2143cbc8282a34ad25a08b0bdd1b4 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 @@ -12,9 +12,11 @@ import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.world.entity.Entity;
  import net.minecraft.world.entity.Mob;
@@ -34,10 +34,10 @@ index 484ba0a90bd6f13fd2116279e422b1c9855d25ea..0af343050a13371b86379a794caeb8df
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -186,7 +186,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      private org.spigotmc.TickLimiter tileLimiter;
-     // private int tileTickPosition; // ShreddedPaper - removed tileTickPosition
+     // private int tileTickPosition; // Confetti - removed tileTickPosition
      public final Map<Explosion.CacheKey, Float> explosionDensityCache = new HashMap<>(); // Paper - Optimize explosions
 -    public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos; // Paper - Faster redstone torch rapid clock removal; Move from Map in BlockRedstoneTorch to here
-+    // public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos; // Paper - Faster redstone torch rapid clock removal; Move from Map in BlockRedstoneTorch to here // ShreddedPaper - move to LevelChunkRegion
++    // public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos; // Paper - Faster redstone torch rapid clock removal; Move from Map in BlockRedstoneTorch to here // Confetti - move to LevelChunkRegion
  
      // Purpur start
      private com.google.common.cache.Cache<BreedingCooldownPair, Object> playerBreedingCooldowns;
@@ -50,7 +50,7 @@ index ceba9617748a8b4f3a9bd459475952c9c6c9ed7c..554377cfee5a7b8df3ddd67a043e8b6a
  import java.util.Map;
  import java.util.WeakHashMap;
 +
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
  import net.minecraft.core.particles.DustParticleOptions;
@@ -59,7 +59,7 @@ index ceba9617748a8b4f3a9bd459475952c9c6c9ed7c..554377cfee5a7b8df3ddd67a043e8b6a
          boolean flag = this.hasNeighborSignal(world, pos, state);
          // Paper start - Faster redstone torch rapid clock removal
 -        java.util.ArrayDeque<RedstoneTorchBlock.Toggle> redstoneUpdateInfos = world.redstoneUpdateInfos;
-+        java.util.ArrayDeque<RedstoneTorchBlock.Toggle> redstoneUpdateInfos = world.chunkSource.tickingRegions.get(RegionPos.forBlockPos(pos)).redstoneUpdateInfos; // ShreddedPaper - move redstoneUpdateInfos to the region
++        java.util.ArrayDeque<RedstoneTorchBlock.Toggle> redstoneUpdateInfos = world.chunkSource.tickingRegions.get(RegionPos.forBlockPos(pos)).redstoneUpdateInfos; // Confetti - move redstoneUpdateInfos to the region
          if (redstoneUpdateInfos != null) {
              RedstoneTorchBlock.Toggle curr;
              while ((curr = redstoneUpdateInfos.peek()) != null && world.getGameTime() - curr.when > 60L) {
@@ -68,10 +68,10 @@ index ceba9617748a8b4f3a9bd459475952c9c6c9ed7c..554377cfee5a7b8df3ddd67a043e8b6a
      private static boolean isToggledTooFrequently(Level world, BlockPos pos, boolean addNew) {
          // Paper start - Faster redstone torch rapid clock removal
 -        java.util.ArrayDeque<RedstoneTorchBlock.Toggle> list = world.redstoneUpdateInfos;
-+        java.util.ArrayDeque<RedstoneTorchBlock.Toggle> list = ((ServerLevel) world).chunkSource.tickingRegions.get(RegionPos.forBlockPos(pos)).redstoneUpdateInfos; // ShreddedPaper - move redstoneUpdateInfos to the region
++        java.util.ArrayDeque<RedstoneTorchBlock.Toggle> list = ((ServerLevel) world).chunkSource.tickingRegions.get(RegionPos.forBlockPos(pos)).redstoneUpdateInfos; // Confetti - move redstoneUpdateInfos to the region
          if (list == null) {
 -            list = world.redstoneUpdateInfos = new java.util.ArrayDeque<>();
-+            list = ((ServerLevel) world).chunkSource.tickingRegions.get(RegionPos.forBlockPos(pos)).redstoneUpdateInfos = new java.util.ArrayDeque<>(); // ShreddedPaper - move redstoneUpdateInfos to the region
++            list = ((ServerLevel) world).chunkSource.tickingRegions.get(RegionPos.forBlockPos(pos)).redstoneUpdateInfos = new java.util.ArrayDeque<>(); // Confetti - move redstoneUpdateInfos to the region
          }
          // Paper end - Faster redstone torch rapid clock removal
  

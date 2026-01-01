@@ -14,7 +14,7 @@ index 973110b208a4026fd296663f58cd60960d9c6a1c..66cb6ad79c1910dd86f61a68adaf1ea0
          ClientboundPlayerInfoRemovePacket packet = new ClientboundPlayerInfoRemovePacket(List.of(entityplayer.getUUID()));
 -        for (int i = 0; i < this.players.size(); i++) {
 -            ServerPlayer entityplayer2 = (ServerPlayer) this.players.get(i);
-+        for (ServerPlayer entityplayer2 : this.players) { // ShreddedPaper - Fix concurrent modification
++        for (ServerPlayer entityplayer2 : this.players) { // Confetti - Fix concurrent modification
  
              if (entityplayer2.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
                  entityplayer2.connection.send(packet);

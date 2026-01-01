@@ -4,20 +4,20 @@ Date: Wed, 26 Jun 2024 10:23:46 +0900
 Subject: [PATCH] /kill command
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/ShreddedPaper.java b/src/main/java/io/multipaper/shreddedpaper/ShreddedPaper.java
+diff --git a/src/main/java/com/vulpeslab/confetti/Confetti.java b/src/main/java/com/vulpeslab/confetti/Confetti.java
 index 25899aea12e866834b7513e69b30aa14437bc945..a4cbae914cfaf363e955351882afdccc946c434b 100644
---- a/src/main/java/io/multipaper/shreddedpaper/ShreddedPaper.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/ShreddedPaper.java
+--- a/src/main/java/com/vulpeslab/confetti/Confetti.java
++++ b/src/main/java/com/vulpeslab/confetti/Confetti.java
 @@ -9,6 +9,8 @@ import org.bukkit.Location;
  import org.bukkit.craftbukkit.CraftWorld;
- import io.multipaper.shreddedpaper.region.RegionPos;
+ import com.vulpeslab.confetti.region.RegionPos;
  
 +import java.util.function.Consumer;
 +
- public class ShreddedPaper {
+ public class Confetti {
  
      public static void runSync(Location location, Runnable runnable) {
-@@ -43,6 +45,14 @@ public class ShreddedPaper {
+@@ -43,6 +45,14 @@ public class Confetti {
          }
      }
  
@@ -42,7 +42,7 @@ index c2974a6bd6851b54d1df2689195d896baf4906ee..610e43fa1b388e34ec50d03f5c87ab33
  import java.util.Collection;
 +import java.util.function.Consumer;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.commands.CommandSourceStack;
  import net.minecraft.commands.Commands;
  import net.minecraft.commands.arguments.EntityArgument;
@@ -51,7 +51,7 @@ index c2974a6bd6851b54d1df2689195d896baf4906ee..610e43fa1b388e34ec50d03f5c87ab33
      private static int kill(CommandSourceStack source, Collection<? extends Entity> targets) {
          for (Entity entity : targets) {
 -            entity.kill();
-+            ShreddedPaper.ensureSync(entity, Entity::kill); // ShreddedPaper - run on right thread
++            Confetti.ensureSync(entity, Entity::kill); // Confetti - run on right thread
          }
  
          if (targets.size() == 1) {

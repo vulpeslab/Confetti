@@ -22,7 +22,7 @@ index 8ab7ca373a885fbe658013c9c6a2e38d32d77bb2..f6d88899f97d46584aabdb2b4719b714
  import java.util.Optional;
 +import java.util.concurrent.Executor;
 +
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
 +import io.papermc.paper.util.TickThread;
  import net.minecraft.Util;
  import net.minecraft.nbt.CompoundTag;
@@ -31,7 +31,7 @@ index 8ab7ca373a885fbe658013c9c6a2e38d32d77bb2..f6d88899f97d46584aabdb2b4719b714
      protected final DataFixer fixerUpper;
      private static final DateTimeFormatter FORMATTER = FileNameDateFormatter.create();
  
-+    private static final Executor IO_WORKER = Util.ioPool(); // ShreddedPaper
++    private static final Executor IO_WORKER = Util.ioPool(); // Confetti
 +
      public PlayerDataStorage(LevelStorageSource.LevelStorageAccess session, DataFixer dataFixer) {
          this.fixerUpper = dataFixer;
@@ -40,7 +40,7 @@ index 8ab7ca373a885fbe658013c9c6a2e38d32d77bb2..f6d88899f97d46584aabdb2b4719b714
          if (org.spigotmc.SpigotConfig.disablePlayerDataSaving) return; // Spigot
          try {
              CompoundTag nbttagcompound = player.saveWithoutId(new CompoundTag());
-+            Runnable r = () -> { try { // ShreddedPaper - write async
++            Runnable r = () -> { try { // Confetti - write async
              Path path = this.playerDir.toPath();
              Path path1 = Files.createTempFile(path, player.getStringUUID() + "-", ".dat");
  
@@ -48,8 +48,8 @@ index 8ab7ca373a885fbe658013c9c6a2e38d32d77bb2..f6d88899f97d46584aabdb2b4719b714
              Path path3 = path.resolve(player.getStringUUID() + ".dat_old");
  
              Util.safeReplaceFile(path2, path1, path3);
-+            } catch (IOException e) { throw new RuntimeException(e); }}; // ShreddedPaper - write async
-+            if (ShreddedPaperConfiguration.get().optimizations.writePlayerSavesAsync && !TickThread.isShutdownThread()) IO_WORKER.execute(r); else r.run(); // ShreddedPaper - write async
++            } catch (IOException e) { throw new RuntimeException(e); }}; // Confetti - write async
++            if (ConfettiConfiguration.get().optimizations.writePlayerSavesAsync && !TickThread.isShutdownThread()) IO_WORKER.execute(r); else r.run(); // Confetti - write async
          } catch (Exception exception) {
              PlayerDataStorage.LOGGER.warn("Failed to save player data for {}", player.getScoreboardName(), exception); // Paper - Print exception
          }

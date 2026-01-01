@@ -4,10 +4,10 @@ Date: Sun, 5 May 2024 17:02:23 +0900
 Subject: [PATCH] Thread-safe navigatingMobs
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 index 1ae8b6b9b0a63c1c93e9add5c5dfe4739476444d..8086978b2a48acf23bf3de1a4082efb4ad6b8f28 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 @@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
@@ -51,12 +51,12 @@ index 1ae8b6b9b0a63c1c93e9add5c5dfe4739476444d..8086978b2a48acf23bf3de1a4082efb4
                  ;
      }
  }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 index 52c7ce154c4cef680143f635d99d162bdac569c4..80acf2a25921c7b674d0758c0c29a7352746726b 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 @@ -1,11 +1,14 @@
- package io.multipaper.shreddedpaper.region;
+ package com.vulpeslab.confetti.region;
  
  import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 +import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -66,8 +66,8 @@ index 52c7ce154c4cef680143f635d99d162bdac569c4..80acf2a25921c7b674d0758c0c29a735
 +import net.minecraft.world.entity.Mob;
  import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.chunk.LevelChunk;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionLocker;
- import io.multipaper.shreddedpaper.util.SimpleStampedLock;
++import com.vulpeslab.confetti.threading.ConfettiRegionLocker;
+ import com.vulpeslab.confetti.util.SimpleStampedLock;
  
  import java.util.ArrayList;
 @@ -103,6 +106,10 @@ public class LevelChunkRegionMap {
@@ -117,8 +117,8 @@ index 52c7ce154c4cef680143f635d99d162bdac569c4..80acf2a25921c7b674d0758c0c29a735
 +
 +        ObjectArrayList<Mob> navigatingMobs = new ObjectArrayList<>();
 +
-+        for (int x = -ShreddedPaperRegionLocker.REGION_LOCK_RADIUS; x <= ShreddedPaperRegionLocker.REGION_LOCK_RADIUS; x++) {
-+            for (int z = -ShreddedPaperRegionLocker.REGION_LOCK_RADIUS; z <= ShreddedPaperRegionLocker.REGION_LOCK_RADIUS; z++) {
++        for (int x = -ConfettiRegionLocker.REGION_LOCK_RADIUS; x <= ConfettiRegionLocker.REGION_LOCK_RADIUS; x++) {
++            for (int z = -ConfettiRegionLocker.REGION_LOCK_RADIUS; z <= ConfettiRegionLocker.REGION_LOCK_RADIUS; z++) {
 +                RegionPos i = new RegionPos(regionPos.x + x, regionPos.z + z);
 +
 +                // Only collect mobs from regions that are locked - if it's not locked, it should be too far away to matter
@@ -142,7 +142,7 @@ index 27d0e0f44831fdd45a581e48e61469c174e6afb8..c2c33961c74eb84ff968ee0bdf8d57b0
      }
  
      public boolean pollTask() {
-+        if (ShreddedPaperTickThread.isShreddedPaperTickThread()) return false; // ShreddedPaper - don't run main thread tasks on worker threads
++        if (ConfettiTickThread.isConfettiTickThread()) return false; // Confetti - don't run main thread tasks on worker threads
          return this.mainThreadProcessor.pollTask();
      }
  
@@ -159,11 +159,11 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
  import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
  import it.unimi.dsi.fastutil.longs.LongSet;
 @@ -207,7 +208,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
-     public final LevelTicksRegionProxy<Fluid> fluidTicks; // ShreddedPaper
+     public final LevelTicksRegionProxy<Fluid> fluidTicks; // Confetti
      private final PathTypeCache pathTypesByPosCache;
      final Set<Mob> navigatingMobs;
 -    volatile boolean isUpdatingNavigations;
-+    final ThreadLocal<Boolean> isUpdatingNavigations = ThreadLocal.withInitial(() -> false); // ShreddedPaper - make thread local
++    final ThreadLocal<Boolean> isUpdatingNavigations = ThreadLocal.withInitial(() -> false); // Confetti - make thread local
      protected final Raids raids;
      private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents;
      private final List<BlockEventData> blockEventsToReschedule;
@@ -172,7 +172,7 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
      @Override
      public void sendBlockUpdated(BlockPos pos, BlockState oldState, BlockState newState, int flags) {
 -        if (this.isUpdatingNavigations) {
-+        if (this.isUpdatingNavigations.get()) { // ShreddedPaper - use thread local
++        if (this.isUpdatingNavigations.get()) { // Confetti - use thread local
              String s = "recursive call to sendBlockUpdated";
  
              Util.logAndPauseIfInIde("recursive call to sendBlockUpdated", new IllegalStateException("recursive call to sendBlockUpdated"));
@@ -181,7 +181,7 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
          if (Shapes.joinIsNotEmpty(voxelshape, voxelshape1, BooleanOp.NOT_SAME)) {
              List<PathNavigation> list = new ObjectArrayList();
 -            Iterator iterator = this.navigatingMobs.iterator();
-+            Iterator iterator = chunkSource.tickingRegions.collectRelevantNavigatingMobs(RegionPos.forChunk(new ChunkPos(pos))).iterator(); // ShreddedPaper
++            Iterator iterator = chunkSource.tickingRegions.collectRelevantNavigatingMobs(RegionPos.forChunk(new ChunkPos(pos))).iterator(); // Confetti
  
              while (iterator.hasNext()) {
                  // CraftBukkit start - fix SPIGOT-6362
@@ -190,7 +190,7 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
  
              try {
 -                this.isUpdatingNavigations = true;
-+                this.isUpdatingNavigations.set(true); // ShreddedPaper - use thread local
++                this.isUpdatingNavigations.set(true); // Confetti - use thread local
                  iterator = list.iterator();
  
                  while (iterator.hasNext()) {
@@ -199,7 +199,7 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
                  }
              } finally {
 -                this.isUpdatingNavigations = false;
-+                this.isUpdatingNavigations.set(false); // ShreddedPaper - use thread local
++                this.isUpdatingNavigations.set(false); // Confetti - use thread local
              }
  
          }
@@ -208,7 +208,7 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
  
          public void onTrackingStart(Entity entity) {
 -            org.spigotmc.AsyncCatcher.catchOp("entity register"); // Spigot
-+            TickThread.ensureTickThread(entity, "entity register"); // org.spigotmc.AsyncCatcher.catchOp("entity register"); // Spigot // ShreddedPaper
++            TickThread.ensureTickThread(entity, "entity register"); // org.spigotmc.AsyncCatcher.catchOp("entity register"); // Spigot // Confetti
              // ServerLevel.this.getChunkSource().addEntity(entity); // Paper - ignore and warn about illegal addEntity calls instead of crashing server; moved down below valid=true
              if (entity instanceof ServerPlayer entityplayer) {
                  ServerLevel.this.players.add(entityplayer);
@@ -217,14 +217,14 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
  
              if (entity instanceof Mob entityinsentient) {
 -                if (false && ServerLevel.this.isUpdatingNavigations) { // Paper - Remove unnecessary onTrackingStart during navigation warning
-+                if (false && ServerLevel.this.isUpdatingNavigations.get()) { // Paper - Remove unnecessary onTrackingStart during navigation warning // ShreddedPaper - use thread local
++                if (false && ServerLevel.this.isUpdatingNavigations.get()) { // Paper - Remove unnecessary onTrackingStart during navigation warning // Confetti - use thread local
                      String s = "onTrackingStart called during navigation iteration";
  
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
 -                ServerLevel.this.navigatingMobs.add(entityinsentient);
-+                // ServerLevel.this.navigatingMobs.add(entityinsentient); // ShreddedPaper - handled ourselves
++                // ServerLevel.this.navigatingMobs.add(entityinsentient); // Confetti - handled ourselves
              }
  
              if (entity instanceof EnderDragon entityenderdragon) {
@@ -233,7 +233,7 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
  
          public void onTrackingEnd(Entity entity) {
 -            org.spigotmc.AsyncCatcher.catchOp("entity unregister"); // Spigot
-+            TickThread.ensureTickThread(entity, "entity unregister"); // org.spigotmc.AsyncCatcher.catchOp("entity unregister"); // Spigot // ShreddedPaper
++            TickThread.ensureTickThread(entity, "entity unregister"); // org.spigotmc.AsyncCatcher.catchOp("entity unregister"); // Spigot // Confetti
              // Spigot start
              if ( entity instanceof Player )
              {
@@ -242,14 +242,14 @@ index c7ebd82dd29dc9474e89fede80802aca2f537408..bae170b01ea310c79f33c41cf32a5f5c
  
              if (entity instanceof Mob entityinsentient) {
 -                if (false && ServerLevel.this.isUpdatingNavigations) { // Paper - Remove unnecessary onTrackingStart during navigation warning
-+                if (false && ServerLevel.this.isUpdatingNavigations.get()) { // Paper - Remove unnecessary onTrackingStart during navigation warning // ShreddedPaper - use thread local
++                if (false && ServerLevel.this.isUpdatingNavigations.get()) { // Paper - Remove unnecessary onTrackingStart during navigation warning // Confetti - use thread local
                      String s = "onTrackingStart called during navigation iteration";
  
                      Util.logAndPauseIfInIde("onTrackingStart called during navigation iteration", new IllegalStateException("onTrackingStart called during navigation iteration"));
                  }
  
 -                ServerLevel.this.navigatingMobs.remove(entityinsentient);
-+                // ServerLevel.this.navigatingMobs.remove(entityinsentient); // ShreddedPaper - handled ourselves
++                // ServerLevel.this.navigatingMobs.remove(entityinsentient); // Confetti - handled ourselves
              }
  
              if (entity instanceof EnderDragon entityenderdragon) {

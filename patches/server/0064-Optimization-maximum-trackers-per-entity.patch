@@ -12,9 +12,9 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
  import com.mojang.logging.LogUtils;
  import com.mojang.serialization.DataResult;
  import com.mojang.serialization.JsonOps;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
- import io.multipaper.shreddedpaper.util.Int2ObjectMapWrapper;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
+ import com.vulpeslab.confetti.util.Int2ObjectMapWrapper;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
  import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 @@ -25,12 +27,15 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
@@ -62,17 +62,17 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
                          ServerPlayer entityplayer = (ServerPlayer) entity;
  
                          this.updatePlayerStatus(entityplayer, true);
-+                        if (true) return; // ShreddedPaper - handled elsewhere
-                         Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // ShreddedPaper - use entityConcurrentMap
++                        if (true) return; // Confetti - handled elsewhere
+                         Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // Confetti - use entityConcurrentMap
  
                          while (objectiterator.hasNext()) {
 @@ -1351,6 +1361,10 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> oldTrackerCandidates = this.lastTrackerCandidates;
              this.lastTrackerCandidates = newTrackerCandidates;
  
-+            boolean fullTrackerUpdate = (level.getGameTime() ^ (long) this.entity.getId()) % ShreddedPaperConfiguration.get().optimizations.trackerFullUpdateFrequency == 0L; // ShreddedPaper - trackerFullUpdateFrequency
-+            if (fullTrackerUpdate && this.entity instanceof ServerPlayer player) player.hasMaximumTrackerBypassPermission = player.getBukkitEntity().hasPermission("shreddedpaper.maximumtrackerbypass"); // ShreddedPaper
-+            if (this.lastTrackerCandidates != null && this.lastTrackerCandidates.size() > ShreddedPaperConfiguration.get().optimizations.maximumTrackersPerEntity) { updatePlayersLimitedAndOrdered(oldTrackerCandidates != newTrackerCandidates && (oldTrackerCandidates == null || newTrackerCandidates == null || oldTrackerCandidates.size() != newTrackerCandidates.size()), fullTrackerUpdate); return; } // ShreddedPaper - maximum trackers per entity
++            boolean fullTrackerUpdate = (level.getGameTime() ^ (long) this.entity.getId()) % ConfettiConfiguration.get().optimizations.trackerFullUpdateFrequency == 0L; // Confetti - trackerFullUpdateFrequency
++            if (fullTrackerUpdate && this.entity instanceof ServerPlayer player) player.hasMaximumTrackerBypassPermission = player.getBukkitEntity().hasPermission("confetti.maximumtrackerbypass"); // Confetti
++            if (this.lastTrackerCandidates != null && this.lastTrackerCandidates.size() > ConfettiConfiguration.get().optimizations.maximumTrackersPerEntity) { updatePlayersLimitedAndOrdered(oldTrackerCandidates != newTrackerCandidates && (oldTrackerCandidates == null || newTrackerCandidates == null || oldTrackerCandidates.size() != newTrackerCandidates.size()), fullTrackerUpdate); return; } // Confetti - maximum trackers per entity
 +
              if (newTrackerCandidates != null) {
                  Object[] rawData = newTrackerCandidates.getBackingSet();
@@ -82,11 +82,11 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
                      }
                      ServerPlayer player = (ServerPlayer)raw;
 -                    this.updatePlayer(player);
-+                    if (fullTrackerUpdate || !this.seenBy.contains(player.connection)) this.updatePlayer(player); // ShreddedPaper - trackerFullUpdateFrequency
++                    if (fullTrackerUpdate || !this.seenBy.contains(player.connection)) this.updatePlayer(player); // Confetti - trackerFullUpdateFrequency
                  }
              }
  
-+            if (!fullTrackerUpdate) return; // ShreddedPaper - trackerFullUpdateFrequency
++            if (!fullTrackerUpdate) return; // Confetti - trackerFullUpdateFrequency
 +
              if (oldTrackerCandidates == newTrackerCandidates) {
                  // this is likely the case.
@@ -95,7 +95,7 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
          }
          // Paper end - use distance map to optimise tracker
  
-+        // ShreddedPaper start - maximum trackers per entity
++        // Confetti start - maximum trackers per entity
 +        private record DistancedServerPlayer(ServerPlayer serverPlayer, double distanceSqr, boolean hasBypassPerm) implements Comparable<DistancedServerPlayer> {
 +            DistancedServerPlayer(ServerPlayer serverPlayer, Entity entity) {
 +                this(serverPlayer, distanceBetween(serverPlayer, entity), serverPlayer.hasMaximumTrackerBypassPermission);
@@ -153,10 +153,10 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
 +
 +            seenByLock.lock();
 +            try {
-+                Set<ServerPlayer> canBeSeenBy = new ReferenceOpenHashSet<>(Math.min(ShreddedPaperConfiguration.get().optimizations.maximumTrackersPerEntity, playerSet.size()));
++                Set<ServerPlayer> canBeSeenBy = new ReferenceOpenHashSet<>(Math.min(ConfettiConfiguration.get().optimizations.maximumTrackersPerEntity, playerSet.size()));
 +                Iterator<DistancedServerPlayer> playerSetIterator = playerSet.iterator();
 +                int count = 0;
-+                while (playerSetIterator.hasNext() && count++ < ShreddedPaperConfiguration.get().optimizations.maximumTrackersPerEntity) { // ShreddedPaper - maximum trackers per entity
++                while (playerSetIterator.hasNext() && count++ < ConfettiConfiguration.get().optimizations.maximumTrackersPerEntity) { // Confetti - maximum trackers per entity
 +                    DistancedServerPlayer distancedPlayer = playerSetIterator.next();
 +                    ServerPlayer player = distancedPlayer.serverPlayer();
 +                    canBeSeenBy.add(player);
@@ -181,7 +181,7 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
 +                seenByLock.unlock();
 +            }
 +        }
-+        // ShreddedPaper end - maximum trackers per entity
++        // Confetti end - maximum trackers per entity
 +
          public boolean equals(Object object) {
              return object instanceof ChunkMap.TrackedEntity ? ((ChunkMap.TrackedEntity) object).entity.getId() == this.entity.getId() : false;
@@ -194,7 +194,7 @@ index de42949f9754b73ca03873c7a97ccdaba0455a5a..26af494184eb07f71852e8e3fa6f7fce
      private BlockPos respawnPosition;
      private boolean respawnForced;
      private float respawnAngle;
-+    public boolean hasMaximumTrackerBypassPermission; // ShreddedPaper
++    public boolean hasMaximumTrackerBypassPermission; // Confetti
      private final TextFilter textFilter;
      private boolean textFilteringEnabled;
      private boolean allowsListing;

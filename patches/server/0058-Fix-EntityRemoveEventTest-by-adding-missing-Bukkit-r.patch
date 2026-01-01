@@ -14,7 +14,7 @@ index a69cd350b6c1e66fc0e81917e23bccc1bc0ab75d..2b2c6cb02342b18d61596d194e024f10
                  if (Projectile.loadedThisTick > gg.pufferfish.pufferfish.PufferfishConfig.maxProjectileLoadsPerTick) {
                      if (++this.loadedLifetime > gg.pufferfish.pufferfish.PufferfishConfig.maxProjectileLoadsPerProjectile) {
 -                        this.discard();
-+                        this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.DESPAWN); // ShreddedPaper - add Bukkit remove cause
++                        this.discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.DESPAWN); // Confetti - add Bukkit remove cause
                      }
                      return;
                  }

@@ -1,16 +1,16 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: PureGero <puregero@gmail.com>
 Date: Fri, 4 Mar 2022 20:33:33 +1000
-Subject: [PATCH] ShreddedPaper config file
+Subject: [PATCH] Confetti config file
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/config/ExceptionableConsumer.java b/src/main/java/io/multipaper/shreddedpaper/config/ExceptionableConsumer.java
+diff --git a/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java b/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..df97bb240655934b62cfb1647f2dc32707b48a09
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/config/ExceptionableConsumer.java
++++ b/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java
 @@ -0,0 +1,8 @@
-+package io.multipaper.shreddedpaper.config;
++package com.vulpeslab.confetti.config;
 +
 +@FunctionalInterface
 +public interface ExceptionableConsumer<T> {
@@ -18,13 +18,13 @@ index 0000000000000000000000000000000000000000..df97bb240655934b62cfb1647f2dc327
 +    void accept(T t) throws Exception;
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/config/ShreddedPaperConfiguration.java b/src/main/java/io/multipaper/shreddedpaper/config/ShreddedPaperConfiguration.java
+diff --git a/src/main/java/com/vulpeslab/confetti/config/ConfettiConfiguration.java b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfiguration.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d0dd169d5cac210373da184f19bfd2b0042a4ffd
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/config/ShreddedPaperConfiguration.java
++++ b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfiguration.java
 @@ -0,0 +1,64 @@
-+package io.multipaper.shreddedpaper.config;
++package com.vulpeslab.confetti.config;
 +
 +import io.papermc.paper.configuration.ConfigurationPart;
 +import org.spongepowered.configurate.objectmapping.meta.Comment;
@@ -32,23 +32,23 @@ index 0000000000000000000000000000000000000000..d0dd169d5cac210373da184f19bfd2b0
 +import java.util.List;
 +
 +@SuppressWarnings({ "InnerClassMayBeStatic" })
-+public class ShreddedPaperConfiguration extends ConfigurationPart {
++public class ConfettiConfiguration extends ConfigurationPart {
 +
 +    public static final String HEADER = """
-+            This is the main configuration file for ShreddedPaper.
++            This is the main configuration file for Confetti.
 +            There's quite alot to configure. Read the docs for more information.
 +
-+            Docs: https://github.com/MultiPaper/ShreddedPaper/blob/main/SHREDDEDPAPER_YAML.md\s
++            Docs: https://github.com/vulpeslab/Confetti/blob/main/CONFETTI_YAML.md\s
 +            """;
 +
-+    private static ShreddedPaperConfiguration instance;
++    private static ConfettiConfiguration instance;
 +
-+    public static ShreddedPaperConfiguration get() {
++    public static ConfettiConfiguration get() {
 +        return instance;
 +    }
 +
-+    static void set(ShreddedPaperConfiguration instance) {
-+        ShreddedPaperConfiguration.instance = instance;
++    static void set(ConfettiConfiguration instance) {
++        ConfettiConfiguration.instance = instance;
 +    }
 +
 +    public Multithreading multithreading;
@@ -88,13 +88,13 @@ index 0000000000000000000000000000000000000000..d0dd169d5cac210373da184f19bfd2b0
 +
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/config/ShreddedPaperConfigurationLoader.java b/src/main/java/io/multipaper/shreddedpaper/config/ShreddedPaperConfigurationLoader.java
+diff --git a/src/main/java/com/vulpeslab/confetti/config/ConfettiConfigurationLoader.java b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfigurationLoader.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a45ea7da9f
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/config/ShreddedPaperConfigurationLoader.java
++++ b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfigurationLoader.java
 @@ -0,0 +1,128 @@
-+package io.multipaper.shreddedpaper.config;
++package com.vulpeslab.confetti.config;
 +
 +import io.papermc.paper.configuration.ConfigurationLoaders;
 +import io.papermc.paper.configuration.ConfigurationPart;
@@ -118,12 +118,12 @@ index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a4
 +
 +import static io.leangen.geantyref.GenericTypeReflector.erase;
 +
-+public class ShreddedPaperConfigurationLoader {
++public class ConfettiConfigurationLoader {
 +
 +    public static void init(File file) {
 +        try {
 +            YamlConfigurationLoader.Builder loaderBuilder = ConfigurationLoaders.naturallySorted();
-+            loaderBuilder.defaultOptions(options -> options.header(ShreddedPaperConfiguration.HEADER));
++            loaderBuilder.defaultOptions(options -> options.header(ConfettiConfiguration.HEADER));
 +
 +            Path configFile = file.toPath();
 +            YamlConfigurationLoader loader = loaderBuilder
@@ -140,7 +140,7 @@ index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a4
 +            String before = node.toString();
 +            setFromProperties(node);
 +
-+            ShreddedPaperConfiguration instance = node.require(ShreddedPaperConfiguration.class);
++            ConfettiConfiguration instance = node.require(ConfettiConfiguration.class);
 +            transformLegacyConfig(node, instance);
 +
 +            for (Object key : node.childrenMap().keySet()) {
@@ -153,16 +153,16 @@ index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a4
 +                loader.save(node);
 +            }
 +
-+            ShreddedPaperConfiguration.set(instance);
++            ConfettiConfiguration.set(instance);
 +        } catch (ConfigurateException e) {
-+            throw new RuntimeException("Could not load shreddedpaper.yml", e);
++            throw new RuntimeException("Could not load confetti.yml", e);
 +        }
 +    }
 +
 +    private static void setFromProperties(ConfigurationNode node) {
 +        for (Map.Entry<Object, Object> property : System.getProperties().entrySet()) {
-+            if (property.getKey().toString().startsWith("shreddedpaper.")) {
-+                String key = property.getKey().toString().substring("shreddedpaper.".length());
++            if (property.getKey().toString().startsWith("confetti.")) {
++                String key = property.getKey().toString().substring("confetti.".length());
 +                try {
 +                    node.node((Object[]) key.split("\\.")).set(property.getValue());
 +                } catch (SerializationException e) {
@@ -185,7 +185,7 @@ index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a4
 +                .registerAnnotatedObjects(factory));
 +    }
 +
-+    private static void transformLegacyConfig(ConfigurationNode node, ShreddedPaperConfiguration config) {
++    private static void transformLegacyConfig(ConfigurationNode node, ConfettiConfiguration config) {
 +        // getAndRemove(node, "oldValue.oldie", value -> config.newSection.newValue.newie = value.getString());
 +    }
 +
@@ -222,50 +222,50 @@ index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a4
 +    }
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java b/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java
+diff --git a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..53dcfbdf38f007fc86064ac1a495288d5f25f598
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java
++++ b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 @@ -0,0 +1,17 @@
-+package io.multipaper.shreddedpaper.permissions;
++package com.vulpeslab.confetti.permissions;
 +
 +import org.bukkit.permissions.Permission;
 +import org.bukkit.util.permissions.DefaultPermissions;
 +import org.jetbrains.annotations.NotNull;
 +
-+public class ShreddedPaperCommandPermissions {
-+    private static final String ROOT = "shreddedpaper.command";
++public class ConfettiCommandPermissions {
++    private static final String ROOT = "confetti.command";
 +    private static final String PREFIX = ROOT + ".";
 +
 +    public static void registerPermissions(@NotNull Permission parent) {
-+        Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all ShreddedPaper commands", parent);
++        Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all Confetti commands", parent);
 +
 +
 +        commands.recalculatePermissibles();
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperPermissions.java b/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperPermissions.java
+diff --git a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiPermissions.java b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiPermissions.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..a72566749fce7c3e0a89e16afc31caf01117034a
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperPermissions.java
++++ b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiPermissions.java
 @@ -0,0 +1,19 @@
-+package io.multipaper.shreddedpaper.permissions;
++package com.vulpeslab.confetti.permissions;
 +
 +import org.bukkit.permissions.Permission;
 +import org.bukkit.permissions.PermissionDefault;
 +import org.bukkit.util.permissions.DefaultPermissions;
 +
-+public class ShreddedPaperPermissions {
-+    private static final String ROOT = "shreddedpaper";
++public class ConfettiPermissions {
++    private static final String ROOT = "confetti";
 +
 +    public static void registerCorePermissions() {
-+        Permission parent = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all ShreddedPaper utilities and commands");
++        Permission parent = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all Confetti utilities and commands");
 +
 +        DefaultPermissions.registerPermission(ROOT + ".maximumtrackerbypass", "Gives the user the ability to see all entities regardless of the maximum tracker config", PermissionDefault.OP, parent);
 +
-+        ShreddedPaperCommandPermissions.registerPermissions(parent);
++        ConfettiCommandPermissions.registerPermissions(parent);
 +
 +        parent.recalculatePermissibles();
 +    }
@@ -286,8 +286,8 @@ index 0f7d6da8685716604f0749d4f5b60730a44cde73..a7ffbbfd2a9fdeae0953ec8753ce48e9
  import org.bukkit.configuration.file.YamlConfiguration;
  // CraftBukkit end
  
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfigurationLoader;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfigurationLoader;
 +
  public class Main {
  
@@ -296,7 +296,7 @@ index 0f7d6da8685716604f0749d4f5b60730a44cde73..a7ffbbfd2a9fdeae0953ec8753ce48e9
                  JvmProfiler.INSTANCE.start(Environment.SERVER);
              }
  
-+            ShreddedPaperConfigurationLoader.init((File) optionset.valueOf("shreddedpaper-settings")); // ShreddedPaper
++            ConfettiConfigurationLoader.init((File) optionset.valueOf("confetti-settings")); // Confetti
 +
              // Purpur start - load config files early
              org.bukkit.configuration.file.YamlConfiguration purpurConfiguration = io.papermc.paper.configuration.PaperConfigurations.loadLegacyConfigFile((File) optionset.valueOf("purpur-settings"));
@@ -309,7 +309,7 @@ index 07a04dcbd48430102268f8f44e9bce437214a00f..01472ee224ac91ec4fbffdf82a0d92e0
  import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
-+import io.multipaper.shreddedpaper.permissions.ShreddedPaperPermissions;
++import com.vulpeslab.confetti.permissions.ConfettiPermissions;
  
  import javax.annotation.Nullable; // Paper
  import javax.annotation.Nonnull; // Paper
@@ -317,7 +317,7 @@ index 07a04dcbd48430102268f8f44e9bce437214a00f..01472ee224ac91ec4fbffdf82a0d92e0
              this.commandMap.registerServerAliases();
              DefaultPermissions.registerCorePermissions();
              CraftDefaultPermissions.registerCorePermissions();
-+            ShreddedPaperPermissions.registerCorePermissions(); // ShreddedPaper
++            ConfettiPermissions.registerCorePermissions(); // Confetti
              if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) this.loadCustomPermissions(); // Paper
              this.helpMap.initializeCommands();
              this.syncCommands();
@@ -329,13 +329,13 @@ index e2b79f8eacd34d2d20f8be34b402820723e37ae3..43310bffeeeebafb0ef7437cbfcd9e06
                      .describedAs("Yml file");
                  // Purpur end
  
-+                // ShreddedPaper start
-+                acceptsAll(asList("shreddedpaper", "shreddedpaper-settings"), "File for shreddedpaper settings")
++                // Confetti start
++                acceptsAll(asList("confetti", "confetti-settings"), "File for confetti settings")
 +                        .withRequiredArg()
 +                        .ofType(File.class)
-+                        .defaultsTo(new File("shreddedpaper.yml"))
++                        .defaultsTo(new File("confetti.yml"))
 +                        .describedAs("Yml file");
-+                // ShreddedPaper end
++                // Confetti end
 +
                  // Paper start
                  acceptsAll(asList("server-name"), "Name of the server")

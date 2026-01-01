@@ -138,7 +138,7 @@ Note that these two examples use Paper's Scheduler API, so you must reference
 the paper api rather than the spigot api in your dependencies.
 
 If you want to continue supporting Spigot and other Bukkit variants, check out
-[MultiLib](https://github.com/MultiPaper/MultiLib#shreddedpaper--folia-methods)
+[MultiLib](https://github.com/MultiPaper/MultiLib)
 which includes fallback mechanics for Bukkit servers.
 
 ## 4. Use entity.teleportAsync

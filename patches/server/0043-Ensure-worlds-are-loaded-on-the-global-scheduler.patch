@@ -12,8 +12,8 @@ index 8179f9a24fb9926f67bc9b181082d2cae10b500b..7103b2bd575202c8d943f89eec82e7d8
      // CraftBukkit start
      public void prepareLevels(ChunkProgressListener worldloadlistener, ServerLevel worldserver) {
          // WorldServer worldserver = this.overworld();
-+        if (!TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // ShreddedPaper
-+        if (ShreddedPaperTickThread.isShreddedPaperTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // ShreddedPaper
++        if (!TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // Confetti
++        if (ConfettiTickThread.isConfettiTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // Confetti
          this.forceTicks = true;
          // CraftBukkit end
  
@@ -25,8 +25,8 @@ index ea13875caf0d5df2750d6ab6758053a7372d966e..c1f331c0150fa0c2dabb0d7ea24c7614
          Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
          //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
          Preconditions.checkArgument(creator != null, "WorldCreator cannot be null");
-+        if (!TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // ShreddedPaper
-+        if (ShreddedPaperTickThread.isShreddedPaperTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // ShreddedPaper
++        if (!TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // Confetti
++        if (ConfettiTickThread.isConfettiTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // Confetti
  
          String name = creator.name();
          ChunkGenerator generator = creator.generator();

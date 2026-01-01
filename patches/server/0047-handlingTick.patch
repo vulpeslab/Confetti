@@ -4,11 +4,11 @@ Date: Sat, 3 Aug 2024 19:37:13 +0900
 Subject: [PATCH] handlingTick
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index 5c798e3f48eb400d0d95e6a733734914d3d0cb8e..6a3932818caeddf930cf1b90f1400bc494914774 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-@@ -78,12 +78,16 @@ public class ShreddedPaperChunkTicker {
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -78,12 +78,16 @@ public class ConfettiChunkTicker {
              region.tickTasks();
  
              if (level.tickRateManager().runsNormally()) {
@@ -24,26 +24,26 @@ index 5c798e3f48eb400d0d95e6a733734914d3d0cb8e..6a3932818caeddf930cf1b90f1400bc4
 +                level.handlingTickThreadLocal.set(false);
              }
  
-             region.forEachTickingEntity(ShreddedPaperEntityTicker::tickEntity);
+             region.forEachTickingEntity(ConfettiEntityTicker::tickEntity);
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
 index b6ffd2ac046777466657eaedbf13f2cbaa8456b3..5f99874eb7d8e33686c2fb662e1220d05883fd0a 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -210,7 +210,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
      protected final Raids raids;
-     // private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents; // ShreddedPaper - moved into each region
-     private final ThreadLocal<List<BlockEventData>> blockEventsToRescheduleThreadLocal; // ShreddedPaper
+     // private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents; // Confetti - moved into each region
+     private final ThreadLocal<List<BlockEventData>> blockEventsToRescheduleThreadLocal; // Confetti
 -    private boolean handlingTick;
-+    public ThreadLocal<Boolean> handlingTickThreadLocal = ThreadLocal.withInitial(() -> false); // ShreddedPaper
++    public ThreadLocal<Boolean> handlingTickThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti
      private final List<CustomSpawner> customSpawners;
      @Nullable
      private EndDragonFight dragonFight;
 @@ -837,7 +837,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
-     public CompletableFuture<Void> tick(BooleanSupplier shouldKeepTicking) { // ShreddedPaper - run async
+     public CompletableFuture<Void> tick(BooleanSupplier shouldKeepTicking) { // Confetti - run async
          //ProfilerFiller gameprofilerfiller = this.getProfiler(); // Purpur
  
 -        this.handlingTick = true;
-+        this.handlingTickThreadLocal.set(true); // ShreddedPaper
++        this.handlingTickThreadLocal.set(true); // Confetti
          TickRateManager tickratemanager = this.tickRateManager();
          boolean flag = tickratemanager.runsNormally();
  
@@ -52,7 +52,7 @@ index b6ffd2ac046777466657eaedbf13f2cbaa8456b3..5f99874eb7d8e33686c2fb662e1220d0
          }
  
 -        this.handlingTick = false;
-+        this.handlingTickThreadLocal.set(false); // ShreddedPaper
++        this.handlingTickThreadLocal.set(false); // Confetti
          //gameprofilerfiller.pop(); // Purpur
          boolean flag1 = !paperConfig().unsupportedSettings.disableWorldTickingWhenEmpty || !this.players.isEmpty() || !this.getForcedChunks().isEmpty(); // CraftBukkit - this prevents entity cleanup, other issues on servers with no players // Paper - restore this
  

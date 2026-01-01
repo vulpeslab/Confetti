@@ -13,7 +13,7 @@ index 92f1ea81b5e90529905d9c508aca18c31443ff6a..b3ebd6a29895777166174b40006177ea
  import java.util.function.BooleanSupplier;
  import java.util.function.Predicate;
 +
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
 +import io.papermc.paper.util.TickThread;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
@@ -22,7 +22,7 @@ index 92f1ea81b5e90529905d9c508aca18c31443ff6a..b3ebd6a29895777166174b40006177ea
      }
  
      public ChunkAccess getHandle(ChunkStatus chunkStatus) {
-+        if (ShreddedPaperTickThread.isShreddedPaperTickThread() && !TickThread.isTickThreadFor(this.worldServer, this.x, this.z)) TickThread.failedTickThreadCheck("Cannot get chunk from a region that is not ours!", "world=" + this.worldServer.convertable.getLevelId() + ", chunkpos=[" + this.x + "," + this.z + "]"); // ShreddedPaper - regions
++        if (ConfettiTickThread.isConfettiTickThread() && !TickThread.isTickThreadFor(this.worldServer, this.x, this.z)) TickThread.failedTickThreadCheck("Cannot get chunk from a region that is not ours!", "world=" + this.worldServer.convertable.getLevelId() + ", chunkpos=[" + this.x + "," + this.z + "]"); // Confetti - regions
          ChunkAccess chunkAccess = this.worldServer.getChunk(this.x, this.z, chunkStatus);
  
          // SPIGOT-7332: Get unwrapped extension
@@ -32,17 +32,17 @@ index 3723dd028800c81f3f392657f1b209884864c5ba..12091e6b2696f7adf5275988ecc4cdc5
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableMap;
  import com.mojang.datafixers.util.Pair;
- import io.multipaper.shreddedpaper.ShreddedPaper;
- import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
- import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
+ import com.vulpeslab.confetti.Confetti;
+ import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
+ import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 @@ -355,6 +356,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public Chunk getChunkAt(int x, int z) {
-+        if (ShreddedPaperTickThread.isShreddedPaperTickThread() && !TickThread.isTickThreadFor(this.world, x, z)) TickThread.failedTickThreadCheck("Cannot get chunk from a region that is not ours!", "world=" + this.world.convertable.getLevelId() + ", chunkpos=[" + x + "," + z + "]"); // ShreddedPaper - regions
++        if (ConfettiTickThread.isConfettiTickThread() && !TickThread.isTickThreadFor(this.world, x, z)) TickThread.failedTickThreadCheck("Cannot get chunk from a region that is not ours!", "world=" + this.world.convertable.getLevelId() + ", chunkpos=[" + x + "," + z + "]"); // Confetti - regions
          warnUnsafeChunk("getting a faraway chunk", x, z); // Paper
          // Paper start - add ticket to hold chunk for a little while longer if plugin accesses it
          net.minecraft.world.level.chunk.LevelChunk chunk = this.world.getChunkSource().getChunkAtIfLoadedImmediately(x, z);

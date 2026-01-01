@@ -4,13 +4,13 @@ Date: Sun, 5 May 2024 12:48:36 +0900
 Subject: [PATCH] Add SimpleStampedLock
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/util/SimpleStampedLock.java b/src/main/java/io/multipaper/shreddedpaper/util/SimpleStampedLock.java
+diff --git a/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java b/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..99dca3671643f471223ed8ec4080d73c57fb3eb1
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/util/SimpleStampedLock.java
++++ b/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java
 @@ -0,0 +1,71 @@
-+package io.multipaper.shreddedpaper.util;
++package com.vulpeslab.confetti.util;
 +
 +import java.util.concurrent.locks.StampedLock;
 +import java.util.function.Supplier;

@@ -13,7 +13,7 @@ index 9f17170179cc99d84ad25a1e838aff3d8cc66f93..e0f567a94fb73d0d20a513f9a1a72974
          int l = 0;
  
 -        wire.shouldSignal = false;
-+        wire.shouldSignalThreadLocal.set(false); // ShreddedPaper - use thread local for shouldSignal
++        wire.shouldSignalThreadLocal.set(false); // Confetti - use thread local for shouldSignal
          // Unfortunately, World.isBlockIndirectlyGettingPowered is complicated,
          // and I'm not ready to try to replicate even more functionality from
          // elsewhere in Minecraft into this accelerator.  So sadly, we must
@@ -21,7 +21,7 @@ index 9f17170179cc99d84ad25a1e838aff3d8cc66f93..e0f567a94fb73d0d20a513f9a1a72974
          // is consistency to what this call returns, we may be able to cache it.
          final int k = worldIn.getBestNeighborSignal(upd.self);
 -        wire.shouldSignal = true;
-+        wire.shouldSignalThreadLocal.set(true); // ShreddedPaper - use thread local for shouldSignal
++        wire.shouldSignalThreadLocal.set(true); // Confetti - use thread local for shouldSignal
  
          // The variable 'k' holds the maximum redstone power value of any adjacent blocks.
          // If 'k' has the highest level of all neighbors, then the power level of this
@@ -34,12 +34,12 @@ index a5f706d6f716b2a463ae58adcde69d9e665c7733..2f269fee6e9119db5b67934627d66e96
      }
  
 -    public void addChunk(final int chunkX, final int chunkZ) {
-+    public synchronized void addChunk(final int chunkX, final int chunkZ) { // ShreddedPaper - synchronized
++    public synchronized void addChunk(final int chunkX, final int chunkZ) { // Confetti - synchronized
          this.getOrCreateAndMergeSection(chunkX >> this.regionChunkShift, chunkZ >> this.regionChunkShift, null).addChunk(chunkX, chunkZ);
      }
  
 -    public void removeChunk(final int chunkX, final int chunkZ) {
-+    public synchronized void removeChunk(final int chunkX, final int chunkZ) { // ShreddedPaper - synchronized
++    public synchronized void removeChunk(final int chunkX, final int chunkZ) { // Confetti - synchronized
          final RegionSection section = this.regionsBySection.get(
                  MCUtil.getCoordinateKey(chunkX >> this.regionChunkShift, chunkZ >> this.regionChunkShift)
          );
@@ -48,7 +48,7 @@ index a5f706d6f716b2a463ae58adcde69d9e665c7733..2f269fee6e9119db5b67934627d66e96
      }
  
 -    public void recalculateRegions() {
-+    public synchronized void recalculateRegions() { // ShreddedPaper - synchronized
++    public synchronized void recalculateRegions() { // Confetti - synchronized
          for (int i = 0, len = this.needsRecalculation.size(); i < len; ++i) {
              final Region region = this.needsRecalculation.removeFirst();
  
@@ -60,7 +60,7 @@ index 758c155c23d95c3cc952cb14f864c703f9b45127..6b83f09f9862e298cad009b3e3a38447
  import com.google.gson.JsonArray;
  import com.google.gson.JsonObject;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
  import io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader;
  import io.papermc.paper.chunk.system.io.RegionFileIOThread;
  import io.papermc.paper.chunk.system.poi.PoiChunk;
@@ -85,7 +85,7 @@ index 758c155c23d95c3cc952cb14f864c703f9b45127..6b83f09f9862e298cad009b3e3a38447
              final NewChunkHolder holder = holders.get(i);
              try {
 -                final NewChunkHolder.SaveStat saveStat = holder.save(shutdown, false);
-+                // ShreddedPaper start - save on chunk's thread
++                // Confetti start - save on chunk's thread
 +                CompletableFuture<NewChunkHolder.SaveStat> future;
 +                Supplier<NewChunkHolder.SaveStat> supplier = () -> holder.save(shutdown, false);
 +                do {
@@ -101,7 +101,7 @@ index 758c155c23d95c3cc952cb14f864c703f9b45127..6b83f09f9862e298cad009b3e3a38447
 +                    }
 +                } while (!future.isDone());
 +                final NewChunkHolder.SaveStat saveStat = future.join();
-+                // ShreddedPaper end - save on chunk's thread
++                // Confetti end - save on chunk's thread
                  if (saveStat != null) {
                      ++saved;
                      needsFlush = flush;
@@ -114,7 +114,7 @@ index 6df0db8b4cdab23494ea34236949ece4989110a3..28a62457a0a02c81055af711105b306f
  
          BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(d1, d2 + d4, d3));
 -        if (!DispenserBlock.eventFired) {
-+        if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++        if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
              worldserver.getCraftServer().getPluginManager().callEvent(event);
          }
  
@@ -127,7 +127,7 @@ index f28705547a62da790f5df071400986aacba39367..18b64fe578ea7c865d8f84b57ad6743b
  
          BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), CraftVector.toBukkit(entityitem.getDeltaMovement()));
 -        if (!DispenserBlock.eventFired) {
-+        if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++        if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
              world.getCraftServer().getPluginManager().callEvent(event);
          }
  
@@ -140,7 +140,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -149,7 +149,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -158,7 +158,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                      BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) list.get(0).getBukkitEntity());
 -                    if (!DispenserBlock.eventFired) {
-+                    if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                    if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                          world.getCraftServer().getPluginManager().callEvent(event);
                      }
  
@@ -167,7 +167,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityhorseabstract.getBukkitEntity());
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      world.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -176,7 +176,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityhorsechestedabstract.getBukkitEntity());
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      world.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -185,7 +185,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                      BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(x, y, z));
 -                    if (!DispenserBlock.eventFired) {
-+                    if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                    if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                          worldserver.getCraftServer().getPluginManager().callEvent(event);
                      }
  
@@ -194,7 +194,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                          BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
 -                        if (!DispenserBlock.eventFired) {
-+                        if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                        if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                              worldserver.getCraftServer().getPluginManager().callEvent(event);
                          }
  
@@ -203,7 +203,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -212,7 +212,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -222,8 +222,8 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
                  if (worldserver.capturedBlockStates.size() > 0) {
 -                    TreeType treeType = SaplingBlock.treeType;
 -                    SaplingBlock.treeType = null;
-+                    TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // ShreddedPaper - thread local for treeType
-+                    SaplingBlock.treeTypeThreadLocal.remove(); // ShreddedPaper - thread local for treeType
++                    TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
++                    SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
                      Location location = CraftLocation.toBukkit(blockposition, worldserver.getWorld());
                      List<org.bukkit.block.BlockState> blocks = new java.util.ArrayList<>(worldserver.capturedBlockStates.values());
                      worldserver.capturedBlockStates.clear();
@@ -232,7 +232,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector((double) blockposition.getX() + 0.5D, (double) blockposition.getY(), (double) blockposition.getZ() + 0.5D));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                     worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -241,7 +241,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -250,7 +250,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -259,7 +259,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                  BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
 -                if (!DispenserBlock.eventFired) {
-+                if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                      worldserver.getCraftServer().getPluginManager().callEvent(event);
                  }
  
@@ -268,7 +268,7 @@ index 68236139e3571791b891dbbef6e3ee20031e16d9..f076380621dc6a40663e4f703de458a1
  
                      BlockDispenseEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) list.get(0).getBukkitEntity());
 -                    if (!DispenserBlock.eventFired) {
-+                    if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++                    if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                          world.getCraftServer().getPluginManager().callEvent(event);
                      }
  
@@ -281,7 +281,7 @@ index e37d2d29f3ba67cfe28abe4847a3dca07121f0be..2b0c59dac5cbe34d2e88c2634d4e58bf
  
          BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector((double) enumdirection.getStepX(), (double) enumdirection.getStepY(), (double) enumdirection.getStepZ()));
 -        if (!DispenserBlock.eventFired) {
-+        if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++        if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
              worldserver.getCraftServer().getPluginManager().callEvent(event);
          }
  
@@ -294,7 +294,7 @@ index e4fab82b369f2c2ea0d8c8acd814d06140d551fc..eea19c71541204c0cccbba2bc86e0538
  
          BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
 -        if (!DispenserBlock.eventFired) {
-+        if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++        if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
              worldserver.getCraftServer().getPluginManager().callEvent(event);
          }
  
@@ -307,7 +307,7 @@ index cb308808906a8cdb127df8284e106e00553473ca..e0bce00aa34e283bacbeb32a5a7e4e5b
  
              BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
 -            if (!DispenserBlock.eventFired) {
-+            if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++            if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                  pointer.level().getCraftServer().getPluginManager().callEvent(event);
              }
  
@@ -327,7 +327,7 @@ index 61327dfa158b385bfba4768493fd7724c4da73c5..d2494f38d1208e2e21daf7c45ccbfe07
  
      private static void syncAfterConfigurationChange(ChannelFuture future) {
          try {
-+            if (TickThread.isTickThread()) MinecraftServer.getServer().managedBlock(future::isDone); // ShreddedPaper - don't block main thread
++            if (TickThread.isTickThread()) MinecraftServer.getServer().managedBlock(future::isDone); // Confetti - don't block main thread
              future.syncUninterruptibly();
          } catch (Exception exception) {
              if (exception instanceof ClosedChannelException) {
@@ -339,7 +339,7 @@ index 472b9494f8a34a8ba90d6a2936b0db7530a229ad..0e0c3a010d5cfaa0c15bcb38c4e3b1a8
  package net.minecraft.server.level;
  
  import com.mojang.datafixers.util.Pair;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
 +import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.shorts.ShortOpenHashSet;
  import it.unimi.dsi.fastutil.shorts.ShortSet;
@@ -348,9 +348,9 @@ index 472b9494f8a34a8ba90d6a2936b0db7530a229ad..0e0c3a010d5cfaa0c15bcb38c4e3b1a8
      // Paper - rewrite chunk system
  
      public void blockChanged(BlockPos pos) {
-+        if (!chunkMap.level.getServer().forceTicks && !TickThread.isShutdownThread() && !this.chunkMap.level.chunkScheduler.getRegionLocker().hasWriteLock(RegionPos.forBlockPos(pos))) { // ShreddedPaper
-+            TickThread.failedTickThreadCheck("Block change is not write locked", "world=" + this.chunkMap.level.convertable.getLevelId() + ", pos=" + pos + ", newstate=" + this.getFullChunkNow().getBlockState(pos)); // ShreddedPaper
-+        } // ShreddedPaper
++        if (!chunkMap.level.getServer().forceTicks && !TickThread.isShutdownThread() && !this.chunkMap.level.chunkScheduler.getRegionLocker().hasWriteLock(RegionPos.forBlockPos(pos))) { // Confetti
++            TickThread.failedTickThreadCheck("Block change is not write locked", "world=" + this.chunkMap.level.convertable.getLevelId() + ", pos=" + pos + ", newstate=" + this.getFullChunkNow().getBlockState(pos)); // Confetti
++        } // Confetti
          // Paper start - replace player chunk loader
          if (this.playersSentChunkTo.size() == 0) {
              return;
@@ -362,7 +362,7 @@ index 12f1345ff70388fb217100bfc717ef861785381d..9c0f561a65ed5f5b45ce4c30754f71b3
  
  import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
  import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
-+import io.multipaper.shreddedpaper.util.SimpleStampedLock;
++import com.vulpeslab.confetti.util.SimpleStampedLock;
 +
 +import java.util.List;
  import java.util.Set;
@@ -373,46 +373,46 @@ index 12f1345ff70388fb217100bfc717ef861785381d..9c0f561a65ed5f5b45ce4c30754f71b3
 -
 -    public Set<ServerPlayer> getAllPlayers() {
 -        return this.players.keySet();
-+    private final SimpleStampedLock playersLock = new SimpleStampedLock(); // ShreddedPaper
-+    private final CopyOnWriteArrayList<ServerPlayer> playersList = new CopyOnWriteArrayList<>(); // ShreddedPaper
++    private final SimpleStampedLock playersLock = new SimpleStampedLock(); // Confetti
++    private final CopyOnWriteArrayList<ServerPlayer> playersList = new CopyOnWriteArrayList<>(); // Confetti
 +
-+    public List<ServerPlayer> getAllPlayers() { // ShreddedPaper
-+        // ShreddedPaper - change to a CopyOnWriteArrayList cache of the player key set to allow for thread-safe iteration
++    public List<ServerPlayer> getAllPlayers() { // Confetti
++        // Confetti - change to a CopyOnWriteArrayList cache of the player key set to allow for thread-safe iteration
 +        //  - Players aren't added/removed often, so a CopyOnWriteArrayList is sufficient
-+        // return this.players.keySet(); // ShreddedPaper
-+        return this.playersList; // ShreddedPaper
++        // return this.players.keySet(); // Confetti
++        return this.playersList; // Confetti
      }
  
      public void addPlayer(ServerPlayer player, boolean inactive) {
 -        this.players.put(player, inactive);
-+        this.playersLock.write(() -> this.players.put(player, inactive)); // ShreddedPaper
-+        this.playersList.add(player); // ShreddedPaper
++        this.playersLock.write(() -> this.players.put(player, inactive)); // Confetti
++        this.playersList.add(player); // Confetti
      }
  
      public void removePlayer(ServerPlayer player) {
 -        this.players.removeBoolean(player);
-+        this.playersLock.write(() -> this.players.removeBoolean(player)); // ShreddedPaper
-+        this.playersList.remove(player); // ShreddedPaper
++        this.playersLock.write(() -> this.players.removeBoolean(player)); // Confetti
++        this.playersList.remove(player); // Confetti
      }
  
      public void ignorePlayer(ServerPlayer player) {
 -        this.players.replace(player, true);
-+        this.playersLock.write(() -> this.players.replace(player, true)); // ShreddedPaper
++        this.playersLock.write(() -> this.players.replace(player, true)); // Confetti
      }
  
      public void unIgnorePlayer(ServerPlayer player) {
 -        this.players.replace(player, false);
-+        this.playersLock.write(() -> this.players.replace(player, false)); // ShreddedPaper
++        this.playersLock.write(() -> this.players.replace(player, false)); // Confetti
      }
  
      public boolean ignoredOrUnknown(ServerPlayer player) {
 -        return this.players.getOrDefault(player, true);
-+        return this.playersLock.optimisticRead(() -> this.players.getOrDefault(player, true)); // ShreddedPaper
++        return this.playersLock.optimisticRead(() -> this.players.getOrDefault(player, true)); // Confetti
      }
  
      public boolean ignored(ServerPlayer player) {
 -        return this.players.getBoolean(player);
-+        return this.playersLock.optimisticRead(() -> this.players.getBoolean(player)); // ShreddedPaper
++        return this.playersLock.optimisticRead(() -> this.players.getBoolean(player)); // Confetti
      }
  }
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
@@ -424,7 +424,7 @@ index 073743301c2e70fcd148c33e97be2a3069d6109e..b7f5bae372b75805c759b3ce9a91557b
  import java.util.stream.Stream;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.core.component.DataComponents;
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.game.ClientGamePacketListener;
@@ -432,7 +432,7 @@ index 073743301c2e70fcd148c33e97be2a3069d6109e..b7f5bae372b75805c759b3ce9a91557b
                      MapItemSavedData worldmap = MapItem.getSavedData(mapid, this.level);
  
                      if (worldmap != null) {
-+                        synchronized (worldmap) { // ShreddedPaper - thread-safe
++                        synchronized (worldmap) { // Confetti - thread-safe
                          Iterator<ServerPlayerConnection> iterator = this.trackedPlayers.iterator(); // CraftBukkit
  
                          while (iterator.hasNext()) {
@@ -440,7 +440,7 @@ index 073743301c2e70fcd148c33e97be2a3069d6109e..b7f5bae372b75805c759b3ce9a91557b
                              if (packet != null) {
                                  entityplayer.connection.send(packet);
                              }
-+                        } // ShreddedPaper - thread-safe
++                        } // Confetti - thread-safe
                          }
                      }
                  }
@@ -453,7 +453,7 @@ index bae170b01ea310c79f33c41cf32a5f5c0f2e91b6..5902b6f5c7d4fd98b2fff8d2cfd16a64
          this.sleepStatus.removeAllSleepers();
          (this.players.stream().filter(LivingEntity::isSleeping).collect(Collectors.toList())).forEach((entityplayer) -> { // CraftBukkit - decompile error
 -            entityplayer.stopSleepInBed(false, false);
-+            entityplayer.getBukkitEntity().taskScheduler.schedule(e -> entityplayer.stopSleepInBed(false, false), e -> {}, 1); // ShreddedPaper - run sync
++            entityplayer.getBukkitEntity().taskScheduler.schedule(e -> entityplayer.stopSleepInBed(false, false), e -> {}, 1); // Confetti - run sync
          });
      }
      // Paper start - optimise random block ticking
@@ -463,12 +463,12 @@ index bae170b01ea310c79f33c41cf32a5f5c0f2e91b6..5902b6f5c7d4fd98b2fff8d2cfd16a64
          if (existing == null && !storage.cache.containsKey(id.key())) {
 -            final MapItemSavedData worldmap = (MapItemSavedData) this.getServer().overworld().getDataStorage().get(MapItemSavedData.factory(), id.key());
 -            storage.cache.put(id.key(), worldmap);
-+            final MapItemSavedData worldmap = (MapItemSavedData) this.getServer().overworld().getDataStorage().get(MapItemSavedData.factory(), id.key()); // ShreddedPaper - this is already a thread-safe cache fill
-+            // storage.cache.put(id.key(), worldmap); // ShreddedPaper - unnecessary and thread-unsafe - The .get() above already puts it in the cache thread-safely
++            final MapItemSavedData worldmap = (MapItemSavedData) this.getServer().overworld().getDataStorage().get(MapItemSavedData.factory(), id.key()); // Confetti - this is already a thread-safe cache fill
++            // storage.cache.put(id.key(), worldmap); // Confetti - unnecessary and thread-unsafe - The .get() above already puts it in the cache thread-safely
              if (worldmap != null) {
                  worldmap.id = id;
 -                new MapInitializeEvent(worldmap.mapView).callEvent();
-+                if (worldmap.hasCalledMapInitializeEvent.compareAndSet(false, true)) new MapInitializeEvent(worldmap.mapView).callEvent(); // ShreddedPaper - ensure only called once
++                if (worldmap.hasCalledMapInitializeEvent.compareAndSet(false, true)) new MapInitializeEvent(worldmap.mapView).callEvent(); // Confetti - ensure only called once
                  return worldmap;
              }
 +            return worldmap;
@@ -480,7 +480,7 @@ index bae170b01ea310c79f33c41cf32a5f5c0f2e91b6..5902b6f5c7d4fd98b2fff8d2cfd16a64
          state.id = id;
          MapInitializeEvent event = new MapInitializeEvent(state.mapView);
 -        Bukkit.getServer().getPluginManager().callEvent(event);
-+        if (state.hasCalledMapInitializeEvent.compareAndSet(false, true)) Bukkit.getServer().getPluginManager().callEvent(event); // ShreddedPaper - ensure only called once
++        if (state.hasCalledMapInitializeEvent.compareAndSet(false, true)) Bukkit.getServer().getPluginManager().callEvent(event); // Confetti - ensure only called once
          // CraftBukkit end
          this.getServer().overworld().getDataStorage().set(id.key(), state);
      }
@@ -489,7 +489,7 @@ index bae170b01ea310c79f33c41cf32a5f5c0f2e91b6..5902b6f5c7d4fd98b2fff8d2cfd16a64
          if (!this.isDebug()) {
              // CraftBukkit start
 -            if (this.populating) {
-+            if (this.populatingThreadLocal.get()) { // ShreddedPaper - thread local for populating
++            if (this.populatingThreadLocal.get()) { // Confetti - thread local for populating
                  return;
              }
              // CraftBukkit end
@@ -497,7 +497,7 @@ index bae170b01ea310c79f33c41cf32a5f5c0f2e91b6..5902b6f5c7d4fd98b2fff8d2cfd16a64
                      {
                          if ( o instanceof MapItemSavedData )
                          {
-+                            synchronized (o) { // ShreddedPaper - thread-safe
++                            synchronized (o) { // Confetti - thread-safe
                              MapItemSavedData map = (MapItemSavedData) o;
                              map.carriedByPlayers.remove( (Player) entity );
                              for ( Iterator<MapItemSavedData.HoldingPlayer> iter = (Iterator<MapItemSavedData.HoldingPlayer>) map.carriedBy.iterator(); iter.hasNext(); )
@@ -505,7 +505,7 @@ index bae170b01ea310c79f33c41cf32a5f5c0f2e91b6..5902b6f5c7d4fd98b2fff8d2cfd16a64
                                      iter.remove();
                                  }
                              }
-+                            } // ShreddedPaper - thread-safe
++                            } // Confetti - thread-safe
                          }
                      }
                  } );
@@ -518,7 +518,7 @@ index 509601a62a2bcbaefb7aed6856a4076e874311c7..9fa73f3848f89364ac46b7bdffc5591b
                  this.connection.send(new ClientboundRemoveMobEffectPacket(entity.getId(), mobeffect.getEffect()));
              }
 +
-+            if (entity.tracker != null) entity.tracker.serverEntity.sendChanges(); // ShreddedPaper - send changes now
++            if (entity.tracker != null) entity.tracker.serverEntity.sendChanges(); // Confetti - send changes now
          }
  
      }
@@ -531,7 +531,7 @@ index 6189ba831a32dd61e32d52f61301ae01bf3d33e1..96b58f95866c12e03d96f10e4f5b3131
          this.filterTextPacket(list).thenAcceptAsync((list1) -> {
              this.updateSignText(packet, list1);
 -        }, this.server);
-+        }, r -> ShreddedPaper.runSync(this.player, r)); // ShreddedPaper - run on region thread
++        }, r -> Confetti.runSync(this.player, r)); // Confetti - run on region thread
      }
  
      private void updateSignText(ServerboundSignUpdatePacket packet, List<FilteredText> signText) {
@@ -546,7 +546,7 @@ index 137fe86e33d63c629d69072ee7cbc15cdef1a4d8..081d5c96534746bf647f49c28f69b166
 +
  public abstract class ReentrantBlockableEventLoop<R extends Runnable> extends BlockableEventLoop<R> {
 -    private int reentrantCount;
-+    private final AtomicInteger reentrantCount = new AtomicInteger(); // ShreddedPaper - use AtomicInteger
++    private final AtomicInteger reentrantCount = new AtomicInteger(); // Confetti - use AtomicInteger
  
      public ReentrantBlockableEventLoop(String name) {
          super(name);
@@ -555,19 +555,19 @@ index 137fe86e33d63c629d69072ee7cbc15cdef1a4d8..081d5c96534746bf647f49c28f69b166
  
      protected boolean runningTask() {
 -        return this.reentrantCount != 0;
-+        return this.reentrantCount.get() != 0; // ShreddedPaper - use AtomicInteger
++        return this.reentrantCount.get() != 0; // Confetti - use AtomicInteger
      }
  
      @Override
      public void doRunTask(R task) {
 -        this.reentrantCount++;
-+        this.reentrantCount.getAndIncrement(); // ShreddedPaper - use AtomicInteger
++        this.reentrantCount.getAndIncrement(); // Confetti - use AtomicInteger
  
          try {
              super.doRunTask(task);
          } finally {
 -            this.reentrantCount--;
-+            this.reentrantCount.getAndDecrement(); // ShreddedPaper - use AtomicInteger
++            this.reentrantCount.getAndDecrement(); // Confetti - use AtomicInteger
          }
      }
  }
@@ -580,7 +580,7 @@ index a755ea41486e5850014b133a1cdd455574742fdc..6c1e9965b10b5709129110bf408eaada
  
      protected BlockPos getOnPos(float offset) {
 -        if (this.mainSupportingBlockPos.isPresent() && this.level().getChunkIfLoadedImmediately(this.mainSupportingBlockPos.get()) != null) { // Paper - ensure no loads
-+        if (this.mainSupportingBlockPos.isPresent() && this.level().getChunkIfLoadedImmediately(this.mainSupportingBlockPos.get()) != null && TickThread.isTickThreadFor((ServerLevel) this.level(), this.mainSupportingBlockPos.get())) { // Paper - ensure no loads // ShreddedPaper - ensure same region
++        if (this.mainSupportingBlockPos.isPresent() && this.level().getChunkIfLoadedImmediately(this.mainSupportingBlockPos.get()) != null && TickThread.isTickThreadFor((ServerLevel) this.level(), this.mainSupportingBlockPos.get())) { // Paper - ensure no loads // Confetti - ensure same region
              BlockPos blockposition = (BlockPos) this.mainSupportingBlockPos.get();
  
              if (offset <= 1.0E-5F) {
@@ -623,9 +623,9 @@ index 30c6f3ee109207c4eaa4244b6838f56514113d38..3fce197ad51db1fa5d498d5126920752
              if (itemstack.getItem() == Items.FILLED_MAP) {
                  net.minecraft.world.level.saveddata.maps.MapItemSavedData worldmap = net.minecraft.world.item.MapItem.getSavedData(itemstack, this.level());
                  if (worldmap != null) {
-+                    synchronized (worldmap) { // ShreddedPaper - thread-safe
++                    synchronized (worldmap) { // Confetti - thread-safe
                      worldmap.tickCarriedBy(this, itemstack);
-+                    } // ShreddedPaper - thread-safe
++                    } // Confetti - thread-safe
                  }
              }
              // Paper end
@@ -638,7 +638,7 @@ index b108ca4c7900ccf6a14ebea01c21c103459054f8..4576722aac8cb7f5310fc4c981a78488
  
              BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityliving.getBukkitEntity());
 -            if (!DispenserBlock.eventFired) {
-+            if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++            if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                  world.getCraftServer().getPluginManager().callEvent(event);
              }
  
@@ -677,8 +677,8 @@ index dc6c07b3cce53da0247fa8e2a7dc70d02a55ade4..20c2ed5b8a4a76554f251aa9c28fa5df
                  Location location = CraftLocation.toBukkit(blockposition, world.getWorld());
 -                TreeType treeType = SaplingBlock.treeType;
 -                SaplingBlock.treeType = null;
-+                TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // ShreddedPaper - thread local for treeType
-+                SaplingBlock.treeTypeThreadLocal.remove(); // ShreddedPaper - thread local for treeType
++                TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
++                SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
                  List<CraftBlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
                  world.capturedBlockStates.clear();
                  StructureGrowEvent structureEvent = null;
@@ -687,7 +687,7 @@ index dc6c07b3cce53da0247fa8e2a7dc70d02a55ade4..20c2ed5b8a4a76554f251aa9c28fa5df
                  }
  
 -                SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
-+                SignItem.openSignThreadLocal.remove(); // SPIGOT-6758 - Reset on early return // ShreddedPaper - thread local for openSign
++                SignItem.openSignThreadLocal.remove(); // SPIGOT-6758 - Reset on early return // Confetti - thread local for openSign
                  return enuminteractionresult;
              }
              world.captureTreeGeneration = false;
@@ -696,7 +696,7 @@ index dc6c07b3cce53da0247fa8e2a7dc70d02a55ade4..20c2ed5b8a4a76554f251aa9c28fa5df
                      // }
                      // Paper end - Don't resync blocks
 -                    SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
-+                    SignItem.openSignThreadLocal.remove(); // SPIGOT-6758 - Reset on early return // ShreddedPaper - thread local for openSign
++                    SignItem.openSignThreadLocal.remove(); // SPIGOT-6758 - Reset on early return // Confetti - thread local for openSign
                  } else {
                      // Change the stack to its new contents if it hasn't been tampered with.
                      if (this.getCount() == oldCount && Objects.equals(this.components.asPatch(), oldData)) {
@@ -705,18 +705,18 @@ index dc6c07b3cce53da0247fa8e2a7dc70d02a55ade4..20c2ed5b8a4a76554f251aa9c28fa5df
  
                      // SPIGOT-4678
 -                    if (this.item instanceof SignItem && SignItem.openSign != null) {
-+                    if (this.item instanceof SignItem && SignItem.openSignThreadLocal.get() != null) { // ShreddedPaper - thread local for openSign
++                    if (this.item instanceof SignItem && SignItem.openSignThreadLocal.get() != null) { // Confetti - thread local for openSign
                          try {
 -                            if (world.getBlockEntity(SignItem.openSign) instanceof SignBlockEntity tileentitysign) {
 -                                if (world.getBlockState(SignItem.openSign).getBlock() instanceof SignBlock blocksign) {
-+                            if (world.getBlockEntity(SignItem.openSignThreadLocal.get()) instanceof SignBlockEntity tileentitysign) { // ShreddedPaper - thread local for openSign
-+                                if (world.getBlockState(SignItem.openSignThreadLocal.get()).getBlock() instanceof SignBlock blocksign) { // ShreddedPaper - thread local for openSign
++                            if (world.getBlockEntity(SignItem.openSignThreadLocal.get()) instanceof SignBlockEntity tileentitysign) { // Confetti - thread local for openSign
++                                if (world.getBlockState(SignItem.openSignThreadLocal.get()).getBlock() instanceof SignBlock blocksign) { // Confetti - thread local for openSign
                                      blocksign.openTextEdit(entityhuman, tileentitysign, true, io.papermc.paper.event.player.PlayerOpenSignEvent.Cause.PLACE); // Paper - Add PlayerOpenSignEvent
                                  }
                              }
                          } finally {
 -                            SignItem.openSign = null;
-+                            SignItem.openSignThreadLocal.remove(); // ShreddedPaper - thread local for openSign
++                            SignItem.openSignThreadLocal.remove(); // Confetti - thread local for openSign
                          }
                      }
  
@@ -728,7 +728,7 @@ index 608390ed36710a419de1542b80340dd3fcc7299c..13b7973ad6d53cefea5aa037cd1a9ff2
      }
  
      public void update(Level world, Entity entity, MapItemSavedData state) {
-+        synchronized (state) { // ShreddedPaper - thread-safe
++        synchronized (state) { // Confetti - thread-safe
          if (world.dimension() == state.dimension && entity instanceof Player) {
              int i = 1 << state.scale;
              int j = state.centerX;
@@ -736,7 +736,7 @@ index 608390ed36710a419de1542b80340dd3fcc7299c..13b7973ad6d53cefea5aa037cd1a9ff2
                  }
              }
          }
-+        } // ShreddedPaper - thread-safe
++        } // Confetti - thread-safe
      }
  
      private BlockState getCorrectStateForFluidBlock(Level world, BlockState state, BlockPos pos) {
@@ -744,7 +744,7 @@ index 608390ed36710a419de1542b80340dd3fcc7299c..13b7973ad6d53cefea5aa037cd1a9ff2
      public static void renderBiomePreviewMap(ServerLevel world, ItemStack map) {
          MapItemSavedData mapItemSavedData = getSavedData(map, world);
          if (mapItemSavedData != null) {
-+            synchronized (mapItemSavedData) { // ShreddedPaper - thread-safe
++            synchronized (mapItemSavedData) { // Confetti - thread-safe
              mapItemSavedData.isExplorerMap = true; // Purpur
              if (world.dimension() == mapItemSavedData.dimension) {
                  int i = 1 << mapItemSavedData.scale;
@@ -752,7 +752,7 @@ index 608390ed36710a419de1542b80340dd3fcc7299c..13b7973ad6d53cefea5aa037cd1a9ff2
                      }
                  }
              }
-+            } // ShreddedPaper - thread-safe
++            } // Confetti - thread-safe
          }
      }
  
@@ -760,7 +760,7 @@ index 608390ed36710a419de1542b80340dd3fcc7299c..13b7973ad6d53cefea5aa037cd1a9ff2
          if (!world.isClientSide) {
              MapItemSavedData mapItemSavedData = getSavedData(stack, world);
              if (mapItemSavedData != null) {
-+                synchronized (mapItemSavedData) { // ShreddedPaper - thread-safe
++                synchronized (mapItemSavedData) { // Confetti - thread-safe
                  if (entity instanceof Player player) {
                      mapItemSavedData.tickCarriedBy(player, stack);
                  }
@@ -768,7 +768,7 @@ index 608390ed36710a419de1542b80340dd3fcc7299c..13b7973ad6d53cefea5aa037cd1a9ff2
                  if (!mapItemSavedData.locked && (selected || entity instanceof Player && ((Player)entity).getOffhandItem() == stack)) {
                      this.update(world, entity, mapItemSavedData);
                  }
-+                } // ShreddedPaper - thread-safe
++                } // Confetti - thread-safe
              }
          }
      }
@@ -781,7 +781,7 @@ index 4b8cebb321eddc852b4ec7def7f51d781f67927b..5a99f87ce3b58d3bc076fca9fbbff339
  
              BlockDispenseEvent event = new BlockDispenseEvent(block2, craftItem.clone(), new org.bukkit.util.Vector(d0, d1 + d3, d2));
 -            if (!DispenserBlock.eventFired) {
-+            if (!DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++            if (!DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
                  worldserver.getCraftServer().getPluginManager().callEvent(event);
              }
  
@@ -794,7 +794,7 @@ index 21c25026da4117b2cb2c85576d2def945a97dbe2..9b588a6f29f67520cc67aa9ec95d70bf
  public class SignItem extends StandingAndWallBlockItem {
  
 -    public static BlockPos openSign; // CraftBukkit
-+    public static final ThreadLocal<BlockPos> openSignThreadLocal = new ThreadLocal<>(); // CraftBukkit // ShreddedPaper - thread local for openSign
++    public static final ThreadLocal<BlockPos> openSignThreadLocal = new ThreadLocal<>(); // CraftBukkit // Confetti - thread local for openSign
  
      public SignItem(Item.Properties settings, Block standingBlock, Block wallBlock) {
          super(standingBlock, wallBlock, settings, Direction.DOWN);
@@ -803,7 +803,7 @@ index 21c25026da4117b2cb2c85576d2def945a97dbe2..9b588a6f29f67520cc67aa9ec95d70bf
                      // CraftBukkit start - SPIGOT-4678
                      // blocksign.openTextEdit(entityhuman, tileentitysign, true);
 -                    SignItem.openSign = pos;
-+                    SignItem.openSignThreadLocal.set(pos); // ShreddedPaper - thread local for openSign
++                    SignItem.openSignThreadLocal.set(pos); // Confetti - thread local for openSign
                      // CraftBukkit end
                  }
              }
@@ -825,7 +825,7 @@ index cdd1f6939ce33e62f6609f7eb3a5dff59bf12675..70cbe44b89f7cac1b9b598505c17f8fa
              } else {
                  BlockPos blockPos = this.target.get().pos();
 -                return world.isInWorldBounds(blockPos) && (!world.hasChunkAt(blockPos) || world.getPoiManager().existsAtPosition(PoiTypes.LODESTONE, blockPos)) // Paper - Prevent compass from loading chunks
-+                return world.isInWorldBounds(blockPos) && (!TickThread.isTickThreadFor(world, blockPos) || !world.hasChunkAt(blockPos) || world.getPoiManager().existsAtPosition(PoiTypes.LODESTONE, blockPos)) // Paper - Prevent compass from loading chunks // ShreddedPaper - Prevent compass from accessing outside our thread
++                return world.isInWorldBounds(blockPos) && (!TickThread.isTickThreadFor(world, blockPos) || !world.hasChunkAt(blockPos) || world.getPoiManager().existsAtPosition(PoiTypes.LODESTONE, blockPos)) // Paper - Prevent compass from loading chunks // Confetti - Prevent compass from accessing outside our thread
                      ? this
                      : new LodestoneTracker(Optional.empty(), true);
              }
@@ -838,7 +838,7 @@ index 195e715a76b9b89134cf929ad2810689e6573324..84557f71d4a98842faeb4badd723ff4e
      public int wakeupInactiveRemainingVillagers;
      // Paper end
 -    public boolean populating;
-+    public final ThreadLocal<Boolean> populatingThreadLocal = ThreadLocal.withInitial(() -> false); // ShreddedPaper - thread local for populating
++    public final ThreadLocal<Boolean> populatingThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - thread local for populating
      public final org.spigotmc.SpigotWorldConfig spigotConfig; // Spigot
      // Paper start - add paper world config
      private final io.papermc.paper.configuration.WorldConfiguration paperConfig;
@@ -851,7 +851,7 @@ index f6edfea463b3725d3a79aca38825e86dbf82175c..59e8748805feaf9bc36fcc5de11c9c56
      });
      private static final int TRIGGER_DURATION = 4;
 -    public static boolean eventFired = false; // CraftBukkit
-+    public static final ThreadLocal<Boolean> eventFiredThreadLocal = ThreadLocal.withInitial(() -> false); // CraftBukkit // ShreddedPaper - use thread local for eventFired
++    public static final ThreadLocal<Boolean> eventFiredThreadLocal = ThreadLocal.withInitial(() -> false); // CraftBukkit // Confetti - use thread local for eventFired
  
      @Override
      public MapCodec<? extends DispenserBlock> codec() {
@@ -860,7 +860,7 @@ index f6edfea463b3725d3a79aca38825e86dbf82175c..59e8748805feaf9bc36fcc5de11c9c56
                  if (idispensebehavior != DispenseItemBehavior.NOOP) {
                      if (!org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockPreDispenseEvent(world, pos, itemstack, i)) return; // Paper - Add BlockPreDispenseEvent
 -                    DispenserBlock.eventFired = false; // CraftBukkit - reset event status
-+                    DispenserBlock.eventFiredThreadLocal.set(false); // CraftBukkit - reset event status // ShreddedPaper - use thread local for eventFired
++                    DispenserBlock.eventFiredThreadLocal.set(false); // CraftBukkit - reset event status // Confetti - use thread local for eventFired
                      tileentitydispenser.setItem(i, idispensebehavior.dispense(sourceblock, itemstack));
                  }
  
@@ -873,10 +873,10 @@ index 454f95ba814b375e97189430b498c0e7486fbd94..0adc7974ccbc5aee8a6c077ae8ab9641
              // CraftBukkit start
              if (this == Blocks.WARPED_FUNGUS) {
 -                SaplingBlock.treeType = org.bukkit.TreeType.WARPED_FUNGUS;
-+                SaplingBlock.treeTypeThreadLocal.set(org.bukkit.TreeType.WARPED_FUNGUS); // ShreddedPaper - thread local for treeType
++                SaplingBlock.treeTypeThreadLocal.set(org.bukkit.TreeType.WARPED_FUNGUS); // Confetti - thread local for treeType
              } else if (this == Blocks.CRIMSON_FUNGUS) {
 -                SaplingBlock.treeType = org.bukkit.TreeType.CRIMSON_FUNGUS;
-+                SaplingBlock.treeTypeThreadLocal.set(org.bukkit.TreeType.CRIMSON_FUNGUS); // ShreddedPaper - thread local for treeType
++                SaplingBlock.treeTypeThreadLocal.set(org.bukkit.TreeType.CRIMSON_FUNGUS); // Confetti - thread local for treeType
              }
              // CraftBukkit end
              ((ConfiguredFeature) holder.value()).place(world, world.getChunkSource().getGenerator(), random, pos);
@@ -889,7 +889,7 @@ index 1172d85c5c26ab2142343d91149766e5993cb36a..103d24bf049e2cf4ba8f4f3fab38b0a3
          } else {
              world.removeBlock(pos, false);
 -            SaplingBlock.treeType = (this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM; // CraftBukkit
-+            SaplingBlock.treeTypeThreadLocal.set((this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM); // CraftBukkit // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set((this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM); // CraftBukkit // Confetti - thread local for treeType
              if (((ConfiguredFeature) ((Holder) optional.get()).value()).place(world, world.getChunkSource().getGenerator(), random, pos)) {
                  return true;
              } else {
@@ -902,7 +902,7 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
      private static final float PARTICLE_DENSITY = 0.2F;
      private final BlockState crossState;
 -    public boolean shouldSignal = true;
-+    public final ThreadLocal<Boolean> shouldSignalThreadLocal = ThreadLocal.withInitial(() -> true); // ShreddedPaper - use thread local for shouldSignal
++    public final ThreadLocal<Boolean> shouldSignalThreadLocal = ThreadLocal.withInitial(() -> true); // Confetti - use thread local for shouldSignal
  
      @Override
      public MapCodec<RedStoneWireBlock> codec() {
@@ -911,7 +911,7 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
      // Paper start - Optimize redstone (Eigencraft)
      // The bulk of the new functionality is found in RedstoneWireTurbo.java
 -    com.destroystokyo.paper.util.RedstoneWireTurbo turbo = new com.destroystokyo.paper.util.RedstoneWireTurbo(this);
-+    final ThreadLocal<com.destroystokyo.paper.util.RedstoneWireTurbo> turboThreadLocal = ThreadLocal.withInitial(() -> new com.destroystokyo.paper.util.RedstoneWireTurbo(this)); // ShreddedPaper - thread local for turbo
++    final ThreadLocal<com.destroystokyo.paper.util.RedstoneWireTurbo> turboThreadLocal = ThreadLocal.withInitial(() -> new com.destroystokyo.paper.util.RedstoneWireTurbo(this)); // Confetti - thread local for turbo
  
      /*
       * Modified version of pre-existing updateSurroundingRedstone, which is called from
@@ -920,7 +920,7 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
      private void updateSurroundingRedstone(Level worldIn, BlockPos pos, BlockState state, BlockPos source) {
          if (worldIn.paperConfig().misc.redstoneImplementation == io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.EIGENCRAFT) {
 -            turbo.updateSurroundingRedstone(worldIn, pos, state, source);
-+            turboThreadLocal.get().updateSurroundingRedstone(worldIn, pos, state, source); // ShreddedPaper - thread local for turbo
++            turboThreadLocal.get().updateSurroundingRedstone(worldIn, pos, state, source); // Confetti - thread local for turbo
              return;
          }
          updatePowerStrength(worldIn, pos, state);
@@ -929,10 +929,10 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
          int j = 0;
          j = this.getPower(j, worldIn.getBlockState(pos2));
 -        this.shouldSignal = false;
-+        this.shouldSignalThreadLocal.set(false); // ShreddedPaper - use thread local for shouldSignal
++        this.shouldSignalThreadLocal.set(false); // Confetti - use thread local for shouldSignal
          int k = worldIn.getBestNeighborSignal(pos1);
 -        this.shouldSignal = true;
-+        this.shouldSignalThreadLocal.set(true); // ShreddedPaper - use thread local for shouldSignal
++        this.shouldSignalThreadLocal.set(true); // Confetti - use thread local for shouldSignal
  
          if (worldIn.paperConfig().misc.redstoneImplementation == io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.VANILLA) {
              // This code is totally redundant to if statements just below the loop.
@@ -941,7 +941,7 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
                  // bypass the new neighbor update stack.
                  if (worldIn.setBlock(pos1, state, Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_CLIENTS))
 -                    turbo.updateNeighborShapes(worldIn, pos1, state);
-+                    turboThreadLocal.get().updateNeighborShapes(worldIn, pos1, state); // ShreddedPaper - thread local for turbo
++                    turboThreadLocal.get().updateNeighborShapes(worldIn, pos1, state); // Confetti - thread local for turbo
              }
          }
  
@@ -950,11 +950,11 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
  
      private int calculateTargetStrength(Level world, BlockPos pos) {
 -        this.shouldSignal = false;
-+        this.shouldSignalThreadLocal.set(false); // ShreddedPaper - use thread local for shouldSignal
++        this.shouldSignalThreadLocal.set(false); // Confetti - use thread local for shouldSignal
          int i = world.getBestNeighborSignal(pos);
  
 -        this.shouldSignal = true;
-+        this.shouldSignalThreadLocal.set(true); // ShreddedPaper - use thread local for shouldSignal
++        this.shouldSignalThreadLocal.set(true); // Confetti - use thread local for shouldSignal
          int j = 0;
  
          if (i < 15) {
@@ -963,13 +963,13 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
      @Override
      protected int getDirectSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
 -        return !this.shouldSignal ? 0 : state.getSignal(world, pos, direction);
-+        return !this.shouldSignalThreadLocal.get() ? 0 : state.getSignal(world, pos, direction); // ShreddedPaper - use thread local for shouldSignal
++        return !this.shouldSignalThreadLocal.get() ? 0 : state.getSignal(world, pos, direction); // Confetti - use thread local for shouldSignal
      }
  
      @Override
      protected int getSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
 -        if (this.shouldSignal && direction != Direction.DOWN) {
-+        if (this.shouldSignalThreadLocal.get() && direction != Direction.DOWN) { // ShreddedPaper - use thread local for shouldSignal
++        if (this.shouldSignalThreadLocal.get() && direction != Direction.DOWN) { // Confetti - use thread local for shouldSignal
              int i = (Integer) state.getValue(RedStoneWireBlock.POWER);
  
              return i == 0 ? 0 : (direction != Direction.UP && !((RedstoneSide) this.getConnectionState(world, state, pos).getValue((Property) RedStoneWireBlock.PROPERTY_BY_DIRECTION.get(direction.getOpposite()))).isConnected() ? 0 : i);
@@ -978,7 +978,7 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..77c2cf5190d5732e15bf28c9ab98f5e3
      @Override
      protected boolean isSignalSource(BlockState state) {
 -        return this.shouldSignal;
-+        return this.shouldSignalThreadLocal.get(); // ShreddedPaper - use thread local for shouldSignal
++        return this.shouldSignalThreadLocal.get(); // Confetti - use thread local for shouldSignal
      }
  
      public static int getColorForPower(int powerLevel) {
@@ -991,7 +991,7 @@ index d262a5a6da57ef9ba9a6fe0dfbc88f577105e74f..99e69f34d4f2dd9a67076e38e094246d
      protected static final VoxelShape SHAPE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 12.0D, 14.0D);
      protected final TreeGrower treeGrower;
 -    public static TreeType treeType; // CraftBukkit
-+    public static final ThreadLocal<TreeType> treeTypeThreadLocal = new ThreadLocal<>(); // CraftBukkit // ShreddedPaper - thread local for treeType
++    public static final ThreadLocal<TreeType> treeTypeThreadLocal = new ThreadLocal<>(); // CraftBukkit // Confetti - thread local for treeType
  
      @Override
      public MapCodec<? extends SaplingBlock> codec() {
@@ -1001,8 +1001,8 @@ index d262a5a6da57ef9ba9a6fe0dfbc88f577105e74f..99e69f34d4f2dd9a67076e38e094246d
                  if (world.capturedBlockStates.size() > 0) {
 -                    TreeType treeType = SaplingBlock.treeType;
 -                    SaplingBlock.treeType = null;
-+                    TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // ShreddedPaper - thread local for treeType
-+                    SaplingBlock.treeTypeThreadLocal.remove(); // ShreddedPaper - thread local for treeType
++                    TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
++                    SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
                      Location location = CraftLocation.toBukkit(pos, world.getWorld());
                      java.util.List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
                      world.capturedBlockStates.clear();
@@ -1032,7 +1032,7 @@ index cd0e43f4c53a746dd6183a8406269f9b11ad3571..7ecc61382e2025d09fff0c9bc515d7da
  
  public abstract class BlockEntity {
 -    static boolean ignoreTileUpdates; // Paper - Perf: Optimize Hoppers
-+    static final ThreadLocal<Boolean> ignoreTileUpdatesThreadLocal = ThreadLocal.withInitial(() -> false); // Paper - Perf: Optimize Hoppers // ShreddedPaper - use thread local for ignoreTileUpdates
++    static final ThreadLocal<Boolean> ignoreTileUpdatesThreadLocal = ThreadLocal.withInitial(() -> false); // Paper - Perf: Optimize Hoppers // Confetti - use thread local for ignoreTileUpdates
  
      public Timing tickTimer = MinecraftTimings.getTileEntityTimings(this); // Paper
      // CraftBukkit start - data containers
@@ -1041,8 +1041,8 @@ index cd0e43f4c53a746dd6183a8406269f9b11ad3571..7ecc61382e2025d09fff0c9bc515d7da
      public void setChanged() {
          if (this.level != null) {
 -            if (ignoreTileUpdates) return; // Paper - Perf: Optimize Hoppers
-+            if (ignoreTileUpdatesThreadLocal.get()) return; // Paper - Perf: Optimize Hoppers // ShreddedPaper - use thread local for ignoreTileUpdates
-+            TickThread.ensureTickThread((ServerLevel) this.level, this.worldPosition, "Block entity modification"); // ShreddedPaper
++            if (ignoreTileUpdatesThreadLocal.get()) return; // Paper - Perf: Optimize Hoppers // Confetti - use thread local for ignoreTileUpdates
++            TickThread.ensureTickThread((ServerLevel) this.level, this.worldPosition, "Block entity modification"); // Confetti
              BlockEntity.setChanged(this.level, this.worldPosition, this.blockState);
          }
  
@@ -1056,13 +1056,13 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
      // Paper start - Perf: Optimize Hoppers
 -    private static boolean skipPullModeEventFire;
 -    private static boolean skipPushModeEventFire;
-+    private static final ThreadLocal<Boolean> skipPullModeEventFireThreadLocal = ThreadLocal.withInitial(() -> false); // ShreddedPaper - use thread local for skipPullModeEventFire
-+    private static final ThreadLocal<Boolean> skipPushModeEventFireThreadLocal = ThreadLocal.withInitial(() -> false); // ShreddedPaper - use thread local for skipPushModeEventFire
++    private static final ThreadLocal<Boolean> skipPullModeEventFireThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - use thread local for skipPullModeEventFire
++    private static final ThreadLocal<Boolean> skipPushModeEventFireThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - use thread local for skipPushModeEventFire
      public static boolean skipHopperEvents;
  
      private static boolean hopperPush(final Level level, final Container destination, final Direction direction, final HopperBlockEntity hopper) {
 -        skipPushModeEventFire = skipHopperEvents;
-+        skipPushModeEventFireThreadLocal.set(skipHopperEvents); // ShreddedPaper - use thread local for skipPushModeEventFire
++        skipPushModeEventFireThreadLocal.set(skipHopperEvents); // Confetti - use thread local for skipPushModeEventFire
          boolean foundItem = false;
          for (int i = 0; i < hopper.getContainerSize(); ++i) {
              final ItemStack item = hopper.getItem(i);
@@ -1071,7 +1071,7 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
                  // We only need to fire the event once to give protection plugins a chance to cancel this event
                  // Because nothing uses getItem, every event call should end up the same result.
 -                if (!skipPushModeEventFire) {
-+                if (!skipPushModeEventFireThreadLocal.get()) { // ShreddedPaper - use thread local for skipPushModeEventFire
++                if (!skipPushModeEventFireThreadLocal.get()) { // Confetti - use thread local for skipPushModeEventFire
                      movedItem = callPushMoveEvent(destination, movedItem, hopper);
                      if (movedItem == null) { // cancelled
                          origItemStack.setCount(originalItemCount);
@@ -1080,7 +1080,7 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
          movedItem.setCount(movedItemCount);
  
 -        if (!skipPullModeEventFire) {
-+        if (!skipPullModeEventFireThreadLocal.get()) { // ShreddedPaper - use thread local for skipPullModeEventFire
++        if (!skipPullModeEventFireThreadLocal.get()) { // Confetti - use thread local for skipPullModeEventFire
              movedItem = callPullMoveEvent(hopper, container, movedItem);
              if (movedItem == null) { // cancelled
                  origItemStack.setCount(originalItemCount);
@@ -1089,10 +1089,10 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
              }
  
 -            ignoreTileUpdates = true;
-+            ignoreTileUpdatesThreadLocal.set(true); // ShreddedPaper - use thread local for ignoreTileUpdates
++            ignoreTileUpdatesThreadLocal.set(true); // Confetti - use thread local for ignoreTileUpdates
              container.setItem(i, origItemStack);
 -            ignoreTileUpdates = false;
-+            ignoreTileUpdatesThreadLocal.set(false); // ShreddedPaper - use thread local for ignoreTileUpdates
++            ignoreTileUpdatesThreadLocal.set(false); // Confetti - use thread local for ignoreTileUpdates
              container.setChanged();
              return true;
          }
@@ -1101,7 +1101,7 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
          final boolean result = event.callEvent();
          if (!event.calledGetItem && !event.calledSetItem) {
 -            skipPushModeEventFire = true;
-+            skipPushModeEventFireThreadLocal.set(true); // ShreddedPaper - use thread local for skipPushModeEventFire
++            skipPushModeEventFireThreadLocal.set(true); // Confetti - use thread local for skipPushModeEventFire
          }
          if (!result) {
              cooldownHopper(hopper);
@@ -1110,7 +1110,7 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
          final boolean result = event.callEvent();
          if (!event.calledGetItem && !event.calledSetItem) {
 -            skipPullModeEventFire = true;
-+            skipPullModeEventFireThreadLocal.set(true); // ShreddedPaper - use thread local for skipPullModeEventFire
++            skipPullModeEventFireThreadLocal.set(true); // Confetti - use thread local for skipPullModeEventFire
          }
          if (!result) {
              cooldownHopper(hopper);
@@ -1119,7 +1119,7 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
          if (iinventory != null) {
              Direction enumdirection = Direction.DOWN;
 -            skipPullModeEventFire = skipHopperEvents; // Paper - Perf: Optimize Hoppers
-+            skipPullModeEventFireThreadLocal.set(skipHopperEvents); // Paper - Perf: Optimize Hoppers // ShreddedPaper - use thread local for skipPullModeEventFire
++            skipPullModeEventFireThreadLocal.set(skipHopperEvents); // Paper - Perf: Optimize Hoppers // Confetti - use thread local for skipPullModeEventFire
              int[] aint = HopperBlockEntity.getSlots(iinventory, enumdirection);
              int i = aint.length;
  
@@ -1128,10 +1128,10 @@ index 8310d132006043e93c612890514c4c7f3eb1c74d..460e6111aca479334210f2524c13ab0c
                  }
                  // Spigot end
 -                ignoreTileUpdates = true; // Paper - Perf: Optimize Hoppers
-+                ignoreTileUpdatesThreadLocal.set(true); // Paper - Perf: Optimize Hoppers // ShreddedPaper - use thread local for ignoreTileUpdates
++                ignoreTileUpdatesThreadLocal.set(true); // Paper - Perf: Optimize Hoppers // Confetti - use thread local for ignoreTileUpdates
                  to.setItem(slot, stack);
 -                ignoreTileUpdates = false; // Paper - Perf: Optimize Hoppers
-+                ignoreTileUpdatesThreadLocal.set(false); // Paper - Perf: Optimize Hoppers // ShreddedPaper - use thread local for ignoreTileUpdates
++                ignoreTileUpdatesThreadLocal.set(false); // Paper - Perf: Optimize Hoppers // Confetti - use thread local for ignoreTileUpdates
                  stack = leftover; // Paper - Make hoppers respect inventory max stack size
                  flag = true;
              } else if (HopperBlockEntity.canMergeItems(itemstack1, stack)) {
@@ -1144,10 +1144,10 @@ index 81dd0aa6a90fd9dda9e7752f85b9cf4568e3b575..a9c1d3848794b7cd67d48588637083b2
  
      public static void serverTick(Level world, BlockPos pos, BlockState state, SculkCatalystBlockEntity blockEntity) {
 -        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverride = blockEntity.getBlockPos(); // CraftBukkit - SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep.
-+        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverrideThreadLocal.set(blockEntity.getBlockPos()); // CraftBukkit - SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep. // ShreddedPaper - use thread local
++        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverrideThreadLocal.set(blockEntity.getBlockPos()); // CraftBukkit - SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep. // Confetti - use thread local
          blockEntity.catalystListener.getSculkSpreader().updateCursors(world, pos, world.getRandom(), true);
 -        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverride = null; // CraftBukkit
-+        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverrideThreadLocal.remove(); // CraftBukkit // ShreddedPaper - use thread local
++        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverrideThreadLocal.remove(); // CraftBukkit // Confetti - use thread local
      }
  
      @Override
@@ -1168,67 +1168,67 @@ index 597599138f69c9ee05dc7657c51c25336337875e..e7a8dd959d43b029f99178dc463b4900
          ResourceKey<ConfiguredFeature<?, ?>> worldgentreeabstract = holder.unwrapKey().get();
          if (worldgentreeabstract == TreeFeatures.OAK || worldgentreeabstract == TreeFeatures.OAK_BEES_005) {
 -            SaplingBlock.treeType = TreeType.TREE;
-+           SaplingBlock.treeTypeThreadLocal.set(TreeType.TREE); // ShreddedPaper - thread local for treeType
++           SaplingBlock.treeTypeThreadLocal.set(TreeType.TREE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.HUGE_RED_MUSHROOM) {
 -            SaplingBlock.treeType = TreeType.RED_MUSHROOM;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.RED_MUSHROOM); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.RED_MUSHROOM); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.HUGE_BROWN_MUSHROOM) {
 -            SaplingBlock.treeType = TreeType.BROWN_MUSHROOM;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.BROWN_MUSHROOM); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.BROWN_MUSHROOM); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.JUNGLE_TREE) {
 -            SaplingBlock.treeType = TreeType.COCOA_TREE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.COCOA_TREE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.COCOA_TREE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.JUNGLE_TREE_NO_VINE) {
 -            SaplingBlock.treeType = TreeType.SMALL_JUNGLE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.SMALL_JUNGLE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.SMALL_JUNGLE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.PINE) {
 -            SaplingBlock.treeType = TreeType.TALL_REDWOOD;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_REDWOOD); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_REDWOOD); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.SPRUCE) {
 -            SaplingBlock.treeType = TreeType.REDWOOD;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.REDWOOD); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.REDWOOD); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.ACACIA) {
 -            SaplingBlock.treeType = TreeType.ACACIA;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.ACACIA); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.ACACIA); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.BIRCH || worldgentreeabstract == TreeFeatures.BIRCH_BEES_005) {
 -            SaplingBlock.treeType = TreeType.BIRCH;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.BIRCH); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.BIRCH); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.SUPER_BIRCH_BEES_0002) {
 -            SaplingBlock.treeType = TreeType.TALL_BIRCH;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_BIRCH); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_BIRCH); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.SWAMP_OAK) {
 -            SaplingBlock.treeType = TreeType.SWAMP;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.SWAMP); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.SWAMP); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.FANCY_OAK || worldgentreeabstract == TreeFeatures.FANCY_OAK_BEES_005) {
 -            SaplingBlock.treeType = TreeType.BIG_TREE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.BIG_TREE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.BIG_TREE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.JUNGLE_BUSH) {
 -            SaplingBlock.treeType = TreeType.JUNGLE_BUSH;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.JUNGLE_BUSH); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.JUNGLE_BUSH); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.DARK_OAK) {
 -            SaplingBlock.treeType = TreeType.DARK_OAK;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.DARK_OAK); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.DARK_OAK); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.MEGA_SPRUCE) {
 -            SaplingBlock.treeType = TreeType.MEGA_REDWOOD;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.MEGA_REDWOOD); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.MEGA_REDWOOD); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.MEGA_PINE) {
 -            SaplingBlock.treeType = TreeType.MEGA_PINE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.MEGA_PINE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.MEGA_PINE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.MEGA_JUNGLE_TREE) {
 -            SaplingBlock.treeType = TreeType.JUNGLE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.JUNGLE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.JUNGLE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.AZALEA_TREE) {
 -            SaplingBlock.treeType = TreeType.AZALEA;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.AZALEA); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.AZALEA); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.MANGROVE) {
 -            SaplingBlock.treeType = TreeType.MANGROVE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.MANGROVE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.MANGROVE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.TALL_MANGROVE) {
 -            SaplingBlock.treeType = TreeType.TALL_MANGROVE;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_MANGROVE); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_MANGROVE); // Confetti - thread local for treeType
          } else if (worldgentreeabstract == TreeFeatures.CHERRY || worldgentreeabstract == TreeFeatures.CHERRY_BEES_005) {
 -            SaplingBlock.treeType = TreeType.CHERRY;
-+            SaplingBlock.treeTypeThreadLocal.set(TreeType.CHERRY); // ShreddedPaper - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.CHERRY); // Confetti - thread local for treeType
          } else {
              throw new IllegalArgumentException("Unknown tree generator " + worldgentreeabstract);
          }
@@ -1249,12 +1249,12 @@ index 031fc626d2075cbe0941fecc188406712ab9953f..b9b084b7e9d5c9b4613d45eed9612ad5
  
      protected void onPlace(BlockState state, Level world, BlockPos pos, BlockState oldState, boolean notify) {
 -        org.spigotmc.AsyncCatcher.catchOp("block onPlace"); // Spigot
-+        TickThread.ensureTickThread((ServerLevel) world, pos, "block onPlace"); // Spigot // ShreddedPaper
++        TickThread.ensureTickThread((ServerLevel) world, pos, "block onPlace"); // Spigot // Confetti
      }
  
      protected void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean moved) {
 -        org.spigotmc.AsyncCatcher.catchOp("block remove"); // Spigot
-+        TickThread.ensureTickThread((ServerLevel) world, pos, "block remove"); // Spigot // ShreddedPaper
++        TickThread.ensureTickThread((ServerLevel) world, pos, "block remove"); // Spigot // Confetti
          if (state.hasBlockEntity() && !state.is(newState.getBlock())) {
              world.removeBlockEntity(pos);
          }
@@ -1267,18 +1267,18 @@ index 6c6eb7deed281678c05ef27f933e1693b11dae7c..ee9c8fd4924e60a8f593c886c17f0014
  
      // Paper start - Bound treasure maps to world border
 -    private final BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
-+    private final ThreadLocal<BlockPos.MutableBlockPos> mutPosThreadLocal = ThreadLocal.withInitial(() -> new BlockPos.MutableBlockPos()); // ShreddedPaper - thread local for mutPos
++    private final ThreadLocal<BlockPos.MutableBlockPos> mutPosThreadLocal = ThreadLocal.withInitial(() -> new BlockPos.MutableBlockPos()); // Confetti - thread local for mutPos
      public boolean isBlockInBounds(int chunkX, int chunkZ) {
 -        this.mutPos.set(chunkX, 64, chunkZ);
 -        return this.isWithinBounds(this.mutPos);
-+        this.mutPosThreadLocal.get().set(chunkX, 64, chunkZ); // ShreddedPaper - thread local for mutPos
-+        return this.isWithinBounds(this.mutPosThreadLocal.get()); // ShreddedPaper - thread local for mutPos
++        this.mutPosThreadLocal.get().set(chunkX, 64, chunkZ); // Confetti - thread local for mutPos
++        return this.isWithinBounds(this.mutPosThreadLocal.get()); // Confetti - thread local for mutPos
      }
      public boolean isChunkInBounds(int chunkX, int chunkZ) {
 -        this.mutPos.set(((chunkX << 4) + 15), 64, (chunkZ << 4) + 15);
 -        return this.isWithinBounds(this.mutPos);
-+        this.mutPosThreadLocal.get().set(((chunkX << 4) + 15), 64, (chunkZ << 4) + 15); // ShreddedPaper - thread local for mutPos
-+        return this.isWithinBounds(this.mutPosThreadLocal.get()); // ShreddedPaper - thread local for mutPos
++        this.mutPosThreadLocal.get().set(((chunkX << 4) + 15), 64, (chunkZ << 4) + 15); // Confetti - thread local for mutPos
++        return this.isWithinBounds(this.mutPosThreadLocal.get()); // Confetti - thread local for mutPos
      }
      // Paper end - Bound treasure maps to world border
  
@@ -1291,14 +1291,14 @@ index 71521c19c60ed16579be100263e0c72cf8f88bec..e01aba693382654f0b078ae065382487
                  org.bukkit.World world = this.level.getWorld();
                  if (world != null) {
 -                    this.level.populating = true;
-+                    this.level.populatingThreadLocal.set(true); // ShreddedPaper - thread local for populating
++                    this.level.populatingThreadLocal.set(true); // Confetti - thread local for populating
                      try {
                          for (org.bukkit.generator.BlockPopulator populator : world.getPopulators()) {
                              populator.populate(world, random, bukkitChunk);
                          }
                      } finally {
 -                        this.level.populating = false;
-+                        this.level.populatingThreadLocal.set(false); // ShreddedPaper - thread local for populating
++                        this.level.populatingThreadLocal.set(false); // Confetti - thread local for populating
                      }
                  }
                  server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(bukkitChunk));
@@ -1311,7 +1311,7 @@ index 763b315b1d761bc3bd82d9b847ed3f64fd5ce991..841aa55043f354d5058992d43645bf9e
  
      @Override
 -    public CompoundTag save(CompoundTag nbt, HolderLookup.Provider registryLookup) {
-+    public synchronized CompoundTag save(CompoundTag nbt, HolderLookup.Provider registryLookup) { // ShreddedPaper - thread-safe
++    public synchronized CompoundTag save(CompoundTag nbt, HolderLookup.Provider registryLookup) { // Confetti - thread-safe
          for (Entry<String> entry : this.usedAuxIds.object2IntEntrySet()) {
              nbt.putInt(entry.getKey(), entry.getIntValue());
          }
@@ -1320,7 +1320,7 @@ index 763b315b1d761bc3bd82d9b847ed3f64fd5ce991..841aa55043f354d5058992d43645bf9e
      }
  
 -    public MapId getFreeAuxValueForMap() {
-+    public synchronized MapId getFreeAuxValueForMap() { // ShreddedPaper - thread-safe
++    public synchronized MapId getFreeAuxValueForMap() { // Confetti - thread-safe
          int i = this.usedAuxIds.getInt("map") + 1;
          this.usedAuxIds.put("map", i);
          this.setDirty();
@@ -1340,7 +1340,7 @@ index e26f6215ca42885cb0635a3183a8df93a924ba7f..6e22cf6b41bebc93db6ce43e1f0d6340
      public byte scale;
      public byte[] colors = new byte[16384];
      public boolean locked;
-+    public AtomicBoolean hasCalledMapInitializeEvent = new AtomicBoolean(false); // ShreddedPaper
++    public AtomicBoolean hasCalledMapInitializeEvent = new AtomicBoolean(false); // Confetti
      public final List<MapItemSavedData.HoldingPlayer> carriedBy = Lists.newArrayList();
      public final Map<Player, MapItemSavedData.HoldingPlayer> carriedByPlayers = Maps.newHashMap();
      private final Map<String, MapBanner> bannerMarkers = Maps.newHashMap();
@@ -1349,7 +1349,7 @@ index e26f6215ca42885cb0635a3183a8df93a924ba7f..6e22cf6b41bebc93db6ce43e1f0d6340
      }
  
 -    public MapItemSavedData locked() {
-+    public synchronized MapItemSavedData locked() { // ShreddedPaper - thread-safe
++    public synchronized MapItemSavedData locked() { // Confetti - thread-safe
          MapItemSavedData worldmap = new MapItemSavedData(this.centerX, this.centerZ, this.scale, this.trackingPosition, this.unlimitedTracking, true, this.dimension);
  
          worldmap.bannerMarkers.putAll(this.bannerMarkers);
@@ -1358,7 +1358,7 @@ index e26f6215ca42885cb0635a3183a8df93a924ba7f..6e22cf6b41bebc93db6ce43e1f0d6340
      }
  
 -    public void tickCarriedBy(Player player, ItemStack stack) {
-+    public synchronized void tickCarriedBy(Player player, ItemStack stack) { // ShreddedPaper - thread-safe
++    public synchronized void tickCarriedBy(Player player, ItemStack stack) { // Confetti - thread-safe
          if (!this.carriedByPlayers.containsKey(player)) {
              MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = new MapItemSavedData.HoldingPlayer(player);
  
@@ -1367,7 +1367,7 @@ index e26f6215ca42885cb0635a3183a8df93a924ba7f..6e22cf6b41bebc93db6ce43e1f0d6340
  
      @Nullable
 -    public Packet<?> getUpdatePacket(MapId mapId, Player player) {
-+    public synchronized Packet<?> getUpdatePacket(MapId mapId, Player player) { // ShreddedPaper - thread-safe
++    public synchronized Packet<?> getUpdatePacket(MapId mapId, Player player) { // Confetti - thread-safe
          MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = (MapItemSavedData.HoldingPlayer) this.carriedByPlayers.get(player);
  
          return worldmap_worldmaphumantracker == null ? null : worldmap_worldmaphumantracker.nextUpdatePacket(mapId);
@@ -1376,7 +1376,7 @@ index e26f6215ca42885cb0635a3183a8df93a924ba7f..6e22cf6b41bebc93db6ce43e1f0d6340
      }
  
 -    public void addClientSideDecorations(List<MapDecoration> decorations) {
-+    public synchronized void addClientSideDecorations(List<MapDecoration> decorations) { // ShreddedPaper - thread-safe
++    public synchronized void addClientSideDecorations(List<MapDecoration> decorations) { // Confetti - thread-safe
          this.decorations.clear();
          this.trackedDecorationCount = 0;
  
@@ -1389,7 +1389,7 @@ index 6e23e69abd56eeda3b52a22019e1b74ae10682e7..f3d1dfb2cca74ecfc123f1c06a20462a
  public class DimensionDataStorage implements java.io.Closeable { // Paper - Write SavedData IO async
      private static final Logger LOGGER = LogUtils.getLogger();
 -    public final Map<String, SavedData> cache = Maps.newHashMap();
-+    public final Map<String, SavedData> cache = Maps.newConcurrentMap(); // ShreddedPaper - thread-safe
++    public final Map<String, SavedData> cache = Maps.newConcurrentMap(); // Confetti - thread-safe
      private final DataFixer fixerUpper;
      private final HolderLookup.Provider registries;
      private final File dataFolder;
@@ -1405,7 +1405,7 @@ index 6e23e69abd56eeda3b52a22019e1b74ae10682e7..f3d1dfb2cca74ecfc123f1c06a20462a
 -            this.set(id, savedData2);
 -            return savedData2;
 -        }
-+        // ShreddedPaper start - thread-safe
++        // Confetti start - thread-safe
 +        return (T) this.cache.compute(id, (key, savedData) -> {
 +            if (savedData != null) {
 +                return savedData;
@@ -1418,7 +1418,7 @@ index 6e23e69abd56eeda3b52a22019e1b74ae10682e7..f3d1dfb2cca74ecfc123f1c06a20462a
 +
 +            return type.constructor().get();
 +        });
-+        // ShreddedPaper end - thread-safe
++        // Confetti end - thread-safe
      }
  
      @Nullable
@@ -1430,11 +1430,11 @@ index 6e23e69abd56eeda3b52a22019e1b74ae10682e7..f3d1dfb2cca74ecfc123f1c06a20462a
 -        }
 -
 -        return (T)savedData;
-+        // ShreddedPaper start - thread-safe
++        // Confetti start - thread-safe
 +        return (T) this.cache.computeIfAbsent(id, (key) -> {
 +            return this.readSavedData(type.deserializer(), type.type(), key);
 +        });
-+        // ShreddedPaper end - thread-safe
++        // Confetti end - thread-safe
      }
  
      @Nullable
@@ -1459,8 +1459,8 @@ index ac11f18690434922179b61ffcc3036dea025b0cb..efdac83c60651818f7d1829be8970cd1
          if (world.capturedBlockStates.size() > 0) {
 -            TreeType treeType = SaplingBlock.treeType;
 -            SaplingBlock.treeType = null;
-+            TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // ShreddedPaper - thread local for treeType
-+            SaplingBlock.treeTypeThreadLocal.remove(); // ShreddedPaper - thread local for treeType
++            TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
++            SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
              List<BlockState> blocks = new ArrayList<>(world.capturedBlockStates.values());
              world.capturedBlockStates.clear();
              StructureGrowEvent structureEvent = null;
@@ -1503,7 +1503,7 @@ index 3ed19f30f1cab9df3b1bfdf0b0caf7882a77c5f7..bebe02d73ed34453ff521ec1d803935c
      @Override
      public boolean addPotionEffect(PotionEffect effect, boolean force) {
 -        org.spigotmc.AsyncCatcher.catchOp("effect add"); // Paper
-+        TickThread.ensureTickThread(this.getHandle(), "effect add"); // Paper // ShreddedPaper
++        TickThread.ensureTickThread(this.getHandle(), "effect add"); // Paper // Confetti
          this.getHandle().addEffect(org.bukkit.craftbukkit.potion.CraftPotionUtil.fromBukkit(effect), EntityPotionEffectEvent.Cause.PLUGIN); // Paper - Don't ignore icon
          return true;
      }
@@ -1516,7 +1516,7 @@ index 27ff2b3037a90ee94bea767c285f2454e545aad2..494920321af0098e390d6b2669403acc
      @Override
      public Set<java.lang.Long> getSentChunkKeys() {
 -        org.spigotmc.AsyncCatcher.catchOp("accessing sent chunks");
-+        TickThread.ensureTickThread(this.getHandle(), "accessing sent chunks"); // ShreddedPaper
++        TickThread.ensureTickThread(this.getHandle(), "accessing sent chunks"); // Confetti
          return it.unimi.dsi.fastutil.longs.LongSets.unmodifiable(
              this.getHandle().chunkLoader.getSentChunksRaw().clone()
          );
@@ -1525,7 +1525,7 @@ index 27ff2b3037a90ee94bea767c285f2454e545aad2..494920321af0098e390d6b2669403acc
      @Override
      public Set<org.bukkit.Chunk> getSentChunks() {
 -        org.spigotmc.AsyncCatcher.catchOp("accessing sent chunks");
-+        TickThread.ensureTickThread(this.getHandle(), "accessing sent chunks"); // ShreddedPaper
++        TickThread.ensureTickThread(this.getHandle(), "accessing sent chunks"); // Confetti
          final it.unimi.dsi.fastutil.longs.LongOpenHashSet rawChunkKeys = this.getHandle().chunkLoader.getSentChunksRaw();
          final it.unimi.dsi.fastutil.objects.ObjectOpenHashSet<org.bukkit.Chunk> chunks = new it.unimi.dsi.fastutil.objects.ObjectOpenHashSet<>(rawChunkKeys.size());
          final org.bukkit.World world = this.getWorld();
@@ -1534,7 +1534,7 @@ index 27ff2b3037a90ee94bea767c285f2454e545aad2..494920321af0098e390d6b2669403acc
      @Override
      public boolean isChunkSent(final long chunkKey) {
 -        org.spigotmc.AsyncCatcher.catchOp("accessing sent chunks");
-+        TickThread.ensureTickThread(this.getHandle(), "accessing sent chunks"); // ShreddedPaper
++        TickThread.ensureTickThread(this.getHandle(), "accessing sent chunks"); // Confetti
          return this.getHandle().chunkLoader.getSentChunksRaw().contains(chunkKey);
      }
      // Paper end
@@ -1547,7 +1547,7 @@ index 5308dc55bcc334ad6bef927de6c2d9b9364d99ff..309786921442a94a275a7dcd923cfc21
      }
  
 -    public static BlockPos sourceBlockOverride = null; // SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep.
-+    public static ThreadLocal<BlockPos> sourceBlockOverrideThreadLocal = ThreadLocal.withInitial(() -> null); // SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep. // ShreddedPaper - use thread local
++    public static ThreadLocal<BlockPos> sourceBlockOverrideThreadLocal = ThreadLocal.withInitial(() -> null); // SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep. // Confetti - use thread local
  
      public static boolean handleBlockSpreadEvent(LevelAccessor world, BlockPos source, BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag) {
          // Suppress during worldgen
@@ -1556,7 +1556,7 @@ index 5308dc55bcc334ad6bef927de6c2d9b9364d99ff..309786921442a94a275a7dcd923cfc21
          state.setData(block);
  
 -        BlockSpreadEvent event = new BlockSpreadEvent(state.getBlock(), CraftBlock.at(world, CraftEventFactory.sourceBlockOverride != null ? CraftEventFactory.sourceBlockOverride : source), state);
-+        BlockSpreadEvent event = new BlockSpreadEvent(state.getBlock(), CraftBlock.at(world, CraftEventFactory.sourceBlockOverrideThreadLocal.get() != null ? CraftEventFactory.sourceBlockOverrideThreadLocal.get() : source), state); // ShreddedPaper - use thread local
++        BlockSpreadEvent event = new BlockSpreadEvent(state.getBlock(), CraftBlock.at(world, CraftEventFactory.sourceBlockOverrideThreadLocal.get() != null ? CraftEventFactory.sourceBlockOverrideThreadLocal.get() : source), state); // Confetti - use thread local
          Bukkit.getPluginManager().callEvent(event);
  
          if (!event.isCancelled()) {
@@ -1565,7 +1565,7 @@ index 5308dc55bcc334ad6bef927de6c2d9b9364d99ff..309786921442a94a275a7dcd923cfc21
  
          org.bukkit.event.block.BlockDispenseEvent event = new org.bukkit.event.block.BlockDispenseEvent(bukkitBlock, craftItem.clone(), CraftVector.toBukkit(to));
 -        if (!net.minecraft.world.level.block.DispenserBlock.eventFired) {
-+        if (!net.minecraft.world.level.block.DispenserBlock.eventFiredThreadLocal.get()) { // ShreddedPaper - use thread local for eventFired
++        if (!net.minecraft.world.level.block.DispenserBlock.eventFiredThreadLocal.get()) { // Confetti - use thread local for eventFired
              if (!event.callEvent()) {
                  return itemStack;
              }
@@ -1585,7 +1585,7 @@ index eafa54c870c3e2aef30c3f9f96f516607a7cae24..1ba11d3653790464bc9af174daecf351
  
      @Override
      public void setItem(int index, ItemStack item) {
-+        TickThread.ensureTickThread(getInventory().player, "Player inventory modification"); // ShreddedPaper
++        TickThread.ensureTickThread(getInventory().player, "Player inventory modification"); // Confetti
          super.setItem(index, item);
          if (this.getHolder() == null) return;
          ServerPlayer player = ((CraftPlayer) this.getHolder()).getHandle();
@@ -1601,7 +1601,7 @@ index 114f273dd7f8b8a3c02f0651f6944859b33a65d4..bc501ce058f001a4c87bf2d513a855f1
  
  public abstract class BossBarTask extends BukkitRunnable {
 -    private final Map<UUID, BossBar> bossbars = new HashMap<>();
-+    private final Map<UUID, BossBar> bossbars = new ConcurrentHashMap<>(); // ShreddedPaper
++    private final Map<UUID, BossBar> bossbars = new ConcurrentHashMap<>(); // Confetti
      private boolean started;
  
      abstract BossBar createBossBar();
@@ -1621,8 +1621,8 @@ index 6505f4bc7000de7b53f4f8fae2393d2c0a315c72..b19b33e02f289837cc8f11fe2e1467fc
  import java.util.logging.Level;
  import java.util.logging.Logger;
 +
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
  import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
  import org.bukkit.Bukkit;
@@ -1632,11 +1632,11 @@ index 6505f4bc7000de7b53f4f8fae2393d2c0a315c72..b19b33e02f289837cc8f11fe2e1467fc
                  io.papermc.paper.chunk.system.scheduling.ChunkTaskScheduler.dumpAllChunkLoadInfo(isLongTimeout); // Paper - rewrite chunk system
                  this.dumpTickingInfo(); // Paper - log detailed tick information
                  WatchdogThread.dumpThread( ManagementFactory.getThreadMXBean().getThreadInfo( MinecraftServer.getServer().serverThread.getId(), Integer.MAX_VALUE ), log );
-+                // ShreddedPaper start - Dump stuck worker threads
++                // Confetti start - Dump stuck worker threads
 +                for (ThreadInfo worker : getStuckTickWorkerThreads()) {
 +                    WatchdogThread.dumpThread( worker, log );
 +                }
-+                // ShreddedPaper end - Dump stuck worker threads
++                // Confetti end - Dump stuck worker threads
                  log.log( Level.SEVERE, "------------------------------" );
                  //
                  // Paper start - Only print full dump on long timeouts
@@ -1644,11 +1644,11 @@ index 6505f4bc7000de7b53f4f8fae2393d2c0a315c72..b19b33e02f289837cc8f11fe2e1467fc
          }
      }
  
-+    // ShreddedPaper start
++    // Confetti start
 +    private List<ThreadInfo> getStuckTickWorkerThreads() {
 +        ThreadInfo[] threads = ManagementFactory.getThreadMXBean().dumpAllThreads( true, true );
 +        return Arrays.stream(threads)
-+                .filter(thread -> thread.getThreadName().startsWith("ShreddedPaperTickThread"))
++                .filter(thread -> thread.getThreadName().startsWith("ConfettiTickThread"))
 +                .filter(thread -> Arrays.stream(thread.getStackTrace()).anyMatch(stack -> !stack.getClassName().startsWith("java") && !stack.getClassName().startsWith("jdk")))
 +                .toList();
 +    }
@@ -1665,7 +1665,7 @@ index 6505f4bc7000de7b53f4f8fae2393d2c0a315c72..b19b33e02f289837cc8f11fe2e1467fc
 +
 +        return strings;
 +    }
-+    // ShreddedPaper end
++    // Confetti end
 +
      private static void dumpThread(ThreadInfo thread, Logger log)
      {
@@ -1675,12 +1675,12 @@ index 6505f4bc7000de7b53f4f8fae2393d2c0a315c72..b19b33e02f289837cc8f11fe2e1467fc
                  + " | Native: " + thread.isInNative()
                  + " | State: " + thread.getThreadState() );
 +
-+        // ShreddedPaper start - Dump region locks held by this thread
++        // Confetti start - Dump region locks held by this thread
 +        List<String> locksHeld = getCurrentLocksHeld(thread);
 +        if (!locksHeld.isEmpty()) {
 +            log.log( Level.SEVERE, "\tRegion locks held (regionSize=" + RegionPos.REGION_SIZE + " chunks): " + locksHeld);
 +        }
-+        // ShreddedPaper end - Dump region locks held by this thread
++        // Confetti end - Dump region locks held by this thread
 +
          if ( thread.getLockedMonitors().length != 0 )
          {

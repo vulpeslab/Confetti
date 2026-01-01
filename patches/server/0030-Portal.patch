@@ -4,16 +4,16 @@ Date: Sat, 1 Jun 2024 10:44:19 +0900
 Subject: [PATCH] Portal
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperDimensionChanger.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperDimensionChanger.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiDimensionChanger.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiDimensionChanger.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..3da4655448755a1af37bb4e5a5fdc7dcebc9437e
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperDimensionChanger.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiDimensionChanger.java
 @@ -0,0 +1,343 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
 +import io.papermc.paper.util.TickThread;
 +import net.minecraft.BlockUtil;
 +import net.minecraft.core.BlockPos;
@@ -53,7 +53,7 @@ index 0000000000000000000000000000000000000000..3da4655448755a1af37bb4e5a5fdc7dc
 +
 +import java.util.concurrent.CompletableFuture;
 +
-+public class ShreddedPaperDimensionChanger {
++public class ConfettiDimensionChanger {
 +
 +    private static final Logger LOGGER = LogUtils.getClassLogger();
 +
@@ -61,7 +61,7 @@ index 0000000000000000000000000000000000000000..3da4655448755a1af37bb4e5a5fdc7dc
 +    private ServerLevel destinationWorld;
 +    private final PlayerTeleportEvent.TeleportCause cause;
 +
-+    public ShreddedPaperDimensionChanger(Entity entity, ServerLevel destinationWorld, PlayerTeleportEvent.TeleportCause cause) {
++    public ConfettiDimensionChanger(Entity entity, ServerLevel destinationWorld, PlayerTeleportEvent.TeleportCause cause) {
 +        this.entity = entity;
 +        this.destinationWorld = destinationWorld;
 +        this.cause = cause;
@@ -71,7 +71,7 @@ index 0000000000000000000000000000000000000000..3da4655448755a1af37bb4e5a5fdc7dc
 +
 +    private void ensureSyncWith(ServerLevel level, ChunkPos pos, Runnable runnable) {
 +        if (!TickThread.isTickThreadFor(this.entity) || !TickThread.isTickThreadFor(level, pos)) {
-+            ShreddedPaperRegionScheduler.scheduleAcrossLevels((ServerLevel) this.entity.level(), RegionPos.forChunk(this.entity.chunkPosition()), level, RegionPos.forChunk(pos), runnable);
++            ConfettiRegionScheduler.scheduleAcrossLevels((ServerLevel) this.entity.level(), RegionPos.forChunk(this.entity.chunkPosition()), level, RegionPos.forChunk(pos), runnable);
 +        } else {
 +            runnable.run();
 +        }
@@ -263,7 +263,7 @@ index 0000000000000000000000000000000000000000..3da4655448755a1af37bb4e5a5fdc7dc
 +                    bukkitEntity.getVelocity(), org.bukkit.craftbukkit.util.CraftVector.toBukkit(portalInfo.speed));
 +            event.callEvent();
 +            if (this.entity.isRemoved() || event.isCancelled() || event.getTo() == null) {
-+                return; // ShreddedPaper
++                return; // Confetti
 +            }
 +            exit = event.getTo();
 +            speed = org.bukkit.craftbukkit.util.CraftVector.toNMS(event.getAfter());
@@ -361,8 +361,8 @@ index 9fa73f3848f89364ac46b7bdffc5591b53a64e16..de42949f9754b73ca03873c7a97ccdab
  import java.util.stream.Collectors;
  import javax.annotation.Nullable;
  
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  import io.papermc.paper.util.TickThread;
  import net.minecraft.BlockUtil;
  import net.minecraft.ChatFormatting;
@@ -372,8 +372,8 @@ index 9fa73f3848f89364ac46b7bdffc5591b53a64e16..de42949f9754b73ca03873c7a97ccdab
      private int lastRecordedExperience = Integer.MIN_VALUE;
 -    private float lastSentHealth = -1.0E8F;
 -    private int lastSentFood = -99999999;
-+    public float lastSentHealth = -1.0E8F; // ShreddedPaper - make public
-+    public int lastSentFood = -99999999; // ShreddedPaper - make public
++    public float lastSentHealth = -1.0E8F; // Confetti - make public
++    public int lastSentFood = -99999999; // Confetti - make public
      private boolean lastFoodSaturationZero = true;
      public int lastSentExp = -99999999;
      public int spawnInvulnerableTime = 60;
@@ -382,7 +382,7 @@ index 9fa73f3848f89364ac46b7bdffc5591b53a64e16..de42949f9754b73ca03873c7a97ccdab
      private Vec3 startingToFallPosition;
      @Nullable
 -    private Vec3 enteredNetherPosition;
-+    public Vec3 enteredNetherPosition; // ShreddedPaper - make public
++    public Vec3 enteredNetherPosition; // Confetti - make public
      @Nullable
      private Vec3 enteredLavaOnVehiclePosition;
      private SectionPos lastSectionPos;
@@ -391,7 +391,7 @@ index 9fa73f3848f89364ac46b7bdffc5591b53a64e16..de42949f9754b73ca03873c7a97ccdab
      // CraftBukkit start
      @Override
 -    protected CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, TeleportCause cause, int searchRadius, int creationRadius) {
-+    public CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, TeleportCause cause, int searchRadius, int creationRadius) { // ShreddedPaper - make public
++    public CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, TeleportCause cause, int searchRadius, int creationRadius) { // Confetti - make public
          Location enter = this.getBukkitEntity().getLocation();
          Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld(), this.getYRot(), this.getXRot());
          PlayerPortalEvent event = new PlayerPortalEvent(this.getBukkitEntity(), enter, exit, cause, searchRadius, true, creationRadius);
@@ -400,7 +400,7 @@ index 9fa73f3848f89364ac46b7bdffc5591b53a64e16..de42949f9754b73ca03873c7a97ccdab
      // CraftBukkit end
  
 -    private void createEndPlatform(ServerLevel world, BlockPos centerPos) {
-+    public void createEndPlatform(ServerLevel world, BlockPos centerPos) { // ShreddedPaper - make public
++    public void createEndPlatform(ServerLevel world, BlockPos centerPos) { // Confetti - make public
          BlockPos.MutableBlockPos blockposition_mutableblockposition = centerPos.mutable();
          org.bukkit.craftbukkit.util.BlockStateListPopulator blockList = new org.bukkit.craftbukkit.util.BlockStateListPopulator(world); // CraftBukkit
  
@@ -409,7 +409,7 @@ index 9fa73f3848f89364ac46b7bdffc5591b53a64e16..de42949f9754b73ca03873c7a97ccdab
  
      @Override
 -    protected Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // CraftBukkit
-+    public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // CraftBukkit // ShreddedPaper - make public
++    public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // CraftBukkit // Confetti - make public
          Optional<BlockUtil.FoundRectangle> optional = super.getExitPortal(worldserver, blockposition, flag, worldborder, searchRadius, canCreatePortal, createRadius); // CraftBukkit
  
          if (optional.isPresent() || !canCreatePortal) { // CraftBukkit
@@ -421,9 +421,9 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
  import com.google.common.collect.Sets;
  import com.google.common.collect.UnmodifiableIterator;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperDimensionChanger;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiDimensionChanger;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
  import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
@@ -432,7 +432,7 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
      public boolean isInsidePortal;
      protected int portalTime;
 -    protected BlockPos portalEntrancePos;
-+    public BlockPos portalEntrancePos; // ShreddedPaper - make public
++    public BlockPos portalEntrancePos; // Confetti - make public
      private boolean invulnerable;
      protected UUID uuid;
      protected String stringUUID;
@@ -440,12 +440,12 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
          org.bukkit.event.entity.EntityPortalEnterEvent event = new org.bukkit.event.entity.EntityPortalEnterEvent(this.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
          event.callEvent();
  
-+        // ShreddedPaper start - async dimension changing
++        // Confetti start - async dimension changing
 +        if (true) {
-+            new ShreddedPaperDimensionChanger(this, worldserver, PlayerTeleportEvent.TeleportCause.END_PORTAL);
++            new ConfettiDimensionChanger(this, worldserver, PlayerTeleportEvent.TeleportCause.END_PORTAL);
 +            return;
 +        }
-+        // ShreddedPaper end - async dimension changing
++        // Confetti end - async dimension changing
 +
          if (this instanceof ServerPlayer) {
              ((ServerPlayer) this).changeDimension(worldserver, PlayerTeleportEvent.TeleportCause.END_PORTAL);
@@ -455,19 +455,19 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
                      // Paper end - Add EntityPortalReadyEvent
                      this.setPortalCooldown();
 +
-+                    // ShreddedPaper start - async dimension changing
++                    // Confetti start - async dimension changing
 +                    if (true) {
-+                        new ShreddedPaperDimensionChanger(this, worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
++                        new ConfettiDimensionChanger(this, worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
 +                    }
-+                    // ShreddedPaper end - async dimension changing
++                    // Confetti end - async dimension changing
 +
                      // CraftBukkit start
                      if (this instanceof ServerPlayer) {
 -                        ((ServerPlayer) this).changeDimension(worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
-+                        // ((ServerPlayer) this).changeDimension(worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL); // ShreddedPaper - handled above
++                        // ((ServerPlayer) this).changeDimension(worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL); // Confetti - handled above
                      } else {
 -                        this.changeDimension(worldserver1);
-+                        // this.changeDimension(worldserver1); // ShreddedPaper - handled above
++                        // this.changeDimension(worldserver1); // Confetti - handled above
                      }
                      } // Paper - Add EntityPortalReadyEvent
                      // CraftBukkit end
@@ -476,7 +476,7 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
      }
  
 -    protected void removeAfterChangingDimensions() {
-+    public void removeAfterChangingDimensions() { // ShreddedPaper - make public
++    public void removeAfterChangingDimensions() { // Confetti - make public
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
      }
  
@@ -485,13 +485,13 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
      }
  
 -    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // ShreddedPaper - make public
++    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
          return PortalShape.getRelativePosition(portalRect, portalAxis, this.position(), this.getDimensions(this.getPose()));
      }
  
      // CraftBukkit start
 -    protected CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) {
-+    public CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) { // ShreddedPaper - make public
++    public CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) { // Confetti - make public
          org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
          Location enter = bukkitEntity.getLocation();
          Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld());
@@ -500,7 +500,7 @@ index 6c1e9965b10b5709129110bf408eaada8991542c..6b2c2e2f782630a3b7e25532260cc61e
      }
  
 -    protected Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) {
-+    public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // ShreddedPaper - make public
++    public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // Confetti - make public
          return worldserver.getPortalForcer().findPortalAround(blockposition, worldborder, searchRadius);
          // CraftBukkit end
      }
@@ -513,7 +513,7 @@ index 472598d554c6c4134f06443b8ef06c3a726cd830..6f840e64c2f416f5e98c9c462fd29e32
  
      @Override
 -    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // ShreddedPaper - make public
++    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
          return LivingEntity.resetForwardDirectionOfRelativePortalPosition(super.getRelativePortalPosition(portalAxis, portalRect));
      }
  
@@ -526,7 +526,7 @@ index c4d964aeac21f0809149e1d50182985fd1dd0938..36224e76d4ad4ed820ea49078a3171a0
  
      @Override
 -    protected void removeAfterChangingDimensions() {
-+    public void removeAfterChangingDimensions() { // ShreddedPaper - make public
++    public void removeAfterChangingDimensions() { // Confetti - make public
          super.removeAfterChangingDimensions();
          // Paper start - Expand EntityUnleashEvent
          EntityUnleashEvent event = new EntityUnleashEvent(this.getBukkitEntity(), EntityUnleashEvent.UnleashReason.UNKNOWN, false);
@@ -539,7 +539,7 @@ index e7a1ce585c9e552e6f9ce9acd26fdfe5c43e0b5d..de2ea35a226c5f595a2ab53beda8238a
  
      @Override
 -    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // ShreddedPaper - make public
++    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
          return LivingEntity.resetForwardDirectionOfRelativePortalPosition(super.getRelativePortalPosition(portalAxis, portalRect));
      }
  
@@ -552,7 +552,7 @@ index 105e2b7d7cd7c64a9164e4114476e44f29433f49..17c81fde9c879d51f09de2efb5a00263
  
      @Override
 -    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // ShreddedPaper - make public
++    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
          return LivingEntity.resetForwardDirectionOfRelativePortalPosition(super.getRelativePortalPosition(portalAxis, portalRect));
      }
  

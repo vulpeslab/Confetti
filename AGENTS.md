@@ -1,4 +1,4 @@
-# ShreddedPaper - AI Agent Context
+# Confetti - AI Agent Context
 
 ## Architecture
 Multi-threaded 1.20.6 Purpur fork enabling vertical scaling. Chunks are grouped into **regions** (default 8x8 chunks), and regions are locked during ticking to prevent race conditions between threads. Code executes on chunk's thread, not a main thread.
@@ -10,14 +10,14 @@ Multi-threaded 1.20.6 Purpur fork enabling vertical scaling. Chunks are grouped 
 ./gradlew publishToMavenLocal      # Publish API locally
 ./gradlew rebuildPatches            # Update patches after code changes
 ```
-Output jar: `build/libs/shreddedpaper-paperclip-*-mojmap.jar`
+Output jar: `build/libs/confetti-paperclip-*-mojmap.jar`
 
 ## Project Structure
 - `patches/api/` - API patches (branding, Folia compatibility checks)
 - `patches/server/` - Server implementation patches (region scheduler, thread safety)
-- `shreddedpaper-api/` - Generated API module
-- `shreddedpaper-server/` - Generated server module
-- `shreddedpaper.yml` - Runtime configuration (region-size, thread-count)
+- `confetti-api/` - Generated API module
+- `confetti-server/` - Generated server module
+- `confetti.yml` - Runtime configuration (region-size, thread-count)
 
 ## Multithreading Core Concepts
 1. **Region locking**: When ticking a chunk, its region and 8 neighboring regions are locked. See `patches/server/0005-Add-multithreading-region-scheduler.patch` for `RegionPos` implementation.
@@ -33,4 +33,4 @@ Folia-supported plugins work without changes. Detection: check `Bukkit.class.get
 - `allow-unsupported-plugins-to-modify-chunks-via-global-scheduler`: Only works with single-threaded regions
 
 ## Version Info
-Maven coordinates: `io.multipaper.shreddedpaper:shreddedpaper-api:1.20.6-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
+Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.20.6-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.

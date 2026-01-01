@@ -4,10 +4,10 @@ Date: Sat, 25 May 2024 02:10:04 +0900
 Subject: [PATCH] Block entities
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 index 801ee1adfbd5fe857c4a21e0a00b710f237b96b4..caff03c2a37d01019975649a87377c7366a5f281 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 @@ -5,9 +5,11 @@ import io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet;
  import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
  import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -38,17 +38,17 @@ index 801ee1adfbd5fe857c4a21e0a00b710f237b96b4..caff03c2a37d01019975649a87377c73
                  ;
      }
  }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index 1d1dd9404b4f592f3f687e132b985d7aaaa4ac22..7a4dcc8fc51713bfd6583567372654558d570533 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-@@ -84,6 +84,8 @@ public class ShreddedPaperChunkTicker {
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -84,6 +84,8 @@ public class ConfettiChunkTicker {
  
-             region.forEachTickingEntity(ShreddedPaperEntityTicker::tickEntity);
+             region.forEachTickingEntity(ConfettiEntityTicker::tickEntity);
  
 +            level.tickBlockEntities(region.tickingBlockEntities, region.pendingBlockEntityTickers);
 +
-             region.getPlayers().forEach(ShreddedPaperPlayerTicker::tickPlayer);
+             region.getPlayers().forEach(ConfettiPlayerTicker::tickPlayer);
  
              while (region.getInternalTaskQueue().executeTask()) ;
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
@@ -60,7 +60,7 @@ index 735e60d40476df1e483fa06fed344038ab16a5e5..89a61e2897c22d3fea17283223371d12
              //this.timings.tickEntities.stopTiming(); // Spigot // Purpur
              //gameprofilerfiller.pop(); // Purpur
 -            this.tickBlockEntities();
-+            // this.tickBlockEntities(); // ShreddedPaper - handled locally in the region
++            // this.tickBlockEntities(); // Confetti - handled locally in the region
          }
  
          //gameprofilerfiller.push("entityManagement"); // Purpur
@@ -69,7 +69,7 @@ index 735e60d40476df1e483fa06fed344038ab16a5e5..89a61e2897c22d3fea17283223371d12
  
              bufferedwriter.write(String.format(Locale.ROOT, "entities: %s\n", this.entityLookup.getDebugInfo())); // Paper - rewrite chunk system
 -            bufferedwriter.write(String.format(Locale.ROOT, "block_entity_tickers: %d\n", this.blockEntityTickers.size()));
-+            // bufferedwriter.write(String.format(Locale.ROOT, "block_entity_tickers: %d\n", this.blockEntityTickers.size())); // ShreddedPaper - removed blockEntityTickers
++            // bufferedwriter.write(String.format(Locale.ROOT, "block_entity_tickers: %d\n", this.blockEntityTickers.size())); // Confetti - removed blockEntityTickers
              bufferedwriter.write(String.format(Locale.ROOT, "block_ticks: %d\n", this.getBlockTicks().count()));
              bufferedwriter.write(String.format(Locale.ROOT, "fluid_ticks: %d\n", this.getFluidTicks().count()));
              bufferedwriter.write("distance_manager: " + playerchunkmap.getDistanceManager().getDebugStatus() + "\n");
@@ -85,7 +85,7 @@ index 735e60d40476df1e483fa06fed344038ab16a5e5..89a61e2897c22d3fea17283223371d12
 -
 -            csvwriter.writeRow(blockposition.getX(), blockposition.getY(), blockposition.getZ(), tickingblockentity.getType());
 -        }
-+        // ShreddedPaper start - removed blockEntityTickers
++        // Confetti start - removed blockEntityTickers
 +//        Iterator iterator = this.blockEntityTickers.iterator();
 +//
 +//        while (iterator.hasNext()) {
@@ -94,7 +94,7 @@ index 735e60d40476df1e483fa06fed344038ab16a5e5..89a61e2897c22d3fea17283223371d12
 +//
 +//            csvwriter.writeRow(blockposition.getX(), blockposition.getY(), blockposition.getZ(), tickingblockentity.getType());
 +//        }
-+        // ShreddedPaper end - removed blockEntityTickers
++        // Confetti end - removed blockEntityTickers
  
      }
  
@@ -103,7 +103,7 @@ index 735e60d40476df1e483fa06fed344038ab16a5e5..89a61e2897c22d3fea17283223371d12
          return String.format(Locale.ROOT, "players: %s, entities: %s [%s], block_entities: %d [%s], block_ticks: %d, fluid_ticks: %d, chunk_source: %s", this.players.size(), this.entityLookup.getDebugInfo(), ServerLevel.getTypeCount(this.entityLookup.getAll(), (entity) -> { // Paper - rewrite chunk system
              return BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
 -        }), this.blockEntityTickers.size(), ServerLevel.getTypeCount(this.blockEntityTickers, TickingBlockEntity::getType), this.getBlockTicks().count(), this.getFluidTicks().count(), this.gatherChunkSourceStats());
-+        }), 0 /*this.blockEntityTickers.size()*/, "" /*ServerLevel.getTypeCount(this.blockEntityTickers, TickingBlockEntity::getType)*/, this.getBlockTicks().count(), this.getFluidTicks().count(), this.gatherChunkSourceStats()); // ShreddedPaper - removed blockEntityTickers
++        }), 0 /*this.blockEntityTickers.size()*/, "" /*ServerLevel.getTypeCount(this.blockEntityTickers, TickingBlockEntity::getType)*/, this.getBlockTicks().count(), this.getFluidTicks().count(), this.gatherChunkSourceStats()); // Confetti - removed blockEntityTickers
      }
  
      private static <T> String getTypeCount(Iterable<T> items, Function<T, String> classifier) {
@@ -121,7 +121,7 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
  import java.util.function.Supplier;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.region.LevelChunkRegion;
++import com.vulpeslab.confetti.region.LevelChunkRegion;
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
@@ -129,8 +129,8 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
  import org.bukkit.craftbukkit.util.CraftSpawnCategory;
  import org.bukkit.entity.SpawnCategory;
  import org.bukkit.event.block.BlockPhysicsEvent;
-+import io.multipaper.shreddedpaper.region.RegionPos;
- import io.multipaper.shreddedpaper.threading.PerThreadNeighborUpdater;
++import com.vulpeslab.confetti.region.RegionPos;
+ import com.vulpeslab.confetti.threading.PerThreadNeighborUpdater;
  // CraftBukkit end
  
 @@ -115,9 +119,9 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -138,10 +138,10 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
      public static final int MAX_ENTITY_SPAWN_Y = 20000000;
      public static final int MIN_ENTITY_SPAWN_Y = -20000000;
 -    public final List<TickingBlockEntity> blockEntityTickers = Lists.newArrayList(); // Paper - public
-+    // public final List<TickingBlockEntity> blockEntityTickers = Lists.newArrayList(); // Paper - public // ShreddedPaper - handled locally in the region
++    // public final List<TickingBlockEntity> blockEntityTickers = Lists.newArrayList(); // Paper - public // Confetti - handled locally in the region
      protected final NeighborUpdater neighborUpdater;
 -    private final List<TickingBlockEntity> pendingBlockEntityTickers = Lists.newArrayList();
-+    // private final List<TickingBlockEntity> pendingBlockEntityTickers = Lists.newArrayList(); // ShreddedPaper - handled locally in the region
++    // private final List<TickingBlockEntity> pendingBlockEntityTickers = Lists.newArrayList(); // Confetti - handled locally in the region
      private boolean tickingBlockEntities;
      public final Thread thread;
      private final boolean isDebug;
@@ -150,7 +150,7 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
      private org.spigotmc.TickLimiter entityLimiter;
      private org.spigotmc.TickLimiter tileLimiter;
 -    private int tileTickPosition;
-+    // private int tileTickPosition; // ShreddedPaper - removed tileTickPosition
++    // private int tileTickPosition; // Confetti - removed tileTickPosition
      public final Map<Explosion.CacheKey, Float> explosionDensityCache = new HashMap<>(); // Paper - Optimize explosions
      public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos; // Paper - Faster redstone torch rapid clock removal; Move from Map in BlockRedstoneTorch to here
  
@@ -159,17 +159,17 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
  
      public void addBlockEntityTicker(TickingBlockEntity ticker) {
 -        (this.tickingBlockEntities ? this.pendingBlockEntityTickers : this.blockEntityTickers).add(ticker);
-+        // ShreddedPaper start
++        // Confetti start
 +        LevelChunkRegion region = ((ServerLevel) this).chunkSource.tickingRegions.getOrCreate(RegionPos.forChunk(new ChunkPos(ticker.getPos())));
 +        synchronized (region.pendingBlockEntityTickers) {
 +            region.pendingBlockEntityTickers.add(ticker);
 +        }
-+        // ShreddedPaper end
-+//        (this.tickingBlockEntities ? this.pendingBlockEntityTickers : this.blockEntityTickers).add(ticker); // ShreddedPaper
++        // Confetti end
++//        (this.tickingBlockEntities ? this.pendingBlockEntityTickers : this.blockEntityTickers).add(ticker); // Confetti
      }
  
 -    protected void tickBlockEntities() {
-+    public void tickBlockEntities(List<TickingBlockEntity> blockEntityTickers, List<TickingBlockEntity> pendingBlockEntityTickers) { // ShreddedPaper
++    public void tickBlockEntities(List<TickingBlockEntity> blockEntityTickers, List<TickingBlockEntity> pendingBlockEntityTickers) { // Confetti
          //ProfilerFiller gameprofilerfiller = this.getProfiler(); // Purpur
  
          //gameprofilerfiller.push("blockEntities"); // Purpur
@@ -178,11 +178,11 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
 -        if (!this.pendingBlockEntityTickers.isEmpty()) {
 -            this.blockEntityTickers.addAll(this.pendingBlockEntityTickers);
 -            this.pendingBlockEntityTickers.clear();
-+        if (!pendingBlockEntityTickers.isEmpty()) { // ShreddedPaper
-+            synchronized (pendingBlockEntityTickers) { // ShreddedPaper
-+                blockEntityTickers.addAll(pendingBlockEntityTickers); // ShreddedPaper
-+                pendingBlockEntityTickers.clear(); // ShreddedPaper
-+            } // ShreddedPaper
++        if (!pendingBlockEntityTickers.isEmpty()) { // Confetti
++            synchronized (pendingBlockEntityTickers) { // Confetti
++                blockEntityTickers.addAll(pendingBlockEntityTickers); // Confetti
++                pendingBlockEntityTickers.clear(); // Confetti
++            } // Confetti
          }
          //this.timings.tileEntityPending.stopTiming(); // Spigot // Purpur
  
@@ -193,9 +193,9 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
 -        for (tileTickPosition = 0; tileTickPosition < this.blockEntityTickers.size(); tileTickPosition++) { // Paper - Disable tick limiters
 -            this.tileTickPosition = (this.tileTickPosition < this.blockEntityTickers.size()) ? this.tileTickPosition : 0;
 -            TickingBlockEntity tickingblockentity = (TickingBlockEntity) this.blockEntityTickers.get(this.tileTickPosition);
-+        for (int tileTickPosition = 0; tileTickPosition < blockEntityTickers.size(); tileTickPosition++) { // Paper - Disable tick limiters // ShreddedPaper
-+            tileTickPosition = (tileTickPosition < blockEntityTickers.size()) ? tileTickPosition : 0; // ShreddedPaper
-+            TickingBlockEntity tickingblockentity = (TickingBlockEntity) blockEntityTickers.get(tileTickPosition); // ShreddedPaper
++        for (int tileTickPosition = 0; tileTickPosition < blockEntityTickers.size(); tileTickPosition++) { // Paper - Disable tick limiters // Confetti
++            tileTickPosition = (tileTickPosition < blockEntityTickers.size()) ? tileTickPosition : 0; // Confetti
++            TickingBlockEntity tickingblockentity = (TickingBlockEntity) blockEntityTickers.get(tileTickPosition); // Confetti
              // Spigot end
  
              if (tickingblockentity.isRemoved()) {
@@ -204,19 +204,19 @@ index fb1ec5a87639402ac008a862e083a8261eac614f..195e715a76b9b89134cf929ad2810689
                  tickingblockentity.tick();
                  // Paper start - execute chunk tasks during tick
 -                if ((this.tileTickPosition & 7) == 0) {
-+                if ((tileTickPosition & 7) == 0) { // ShreddedPaper
++                if ((tileTickPosition & 7) == 0) { // Confetti
                      MinecraftServer.getServer().executeMidTickTasks();
                  }
                  // Paper end - execute chunk tasks during tick
              }
          }
 -        this.blockEntityTickers.removeAll(toRemove); // Paper - Fix MC-117075
-+        blockEntityTickers.removeAll(toRemove); // Paper - Fix MC-117075 // ShreddedPaper
++        blockEntityTickers.removeAll(toRemove); // Paper - Fix MC-117075 // Confetti
  
          //this.timings.tileEntityTick.stopTiming(); // Spigot // Purpur
          this.tickingBlockEntities = false;
 -        co.aikar.timings.TimingHistory.tileEntityTicks += this.blockEntityTickers.size(); // Paper
-+        co.aikar.timings.TimingHistory.tileEntityTicks += blockEntityTickers.size(); // Paper // ShreddedPaper
++        co.aikar.timings.TimingHistory.tileEntityTicks += blockEntityTickers.size(); // Paper // Confetti
          //gameprofilerfiller.pop(); // Purpur
          this.spigotConfig.currentPrimedTnt = 0; // Spigot
      }
@@ -229,7 +229,7 @@ index 5bc079d4edb08f0d3597af6e8f0ce403213434db..71521c19c60ed16579be100263e0c72c
      public LevelChunk(Level world, ChunkPos pos, UpgradeData upgradeData, LevelChunkTicks<Block> blockTickScheduler, LevelChunkTicks<Fluid> fluidTickScheduler, long inhabitedTime, @Nullable LevelChunkSection[] sectionArrayInitializer, @Nullable LevelChunk.PostLoadProcessor entityLoader, @Nullable BlendingData blendingData) {
          super(pos, upgradeData, world, net.minecraft.server.MinecraftServer.getServer().registryAccess().registryOrThrow(Registries.BIOME), inhabitedTime, sectionArrayInitializer, blendingData); // Paper - Anti-Xray - The world isn't ready yet, use server singleton for registry
 -        this.tickersInLevel = Maps.newHashMap();
-+        this.tickersInLevel = Maps.newConcurrentMap(); // ShreddedPaper - use concurrent map
++        this.tickersInLevel = Maps.newConcurrentMap(); // Confetti - use concurrent map
          this.level = (ServerLevel) world; // CraftBukkit - type
          this.gameEventListenerRegistrySections = new Int2ObjectOpenHashMap();
          Heightmap.Types[] aheightmap_type = Heightmap.Types.values();
@@ -242,7 +242,7 @@ index 04525318d338f0b552c35301770c586b2964769e..0ec053d6aa8a32a3a1b934ed489485c9
      @Override
      public int getTickableTileEntityCount() {
 -        return world.blockEntityTickers.size();
-+        return 0; // world.blockEntityTickers.size(); // ShreddedPaper - removed blockEntityTickers
++        return 0; // world.blockEntityTickers.size(); // Confetti - removed blockEntityTickers
      }
  
      @Override

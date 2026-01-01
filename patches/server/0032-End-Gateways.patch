@@ -15,8 +15,8 @@ index fb9611866671880fc7a1a969da928b8f2ad15269..e7ced465076195f1c774a2f5ddd69016
 +import java.util.concurrent.CompletableFuture;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  import net.minecraft.advancements.CriteriaTriggers;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
@@ -25,25 +25,25 @@ index fb9611866671880fc7a1a969da928b8f2ad15269..e7ced465076195f1c774a2f5ddd69016
              // Purpur end
              blockEntity.teleportCooldown = 100;
 -            BlockPos blockposition1;
-+            CompletableFuture<BlockPos> blockpositionfuture = CompletableFuture.completedFuture(blockEntity.exitPortal); // ShreddedPaper
++            CompletableFuture<BlockPos> blockpositionfuture = CompletableFuture.completedFuture(blockEntity.exitPortal); // Confetti
  
              if (blockEntity.exitPortal == null && world.getTypeKey() == LevelStem.END) { // CraftBukkit - work in alternate worlds
 -                blockposition1 = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos);
 -                blockposition1 = blockposition1.above(10);
-+                blockpositionfuture = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos); // ShreddedPaper
-+                blockpositionfuture = blockpositionfuture.thenApply(blockposition1 -> blockposition1.above(10)); // ShreddedPaper
-+                blockpositionfuture.thenAccept(blockposition1 -> { // ShreddedPaper
++                blockpositionfuture = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos); // Confetti
++                blockpositionfuture = blockpositionfuture.thenApply(blockposition1 -> blockposition1.above(10)); // Confetti
++                blockpositionfuture.thenAccept(blockposition1 -> { // Confetti
                  TheEndGatewayBlockEntity.LOGGER.debug("Creating portal at {}", blockposition1);
                  TheEndGatewayBlockEntity.spawnGatewayPortal(worldserver, blockposition1, EndGatewayConfiguration.knownExit(pos, false));
                  blockEntity.exitPortal = blockposition1;
-+                }); // ShreddedPaper
++                }); // Confetti
              }
  
 -            if (blockEntity.exitPortal != null) {
-+            blockpositionfuture.thenRun(() -> { // ShreddedPaper
-+                if (blockEntity.exitPortal == null) return; // ShreddedPaper
-+                ShreddedPaperRegionScheduler.scheduleAcrossLevels(worldserver, RegionPos.forChunk(entity.chunkPosition()), worldserver, RegionPos.forBlockPos(blockEntity.exitPortal), () -> { // ShreddedPaper
-+                BlockPos blockposition1; // ShreddedPaper
++            blockpositionfuture.thenRun(() -> { // Confetti
++                if (blockEntity.exitPortal == null) return; // Confetti
++                ConfettiRegionScheduler.scheduleAcrossLevels(worldserver, RegionPos.forChunk(entity.chunkPosition()), worldserver, RegionPos.forBlockPos(blockEntity.exitPortal), () -> { // Confetti
++                BlockPos blockposition1; // Confetti
                  blockposition1 = blockEntity.exactTeleport ? blockEntity.exitPortal : TheEndGatewayBlockEntity.findExitPosition(world, blockEntity.exitPortal);
                  Entity entity1;
  
@@ -52,8 +52,8 @@ index fb9611866671880fc7a1a969da928b8f2ad15269..e7ced465076195f1c774a2f5ddd69016
                  entity1.teleportToWithTicket(teleEvent.getTo().getX(), teleEvent.getTo().getY(), teleEvent.getTo().getZ());
                  // CraftBukkit end
 -            }
-+                }); // ShreddedPaper
-+            }); // ShreddedPaper
++                }); // Confetti
++            }); // Confetti
  
              TheEndGatewayBlockEntity.triggerCooldown(world, pos, state, blockEntity);
          }
@@ -62,9 +62,9 @@ index fb9611866671880fc7a1a969da928b8f2ad15269..e7ced465076195f1c774a2f5ddd69016
      }
  
 -    private static BlockPos findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) {
-+    private static CompletableFuture<BlockPos> findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) { // ShreddedPaper
++    private static CompletableFuture<BlockPos> findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) { // Confetti
          Vec3 vec3d = TheEndGatewayBlockEntity.findExitPortalXZPosTentative(world, pos);
-+        return world.getWorld().getChunkAtAsyncUrgently((int) vec3d.x >> 4, (int) vec3d.z >> 4).thenApply(bukkitChunk -> { // ShreddedPaper - run on region's thread for write access
++        return world.getWorld().getChunkAtAsyncUrgently((int) vec3d.x >> 4, (int) vec3d.z >> 4).thenApply(bukkitChunk -> { // Confetti - run on region's thread for write access
          LevelChunk chunk = TheEndGatewayBlockEntity.getChunk(world, vec3d);
          BlockPos blockposition1 = TheEndGatewayBlockEntity.findValidSpawnInChunk(chunk);
  
@@ -72,7 +72,7 @@ index fb9611866671880fc7a1a969da928b8f2ad15269..e7ced465076195f1c774a2f5ddd69016
          }
  
          return TheEndGatewayBlockEntity.findTallestBlock(world, blockposition1, 16, true);
-+        }); // ShreddedPaper
++        }); // Confetti
      }
  
      private static Vec3 findExitPortalXZPosTentative(ServerLevel world, BlockPos pos) {

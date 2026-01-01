@@ -13,7 +13,7 @@ index 9f1c8a62bda242781a0966fa2fc01534261423c7..0f50a67a1d3023043725cdc3d8d6e554
  import java.util.Collection;
  import java.util.Iterator;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.commands.CommandBuildContext;
  import net.minecraft.commands.CommandSourceStack;
  import net.minecraft.commands.arguments.EntityArgument;
@@ -21,12 +21,12 @@ index 9f1c8a62bda242781a0966fa2fc01534261423c7..0f50a67a1d3023043725cdc3d8d6e554
  
                      l -= i1;
                      ItemStack itemstack1 = item.createItemStack(i1, false);
-+                    ShreddedPaper.ensureSync(entityplayer, () -> { // ShreddedPaper - run on player's thread
++                    Confetti.ensureSync(entityplayer, () -> { // Confetti - run on player's thread
                      boolean flag = entityplayer.getInventory().add(itemstack1);
                      ItemEntity entityitem;
  
 -                    if (org.purpurmc.purpur.PurpurConfig.disableGiveCommandDrops) continue; // Purpur - add config option for toggling give command dropping
-+                    if (org.purpurmc.purpur.PurpurConfig.disableGiveCommandDrops) return; // Purpur - add config option for toggling give command dropping // ShreddedPaper - run on player's thread
++                    if (org.purpurmc.purpur.PurpurConfig.disableGiveCommandDrops) return; // Purpur - add config option for toggling give command dropping // Confetti - run on player's thread
                      if (flag && itemstack1.isEmpty()) {
                          entityitem = entityplayer.drop(itemstack, false, false, false); // CraftBukkit - SPIGOT-2942: Add boolean to call event
                          if (entityitem != null) {
@@ -34,7 +34,7 @@ index 9f1c8a62bda242781a0966fa2fc01534261423c7..0f50a67a1d3023043725cdc3d8d6e554
                              entityitem.setTarget(entityplayer.getUUID());
                          }
                      }
-+                    }); // ShreddedPaper - run on player's thread
++                    }); // Confetti - run on player's thread
                  }
              }
  

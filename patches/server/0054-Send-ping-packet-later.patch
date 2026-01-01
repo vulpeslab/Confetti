@@ -12,7 +12,7 @@ index 7103b2bd575202c8d943f89eec82e7d8fffdc333..2b81e2673ac438df938979bb7076c687
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
  
              entityplayer.connection.chunkSender.sendNextChunks(entityplayer);
-+            entityplayer.connection.keepConnectionAlive(); // ShreddedPaper - send the ping packet right before flushing
++            entityplayer.connection.keepConnectionAlive(); // Confetti - send the ping packet right before flushing
              entityplayer.connection.resumeFlushing();
          }
  
@@ -25,7 +25,7 @@ index efd4456c59c51862ffaf0c17d5b49514a93a7b57..d9527c7627a1b10ba65b8be283a4ce64
      }
  
 -    protected void keepConnectionAlive() {
-+    public void keepConnectionAlive() { // ShreddedPaper - make public
++    public void keepConnectionAlive() { // Confetti - make public
          //this.server.getProfiler().push("keepAlive"); // Purpur
          // Paper start - give clients a longer time to respond to pings as per pre 1.12.2 timings
          // This should effectively place the keepalive handling back to "as it was" before 1.12.2
@@ -38,7 +38,7 @@ index 96b58f95866c12e03d96f10e4f5b31311e663a23..28b85349908829ddbe90718e4c5729a3
          }
  
 -        this.keepConnectionAlive();
-+        // this.keepConnectionAlive(); // ShreddedPaper - called elsewhere
++        // this.keepConnectionAlive(); // Confetti - called elsewhere
          // CraftBukkit start
          for (int spam; (spam = this.chatSpamTickCount.get()) > 0 && !this.chatSpamTickCount.compareAndSet(spam, spam - 1); ) ;
          if (tabSpamLimiter.get() > 0) tabSpamLimiter.getAndDecrement(); // Paper - configurable tab spam limits

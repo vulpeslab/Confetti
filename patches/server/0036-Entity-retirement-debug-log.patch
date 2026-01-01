@@ -20,7 +20,7 @@ index 62484ebf4550b05182f693a3180bbac5d5fd906d..9fb58f07997e0c4c336b246e518d7e97
      private static final record ScheduledTask(Consumer<? extends Entity> run, Consumer<? extends Entity> retired) {}
  
      private long tickCount = 0L;
-+    private Exception retiredReason; // ShreddedPaper
++    private Exception retiredReason; // Confetti
      private static final long RETIRED_TICK_COUNT = -1L;
      private final Object stateLock = new Object();
      private final Long2ObjectOpenHashMap<List<ScheduledTask>> oneTimeDelayed = new Long2ObjectOpenHashMap<>();
@@ -28,7 +28,7 @@ index 62484ebf4550b05182f693a3180bbac5d5fd906d..9fb58f07997e0c4c336b246e518d7e97
                  throw new IllegalStateException("Already retired");
              }
              this.tickCount = RETIRED_TICK_COUNT;
-+            this.retiredReason = new Exception("Retired"); // ShreddedPaper
++            this.retiredReason = new Exception("Retired"); // Confetti
          }
  
          final Entity thisEntity = this.entity.getHandleRaw();
@@ -36,7 +36,7 @@ index 62484ebf4550b05182f693a3180bbac5d5fd906d..9fb58f07997e0c4c336b246e518d7e97
          final List<ScheduledTask> toRun;
          synchronized (this.stateLock) {
              if (this.tickCount == RETIRED_TICK_COUNT) {
-+                LogUtils.getClassLogger().error("Tried to execute tick on entity, but was retired here: {}", this.entity.getHandle(), retiredReason); // ShreddedPaper
++                LogUtils.getClassLogger().error("Tried to execute tick on entity, but was retired here: {}", this.entity.getHandle(), retiredReason); // Confetti
                  throw new IllegalStateException("Ticking retired scheduler");
              }
              ++this.tickCount;

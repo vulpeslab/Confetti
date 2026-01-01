@@ -24,7 +24,7 @@ index 8ef22f8f0d6da49247a90152e5cfa9ffc7f596a4..161b847fe36613a6bc76ed7399ff118a
      }
  
 -    private final Long2IntOpenHashMap chunksBeingWorkedOn = new Long2IntOpenHashMap();
-+    private final Map<Long, Integer> chunksBeingWorkedOn = new ConcurrentHashMap<>(); // ShreddedPaper - thread-safe chunksBeingWorkedOn
++    private final Map<Long, Integer> chunksBeingWorkedOn = new ConcurrentHashMap<>(); // Confetti - thread-safe chunksBeingWorkedOn
  
      private void queueTaskForSection(final int chunkX, final int chunkY, final int chunkZ,
                                       final Supplier<io.papermc.paper.chunk.system.light.LightQueue.ChunkTasks> runnable) { // Paper - rewrite chunk system
@@ -42,7 +42,7 @@ index 8ef22f8f0d6da49247a90152e5cfa9ffc7f596a4..161b847fe36613a6bc76ed7399ff118a
 -            final int newReferences = this.chunksBeingWorkedOn.get(key);
 -            if (newReferences == 1) {
 -                this.chunksBeingWorkedOn.remove(key);
-+        // ShreddedPaper start - thread-safe chunksBeingWorkedOn
++        // Confetti start - thread-safe chunksBeingWorkedOn
 +        this.chunksBeingWorkedOn.compute(key, (k, references) -> {
 +            if (references == null || references == 0) {
                  final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
@@ -54,10 +54,10 @@ index 8ef22f8f0d6da49247a90152e5cfa9ffc7f596a4..161b847fe36613a6bc76ed7399ff118a
              }
 +            return references + 1;
 +        });
-+        // ShreddedPaper end - thread-safe chunksBeingWorkedOn
++        // Confetti end - thread-safe chunksBeingWorkedOn
 +
 +        updateFuture.onComplete.thenAcceptAsync((final Void ignore) -> {
-+            // ShreddedPaper start - thread-safe chunksBeingWorkedOn
++            // Confetti start - thread-safe chunksBeingWorkedOn
 +            this.chunksBeingWorkedOn.compute(key, (k, newReferences) -> {
 +                if (newReferences == null) {
 +                    throw new NullPointerException("newReferences should not be null here! Should be at least 1 or larger");
@@ -69,7 +69,7 @@ index 8ef22f8f0d6da49247a90152e5cfa9ffc7f596a4..161b847fe36613a6bc76ed7399ff118a
 +                }
 +                return newReferences - 1;
 +            });
-+            // ShreddedPaper end - thread-safe chunksBeingWorkedOn
++            // Confetti end - thread-safe chunksBeingWorkedOn
          }, world.getChunkSource().chunkMap.mainThreadExecutor).whenComplete((final Void ignore, final Throwable thr) -> {
              if (thr != null) {
                  LOGGER.error("Failed to remove ticket level for post chunk task " + new ChunkPos(chunkX, chunkZ), thr);

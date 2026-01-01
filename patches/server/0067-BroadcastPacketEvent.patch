@@ -4,13 +4,13 @@ Date: Sun, 10 Aug 2025 18:50:42 +0900
 Subject: [PATCH] BroadcastPacketEvent
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/event/BroadcastPacketEvent.java b/src/main/java/io/multipaper/shreddedpaper/event/BroadcastPacketEvent.java
+diff --git a/src/main/java/com/vulpeslab/confetti/event/BroadcastPacketEvent.java b/src/main/java/com/vulpeslab/confetti/event/BroadcastPacketEvent.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..33b427802ec5bdcbf6c8fed236fe718d6fee60e2
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/event/BroadcastPacketEvent.java
++++ b/src/main/java/com/vulpeslab/confetti/event/BroadcastPacketEvent.java
 @@ -0,0 +1,67 @@
-+package io.multipaper.shreddedpaper.event;
++package com.vulpeslab.confetti.event;
 +
 +import net.minecraft.network.protocol.Packet;
 +import org.bukkit.World;
@@ -86,7 +86,7 @@ index 456b8450c0c55f1213701ed53c5aa9f8fbc56518..3026b340d162e5ad75488e35e25eb10f
  
              } finally { seenByLock.unlock(); } // ShreededPaper - seenBy thread safety
 +
-+            new io.multipaper.shreddedpaper.event.BroadcastPacketEvent(ChunkMap.this.level.getWorld(), packet, this.entity.getBukkitEntity()).callEvent(); // ShreddedPaper - BroadcastPacketEvent
++            new com.vulpeslab.confetti.event.BroadcastPacketEvent(ChunkMap.this.level.getWorld(), packet, this.entity.getBukkitEntity()).callEvent(); // Confetti - BroadcastPacketEvent
          }
  
          public void broadcastAndSend(Packet<?> packet) {
@@ -99,7 +99,7 @@ index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b
      @Override
      public void destroyBlockProgress(int entityId, BlockPos pos, int progress) {
 -        Iterator iterator = this.server.getPlayerList().getPlayers().iterator();
-+        Iterator iterator = this.players.iterator(); // ShreddedPaper - BroadcastPacketEvent - optimisation: use the level's players instead of all players
++        Iterator iterator = this.players.iterator(); // Confetti - BroadcastPacketEvent - optimisation: use the level's players instead of all players
  
          // CraftBukkit start
          Player entityhuman = null;
@@ -107,8 +107,8 @@ index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b
          }
          // Paper end - Add BlockBreakProgressUpdateEvent
  
-+        ClientboundBlockDestructionPacket packet = new ClientboundBlockDestructionPacket(entityId, pos, progress); // ShreddedPaper - BroadcastPacketEvent - move packet creation out of loop
-+        new io.multipaper.shreddedpaper.event.BroadcastPacketEvent(this.getWorld(), packet, entity == null ? null : entity.getBukkitEntity()).callEvent(); // ShreddedPaper - BroadcastPacketEvent
++        ClientboundBlockDestructionPacket packet = new ClientboundBlockDestructionPacket(entityId, pos, progress); // Confetti - BroadcastPacketEvent - move packet creation out of loop
++        new com.vulpeslab.confetti.event.BroadcastPacketEvent(this.getWorld(), packet, entity == null ? null : entity.getBukkitEntity()).callEvent(); // Confetti - BroadcastPacketEvent
          while (iterator.hasNext()) {
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
  
@@ -117,7 +117,7 @@ index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b
  
                  if (d0 * d0 + d1 * d1 + d2 * d2 < 1024.0D) {
 -                    entityplayer.connection.send(new ClientboundBlockDestructionPacket(entityId, pos, progress));
-+                    entityplayer.connection.send(packet); // ShreddedPaper - BroadcastPacketEvent - move packet creation out of loop
++                    entityplayer.connection.send(packet); // Confetti - BroadcastPacketEvent - move packet creation out of loop
                  }
              }
          }
@@ -137,7 +137,7 @@ index ab96dcb873758f9d92eecb62b473b84dc9e295a2..dc99d088d6d915de789a1215df810a4a
      }
  
      public void broadcast(@Nullable net.minecraft.world.entity.player.Player player, double x, double y, double z, double distance, ResourceKey<Level> worldKey, Packet<?> packet) {
-+        if (player != null) new io.multipaper.shreddedpaper.event.BroadcastPacketEvent(this.getServer().getLevel(worldKey).getWorld(), packet, player.getBukkitEntity()).callEvent(); // ShreddedPaper - BroadcastPacketEvent
++        if (player != null) new com.vulpeslab.confetti.event.BroadcastPacketEvent(this.getServer().getLevel(worldKey).getWorld(), packet, player.getBukkitEntity()).callEvent(); // Confetti - BroadcastPacketEvent
          for (int i = 0; i < this.players.size(); ++i) {
              ServerPlayer entityplayer = (ServerPlayer) this.players.get(i);
  

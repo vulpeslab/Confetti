@@ -29,12 +29,12 @@ index 6671796d292fbc922a94271136f5a7a4bbdedaca..4671f34ba2796c1284af5bd9b2d2edfe
                      vec3d = Vec3.ZERO;
                  }
  
-+                // ShreddedPaper start - remove firework rocket if entity teleported away
++                // Confetti start - remove firework rocket if entity teleported away
 +                if (!TickThread.isTickThreadFor((ServerLevel) this.level(), new Vec3(this.attachedToEntity.getX() + vec3d.x, this.attachedToEntity.getY() + vec3d.y, this.attachedToEntity.getZ() + vec3d.z))) {
 +                    this.discard();
 +                    return;
 +                }
-+                // ShreddedPaper end - remove firework rocket if entity teleported away
++                // Confetti end - remove firework rocket if entity teleported away
                  this.setPos(this.attachedToEntity.getX() + vec3d.x, this.attachedToEntity.getY() + vec3d.y, this.attachedToEntity.getZ() + vec3d.z);
                  this.setDeltaMovement(this.attachedToEntity.getDeltaMovement());
              }

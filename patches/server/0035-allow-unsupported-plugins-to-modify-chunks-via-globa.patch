@@ -5,18 +5,18 @@ Subject: [PATCH]
  allow-unsupported-plugins-to-modify-chunks-via-global-scheduler
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 index 5e5cf3cb72ab51a20fa5c91fb9b7f0f942ae9cc8..b30147827ffa329c09703f48f01733c34f5e63e3 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 @@ -1,5 +1,6 @@
- package io.multipaper.shreddedpaper.threading;
+ package com.vulpeslab.confetti.threading;
  
 +import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
- import io.multipaper.shreddedpaper.region.RegionPos;
+ import com.vulpeslab.confetti.region.RegionPos;
  
-@@ -40,7 +41,7 @@ public class ShreddedPaperRegionLocker {
+@@ -40,7 +41,7 @@ public class ConfettiRegionLocker {
       * Checks if the current thread holds a read lock for the given region
       */
      public boolean hasLock(RegionPos regionPos) {
@@ -25,7 +25,7 @@ index 5e5cf3cb72ab51a20fa5c91fb9b7f0f942ae9cc8..b30147827ffa329c09703f48f01733c3
      }
  
      /**
-@@ -49,7 +50,7 @@ public class ShreddedPaperRegionLocker {
+@@ -49,7 +50,7 @@ public class ConfettiRegionLocker {
       * syncing conflicts with other servers.
       */
      public boolean hasWriteLock(RegionPos regionPos) {
@@ -41,26 +41,26 @@ index 313f30948c9ebd09094c1623bfe2c3594f30077c..0ba8354dce31cb0be5491bbb476c8506
 @@ -1,6 +1,9 @@
  package io.papermc.paper.util;
  
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperChunkTicker;
- import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
-+import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
++import com.vulpeslab.confetti.threading.ConfettiChunkTicker;
+ import com.vulpeslab.confetti.threading.ConfettiTickThread;
++import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
  import net.minecraft.core.BlockPos;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerLevel;
 @@ -69,6 +72,16 @@ public class TickThread extends Thread {
      }
-     // ShreddedPaper end
+     // Confetti end
  
-+    // ShreddedPaper start
++    // Confetti start
 +    public static boolean canBypassTickThreadCheck() {
 +        return
-+                ShreddedPaperConfiguration.get().multithreading.allowUnsupportedPluginsToModifyChunksViaGlobalScheduler &&
++                ConfettiConfiguration.get().multithreading.allowUnsupportedPluginsToModifyChunksViaGlobalScheduler &&
 +                SynchronousPluginExecution.getCurrentPlugin() != null &&
 +                Thread.currentThread() == MinecraftServer.getServer().getRunningThread() &&
 +                MinecraftServer.isBukkitSchedulerHearbeat;
 +    }
-+    // ShreddedPaper end
++    // Confetti end
 +
      /**
       * @deprecated
@@ -81,9 +81,9 @@ index 7041c295770089c3064bc3c0911e02038c5afb96..8179f9a24fb9926f67bc9b181082d2ca
              entityplayer.connection.suspendFlushing();
          });
          //MinecraftTimings.bukkitSchedulerTimer.startTiming(); // Spigot // Paper // Purpur
-+        MinecraftServer.isBukkitSchedulerHearbeat = true; // ShreddedPaper
++        MinecraftServer.isBukkitSchedulerHearbeat = true; // Confetti
          this.server.getScheduler().mainThreadHeartbeat(this.tickCount); // CraftBukkit
-+        MinecraftServer.isBukkitSchedulerHearbeat = false; // ShreddedPaper
++        MinecraftServer.isBukkitSchedulerHearbeat = false; // Confetti
          //MinecraftTimings.bukkitSchedulerTimer.stopTiming(); // Spigot // Paper // Purpur
          // Paper start - Folia scheduler API
-         // ShreddedPaper - moved global scheduler down
+         // Confetti - moved global scheduler down

@@ -43,14 +43,14 @@ index bb09c468ab1261ea4eaf59012d30a2e45199caf7..85f557db3be4b9b688c4e2f35b37bc2d
          return server.isOwnedByCurrentRegion(entity);
      }
      // Paper end - Folia region threading API
-+    // ShreddedPaper start - region threading API
++    // Confetti start - region threading API
 +    /**
 +     * Returns whether the current thread is ticking the global region.
 +     */
 +    public static boolean isGlobalTickThread() {
 +        return server.isGlobalTickThread();
 +    }
-+    // ShreddedPaper end - region threading API
++    // Confetti end - region threading API
  
      @NotNull
      public static Server.Spigot spigot() {
@@ -62,12 +62,12 @@ index 36d8ce7a21513600ab10b7e6f47c9f1d2cc51947..0c7c8b2f454f665e351dcd5d7230009a
       */
      boolean isOwnedByCurrentRegion(@NotNull Entity entity);
      // Paper end - Folia region threading API
-+    // ShreddedPaper start - region threading API
++    // Confetti start - region threading API
 +    /**
 +     * Returns whether the current thread is ticking the global region.
 +     */
 +    public boolean isGlobalTickThread();
-+    // ShreddedPaper end - region threading API
++    // Confetti end - region threading API
  
      // Purpur start
      /**

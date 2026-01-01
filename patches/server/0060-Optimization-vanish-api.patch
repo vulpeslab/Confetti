@@ -12,7 +12,7 @@ index 494920321af0098e390d6b2669403acc97dab984..cf651f132a125cded54bd36014da8b61
  import com.google.common.io.BaseEncoding;
  import com.mojang.authlib.GameProfile;
  import com.mojang.datafixers.util.Pair;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
  import io.netty.buffer.Unpooled;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.shorts.ShortArraySet;
@@ -20,18 +20,18 @@ index 494920321af0098e390d6b2669403acc97dab984..cf651f132a125cded54bd36014da8b61
  
      @Override
      public boolean canSee(Player player) {
-+        if (ShreddedPaperConfiguration.get().optimizations.disableVanishApi) return true; // ShreddedPaper - optimize canSee
++        if (ConfettiConfiguration.get().optimizations.disableVanishApi) return true; // Confetti - optimize canSee
          return this.canSee((org.bukkit.entity.Entity) player);
      }
  
      @Override
      public boolean canSee(org.bukkit.entity.Entity entity) {
-+        if (ShreddedPaperConfiguration.get().optimizations.disableVanishApi) return true; // ShreddedPaper - optimize canSee
++        if (ConfettiConfiguration.get().optimizations.disableVanishApi) return true; // Confetti - optimize canSee
          return this.equals(entity) || entity.isVisibleByDefault() ^ this.invertedVisibilityEntities.containsKey(entity.getUniqueId()); // SPIGOT-7312: Can always see self
      }
  
      public boolean canSeePlayer(UUID uuid) {
-+        if (ShreddedPaperConfiguration.get().optimizations.disableVanishApi) return true; // ShreddedPaper - optimize canSee
++        if (ConfettiConfiguration.get().optimizations.disableVanishApi) return true; // Confetti - optimize canSee
          org.bukkit.entity.Entity entity = this.getServer().getPlayer(uuid);
  
          return (entity != null) ? this.canSee(entity) : false; // If we can't find it, we can't see it

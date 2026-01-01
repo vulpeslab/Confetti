@@ -4,13 +4,13 @@ Date: Wed, 10 Jul 2024 23:18:32 +0900
 Subject: [PATCH] entityMap thread safety
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/util/Int2ObjectMapWrapper.java b/src/main/java/io/multipaper/shreddedpaper/util/Int2ObjectMapWrapper.java
+diff --git a/src/main/java/com/vulpeslab/confetti/util/Int2ObjectMapWrapper.java b/src/main/java/com/vulpeslab/confetti/util/Int2ObjectMapWrapper.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..28bb91a25b7e473f4e2af48561e6b1086986082d
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/util/Int2ObjectMapWrapper.java
++++ b/src/main/java/com/vulpeslab/confetti/util/Int2ObjectMapWrapper.java
 @@ -0,0 +1,261 @@
-+package io.multipaper.shreddedpaper.util;
++package com.vulpeslab.confetti.util;
 +
 +import com.mojang.logging.LogUtils;
 +import it.unimi.dsi.fastutil.ints.AbstractInt2ObjectMap;
@@ -279,7 +279,7 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
  import com.mojang.logging.LogUtils;
  import com.mojang.serialization.DataResult;
  import com.mojang.serialization.JsonOps;
-+import io.multipaper.shreddedpaper.util.Int2ObjectMapWrapper;
++import com.vulpeslab.confetti.util.Int2ObjectMapWrapper;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
  import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
  import it.unimi.dsi.fastutil.longs.Long2ByteMap;
@@ -296,8 +296,8 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
      private final String storageName;
      private final PlayerMap playerMap;
 -    public final Int2ObjectMap<ChunkMap.TrackedEntity> entityMap;
-+    public final Int2ObjectMap<ChunkMap.TrackedEntity> entityMap; // ShreddedPaper - Wrapper of ConcurrentHashMap to maintain plugin support
-+    public final ConcurrentHashMap<Integer, ChunkMap.TrackedEntity> entityConcurrentMap; // ShreddedPaper - Wrapper of ConcurrentHashMap to maintain plugin support
++    public final Int2ObjectMap<ChunkMap.TrackedEntity> entityMap; // Confetti - Wrapper of ConcurrentHashMap to maintain plugin support
++    public final ConcurrentHashMap<Integer, ChunkMap.TrackedEntity> entityConcurrentMap; // Confetti - Wrapper of ConcurrentHashMap to maintain plugin support
      private final Long2ByteMap chunkTypeCache;
      private final Long2LongMap chunkSaveCooldowns;
      private final Queue<Runnable> unloadQueue;
@@ -306,8 +306,8 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
          this.tickingGenerated = new AtomicInteger();
          this.playerMap = new PlayerMap();
 -        this.entityMap = new Int2ObjectOpenHashMap();
-+        this.entityConcurrentMap = new ConcurrentHashMap<>(); // ShreddedPaper - Wrapper of ConcurrentHashMap to maintain plugin support
-+        this.entityMap = new Int2ObjectMapWrapper(this.entityConcurrentMap); // ShreddedPaper - Wrapper of ConcurrentHashMap to maintain plugin support
++        this.entityConcurrentMap = new ConcurrentHashMap<>(); // Confetti - Wrapper of ConcurrentHashMap to maintain plugin support
++        this.entityMap = new Int2ObjectMapWrapper(this.entityConcurrentMap); // Confetti - Wrapper of ConcurrentHashMap to maintain plugin support
          this.chunkTypeCache = new Long2ByteOpenHashMap();
          this.chunkSaveCooldowns = new Long2LongOpenHashMap();
          this.unloadQueue = Queues.newConcurrentLinkedQueue();
@@ -316,10 +316,10 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
          org.spigotmc.AsyncCatcher.catchOp("entity track"); // Spigot
          // Paper start - ignore and warn about illegal addEntity calls instead of crashing server
 -        if (!entity.valid || entity.level() != this.level || this.entityMap.containsKey(entity.getId())) {
-+        if (!entity.valid || entity.level() != this.level || this.entityConcurrentMap.containsKey(entity.getId())) { // ShreddedPaper - use entityConcurrentMap
++        if (!entity.valid || entity.level() != this.level || this.entityConcurrentMap.containsKey(entity.getId())) { // Confetti - use entityConcurrentMap
              LOGGER.error("Illegal ChunkMap::addEntity for world " + this.level.getWorld().getName()
 -                + ": " + entity  + (this.entityMap.containsKey(entity.getId()) ? " ALREADY CONTAINED (This would have crashed your server)" : ""), new Throwable());
-+                + ": " + entity  + (this.entityConcurrentMap.containsKey(entity.getId()) ? " ALREADY CONTAINED (This would have crashed your server)" : ""), new Throwable()); // ShreddedPaper - use entityConcurrentMap
++                + ": " + entity  + (this.entityConcurrentMap.containsKey(entity.getId()) ? " ALREADY CONTAINED (This would have crashed your server)" : ""), new Throwable()); // Confetti - use entityConcurrentMap
              return;
          }
          // Paper end - ignore and warn about illegal addEntity calls instead of crashing server
@@ -328,22 +328,22 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
                  int j = entitytypes.updateInterval();
  
 -                if (this.entityMap.containsKey(entity.getId())) {
-+                if (this.entityConcurrentMap.containsKey(entity.getId())) { // ShreddedPaper - use entityConcurrentMap
++                if (this.entityConcurrentMap.containsKey(entity.getId())) { // Confetti - use entityConcurrentMap
                      throw (IllegalStateException) Util.pauseInIde(new IllegalStateException("Entity is already tracked!"));
                  } else {
                      ChunkMap.TrackedEntity playerchunkmap_entitytracker = new ChunkMap.TrackedEntity(entity, i, j, entitytypes.trackDeltas());
  
                      entity.tracker = playerchunkmap_entitytracker; // Paper - Fast access to tracker
 -                    this.entityMap.put(entity.getId(), playerchunkmap_entitytracker);
-+                    this.entityConcurrentMap.put(entity.getId(), playerchunkmap_entitytracker); // ShreddedPaper - use entityConcurrentMap
-                     this.level.getChunkSource().tickingRegions.addTrackedEntity(entity); // ShreddedPaper
++                    this.entityConcurrentMap.put(entity.getId(), playerchunkmap_entitytracker); // Confetti - use entityConcurrentMap
+                     this.level.getChunkSource().tickingRegions.addTrackedEntity(entity); // Confetti
                      playerchunkmap_entitytracker.updatePlayers(entity.getPlayersInTrackRange()); // Paper - don't search all players
                      if (entity instanceof ServerPlayer) {
                          ServerPlayer entityplayer = (ServerPlayer) entity;
  
                          this.updatePlayerStatus(entityplayer, true);
 -                        ObjectIterator objectiterator = this.entityMap.values().iterator();
-+                        Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // ShreddedPaper - use entityConcurrentMap
++                        Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // Confetti - use entityConcurrentMap
  
                          while (objectiterator.hasNext()) {
                              ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) objectiterator.next();
@@ -352,7 +352,7 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
          if (entity instanceof ServerPlayer entityplayer) {
              this.updatePlayerStatus(entityplayer, false);
 -            ObjectIterator objectiterator = this.entityMap.values().iterator();
-+            Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // ShreddedPaper - use entityConcurrentMap
++            Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // Confetti - use entityConcurrentMap
  
              while (objectiterator.hasNext()) {
                  ChunkMap.TrackedEntity playerchunkmap_entitytracker = (ChunkMap.TrackedEntity) objectiterator.next();
@@ -361,16 +361,16 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
          }
  
 -        ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) this.entityMap.remove(entity.getId());
-+        ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) this.entityConcurrentMap.remove(entity.getId()); // ShreddedPaper - use entityConcurrentMap
++        ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) this.entityConcurrentMap.remove(entity.getId()); // Confetti - use entityConcurrentMap
  
          if (playerchunkmap_entitytracker1 != null) {
-             this.level.getChunkSource().tickingRegions.removeTrackedEntity(entity); // ShreddedPaper - only remove if it actually existed
+             this.level.getChunkSource().tickingRegions.removeTrackedEntity(entity); // Confetti - only remove if it actually existed
 @@ -1160,7 +1164,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-         if (true) return; // ShreddedPaper - handle ourselves
+         if (true) return; // Confetti - handle ourselves
          //this.level.timings.tracker1.startTiming(); // Purpur
          try {
 -            for (TrackedEntity tracker : this.entityMap.values()) {
-+            for (TrackedEntity tracker : this.entityConcurrentMap.values()) { // ShreddedPaper - use entityConcurrentMap
++            for (TrackedEntity tracker : this.entityConcurrentMap.values()) { // Confetti - use entityConcurrentMap
                  // update tracker entry
                  tracker.updatePlayers(tracker.entity.getPlayersInTrackRange());
              }
@@ -379,7 +379,7 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
          //this.level.timings.tracker2.startTiming(); // Purpur
          try {
 -            for (TrackedEntity tracker : this.entityMap.values()) {
-+            for (TrackedEntity tracker : this.entityConcurrentMap.values()) { // ShreddedPaper - use entityConcurrentMap
++            for (TrackedEntity tracker : this.entityConcurrentMap.values()) { // Confetti - use entityConcurrentMap
                  tracker.serverEntity.sendChanges();
              }
          } finally {
@@ -388,7 +388,7 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
          List<ServerPlayer> list = Lists.newArrayList();
          List<ServerPlayer> list1 = this.level.players();
 -        ObjectIterator objectiterator = this.entityMap.values().iterator();
-+        Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // ShreddedPaper - use entityConcurrentMap
++        Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // Confetti - use entityConcurrentMap
          //this.level.timings.tracker1.startTiming(); // Paper // Purpur
  
          ChunkMap.TrackedEntity playerchunkmap_entitytracker;
@@ -397,7 +397,7 @@ index f6a01cbe8871bc6d0f5992730c70d34c184d718e..746c3e614a9596a93574af870365e535
  
          if (!list.isEmpty()) {
 -            objectiterator = this.entityMap.values().iterator();
-+            objectiterator = this.entityConcurrentMap.values().iterator(); // ShreddedPaper - use entityConcurrentMap
++            objectiterator = this.entityConcurrentMap.values().iterator(); // Confetti - use entityConcurrentMap
  
              //this.level.timings.tracker2.startTiming(); // Paper // Purpur
              while (objectiterator.hasNext()) {

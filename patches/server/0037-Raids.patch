@@ -13,7 +13,7 @@ index fdff9788eaf663be79214b2ca491f0f0444f6136..71a442d218b7e7e7ebb57d9a1559289b
  import java.util.stream.Stream;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.ChatFormatting;
  import net.minecraft.advancements.CriteriaTriggers;
  import net.minecraft.core.BlockPos;
@@ -21,7 +21,7 @@ index fdff9788eaf663be79214b2ca491f0f0444f6136..71a442d218b7e7e7ebb57d9a1559289b
                                  LivingEntity entityliving = (LivingEntity) entity;
  
                                  if (!entity.isSpectator()) {
-+                                    ShreddedPaper.ensureSync(entity, () -> { // ShreddedPaper - run on right thread
++                                    Confetti.ensureSync(entity, () -> { // Confetti - run on right thread
                                      entityliving.addEffect(new MobEffectInstance(MobEffects.HERO_OF_THE_VILLAGE, 48000, this.raidOmenLevel - 1, false, false, true));
                                      if (entityliving instanceof ServerPlayer) {
                                          ServerPlayer entityplayer = (ServerPlayer) entityliving;
@@ -29,10 +29,10 @@ index fdff9788eaf663be79214b2ca491f0f0444f6136..71a442d218b7e7e7ebb57d9a1559289b
                                          entityplayer.awardStat(Stats.RAID_WIN);
                                          CriteriaTriggers.RAID_WIN.trigger(entityplayer);
 -                                        winners.add(entityplayer.getBukkitEntity()); // CraftBukkit
-+                                        // winners.add(entityplayer.getBukkitEntity()); // CraftBukkit // ShreddedPaper - don't run on right thread
++                                        // winners.add(entityplayer.getBukkitEntity()); // CraftBukkit // Confetti - don't run on right thread
                                      }
-+                                    }); // ShreddedPaper - run on right thread
-+                                    if (entityliving instanceof ServerPlayer entityplayer) winners.add(entityplayer.getBukkitEntity()); // ShreddedPaper - this doesn't need to be run on right thread
++                                    }); // Confetti - run on right thread
++                                    if (entityliving instanceof ServerPlayer entityplayer) winners.add(entityplayer.getBukkitEntity()); // Confetti - this doesn't need to be run on right thread
                                  }
                              }
                          }
@@ -45,7 +45,7 @@ index eedce2a3d67d875d5174ee125e2679480d4d412c..998d7184cb5718e6f643e6dccc416cb8
  import java.util.Map;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Holder;
  import net.minecraft.core.HolderLookup;
@@ -54,7 +54,7 @@ index eedce2a3d67d875d5174ee125e2679480d4d412c..998d7184cb5718e6f643e6dccc416cb8
      private static final String RAID_FILE_ID = "raids";
      public final Map<java.util.UUID, Integer> playerCooldowns = Maps.newHashMap();
 -    public final Map<Integer, Raid> raidMap = Maps.newHashMap();
-+    public final Map<Integer, Raid> raidMap = Maps.newConcurrentMap(); // ShreddedPaper - concurrent map
++    public final Map<Integer, Raid> raidMap = Maps.newConcurrentMap(); // Confetti - concurrent map
      private final ServerLevel level;
      private int nextAvailableID;
      private int tick;
@@ -62,19 +62,19 @@ index eedce2a3d67d875d5174ee125e2679480d4d412c..998d7184cb5718e6f643e6dccc416cb8
          while (iterator.hasNext()) {
              Raid raid = (Raid) iterator.next();
  
-+            ShreddedPaper.runSync((ServerLevel) raid.getLevel(), raid.getCenter(), () -> { // ShreddedPaper - run on right thread
++            Confetti.runSync((ServerLevel) raid.getLevel(), raid.getCenter(), () -> { // Confetti - run on right thread
              if (this.level.getGameRules().getBoolean(GameRules.RULE_DISABLE_RAIDS)) {
                  raid.stop();
              }
  
              if (raid.isStopped()) {
 -                iterator.remove();
-+                this.raidMap.remove(raid.getId(), raid); // iterator.remove(); // ShreddedPaper - run on right thread
++                this.raidMap.remove(raid.getId(), raid); // iterator.remove(); // Confetti - run on right thread
                  this.setDirty();
              } else {
                  raid.tick();
              }
-+            }); // ShreddedPaper - run on right thread
++            }); // Confetti - run on right thread
          }
  
          if (this.tick % 200 == 0) {

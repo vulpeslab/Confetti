@@ -4,13 +4,13 @@ Date: Sat, 4 May 2024 14:40:58 +0900
 Subject: [PATCH] Add multithreading region scheduler
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/RegionPos.java b/src/main/java/io/multipaper/shreddedpaper/region/RegionPos.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/RegionPos.java b/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..c8caf9240e1aa5e434a47cbdf4b7bf68e4025586
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/RegionPos.java
++++ b/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
 @@ -0,0 +1,138 @@
-+package io.multipaper.shreddedpaper.region;
++package com.vulpeslab.confetti.region;
 +
 +import com.mojang.logging.LogUtils;
 +import net.minecraft.core.BlockPos;
@@ -18,7 +18,7 @@ index 0000000000000000000000000000000000000000..c8caf9240e1aa5e434a47cbdf4b7bf68
 +import net.minecraft.world.level.ChunkPos;
 +import org.bukkit.Location;
 +import org.slf4j.Logger;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
 +
 +// Copy of ChunkPos basically, but separate to avoid accidental usage as a ChunkPos
 +public class RegionPos {
@@ -33,7 +33,7 @@ index 0000000000000000000000000000000000000000..c8caf9240e1aa5e434a47cbdf4b7bf68
 +        // desiredRegionSize = 7 -> shift = 3, size = 8, mask = 7
 +        // desiredRegionSize = 8 -> shift = 3, size = 8, mask = 7
 +        // desiredRegionSize = 9 -> shift = 4, size = 16, mask = 15
-+        int desiredRegionSize = ShreddedPaperConfiguration.get().multithreading.regionSize - 1;
++        int desiredRegionSize = ConfettiConfiguration.get().multithreading.regionSize - 1;
 +        int shift = 0;
 +        while (desiredRegionSize > 0) {
 +            shift++;
@@ -148,16 +148,16 @@ index 0000000000000000000000000000000000000000..c8caf9240e1aa5e434a47cbdf4b7bf68
 +        return "RegionPos[" + this.x + ", " + this.z + "]";
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e69f12a01e
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 @@ -0,0 +1,320 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
 +
 +import javax.annotation.Nullable;
 +import java.util.ArrayList;
@@ -181,7 +181,7 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 + *  - Only one server can hold a write lock at a time.
 + *  - Important for tasks that modify the region, such as modifying blocks or entities.
 + */
-+public class ShreddedPaperRegionLocker {
++public class ConfettiRegionLocker {
 +
 +    private static final int REGION_LOCK_RADIUS = 1;
 +
@@ -371,11 +371,11 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 +                throw new IllegalStateException("Cannot lock a region from a different thread [expected=%s,got=%s]".formatted(thread, Thread.currentThread()));
 +            }
 +
-+            LockedRegion lockedRegion = ShreddedPaperRegionLocker.this.lockedRegions.compute(regionPos, (k, prevValue) -> {
++            LockedRegion lockedRegion = ConfettiRegionLocker.this.lockedRegions.compute(regionPos, (k, prevValue) -> {
 +                if (prevValue == null) {
 +                    // This region is unlocked, let's lock it
-+                    ShreddedPaperRegionLocker.this.localLocks.get().add(regionPos);
-+                    ShreddedPaperRegionLocker.this.readOnlyLocks.get().add(regionPos);
++                    ConfettiRegionLocker.this.localLocks.get().add(regionPos);
++                    ConfettiRegionLocker.this.readOnlyLocks.get().add(regionPos);
 +                    LockedRegion newLockedRegion = new LockedRegion(regionPos, this.thread);
 +                    this.readLocks.add(newLockedRegion);
 +                    return newLockedRegion;
@@ -402,9 +402,9 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 +            }
 +
 +            for (LockedRegion lockedRegion : this.readLocks) {
-+                ShreddedPaperRegionLocker.this.lockedRegions.remove(lockedRegion.regionPos(), lockedRegion);
-+                ShreddedPaperRegionLocker.this.localLocks.get().remove(lockedRegion.regionPos());
-+                ShreddedPaperRegionLocker.this.readOnlyLocks.get().remove(lockedRegion.regionPos());
++                ConfettiRegionLocker.this.lockedRegions.remove(lockedRegion.regionPos(), lockedRegion);
++                ConfettiRegionLocker.this.localLocks.get().remove(lockedRegion.regionPos());
++                ConfettiRegionLocker.this.readOnlyLocks.get().remove(lockedRegion.regionPos());
 +            }
 +
 +            for (LockedRegion lockedRegion : this.readLocks) {
@@ -423,8 +423,8 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 +
 +            Collection<RegionPos> lockedRegions = superLock.lockedRegions();
 +            this.writeLocks = new ArrayList<>(lockedRegions);
-+            ShreddedPaperRegionLocker.this.writeLocks.get().addAll(lockedRegions);
-+            ShreddedPaperRegionLocker.this.readOnlyLocks.get().removeAll(lockedRegions);
++            ConfettiRegionLocker.this.writeLocks.get().addAll(lockedRegions);
++            ConfettiRegionLocker.this.readOnlyLocks.get().removeAll(lockedRegions);
 +        }
 +
 +        @Override
@@ -439,8 +439,8 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 +
 +        @Override
 +        public void unlock() {
-+            ShreddedPaperRegionLocker.this.writeLocks.get().removeAll(this.writeLocks);
-+            ShreddedPaperRegionLocker.this.readOnlyLocks.get().addAll(this.writeLocks);
++            ConfettiRegionLocker.this.writeLocks.get().removeAll(this.writeLocks);
++            ConfettiRegionLocker.this.readOnlyLocks.get().addAll(this.writeLocks);
 +            this.superLock.unlock();
 +        }
 +    }
@@ -474,23 +474,23 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 +    }
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionScheduler.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionScheduler.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac11b9dbce
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionScheduler.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
 @@ -0,0 +1,185 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import net.minecraft.server.level.ServerLevel;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
 +
 +import java.util.concurrent.CompletableFuture;
 +import java.util.function.Supplier;
 +
-+public class ShreddedPaperRegionScheduler {
++public class ConfettiRegionScheduler {
 +
-+    private final ShreddedPaperRegionLocker locker = new ShreddedPaperRegionLocker();
++    private final ConfettiRegionLocker locker = new ConfettiRegionLocker();
 +
 +    public static CompletableFuture<Void> schedule(ServerLevel level, RegionPos regionPos, Runnable runnable) {
 +        return level.chunkScheduler.schedule(regionPos, runnable);
@@ -502,7 +502,7 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +    public CompletableFuture<Void> schedule(RegionPos regionPos, Runnable runnable) {
 +        CompletableFuture<Void> future = new CompletableFuture<>();
 +
-+        ShreddedPaperTickThread.getExecutor().execute(() -> {
++        ConfettiTickThread.getExecutor().execute(() -> {
 +            run(regionPos, runnable, future);
 +        });
 +
@@ -515,7 +515,7 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +    public CompletableFuture<Void> scheduleOnMany(Runnable runnable, RegionPos... posArray) {
 +        CompletableFuture<Void> future = new CompletableFuture<>();
 +
-+        ShreddedPaperTickThread.getExecutor().execute(() -> {
++        ConfettiTickThread.getExecutor().execute(() -> {
 +            runOnMany(sortPredictably(posArray), runnable, future);
 +        });
 +
@@ -548,7 +548,7 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +
 +        CompletableFuture<Void> future = new CompletableFuture<>();
 +
-+        ShreddedPaperTickThread.getExecutor().execute(() -> {
++        ConfettiTickThread.getExecutor().execute(() -> {
 +            runAcrossLevels(finalLevel1, finalRegionPos1, finalLevel2, finalRegionPos2, runnable, future);
 +        });
 +
@@ -585,12 +585,12 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +    }
 +
 +    private void run(RegionPos regionPos, Runnable runnable, CompletableFuture<Void> future) {
-+        ShreddedPaperRegionLocker.RegionLock lock = null;
++        ConfettiRegionLocker.RegionLock lock = null;
 +        try {
 +            lock = locker.tryTakeLockNow(regionPos);
 +            if (lock == null) {
 +                // Wait for unlock, then retry
-+                locker.onUnlock(regionPos, () -> CompletableFuture.runAsync(() -> run(regionPos, runnable, future), ShreddedPaperTickThread.getExecutor()));
++                locker.onUnlock(regionPos, () -> CompletableFuture.runAsync(() -> run(regionPos, runnable, future), ConfettiTickThread.getExecutor()));
 +                return;
 +            }
 +
@@ -607,13 +607,13 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +    }
 +
 +    private void runOnMany(RegionPos[] regionPosArray, Runnable runnable, CompletableFuture<Void> future) {
-+        ShreddedPaperRegionLocker.RegionLock[] locks = new ShreddedPaperRegionLocker.RegionLock[regionPosArray.length];
++        ConfettiRegionLocker.RegionLock[] locks = new ConfettiRegionLocker.RegionLock[regionPosArray.length];
 +        try {
 +            try {
 +                for (int i = 0; i < regionPosArray.length; i++) {
 +                    locks[i] = locker.tryTakeLockNow(regionPosArray[i]);
 +                    if (locks[i] == null) {
-+                        locker.onUnlock(regionPosArray[i], () -> CompletableFuture.runAsync(() -> runOnMany(regionPosArray, runnable, future), ShreddedPaperTickThread.getExecutor()));
++                        locker.onUnlock(regionPosArray[i], () -> CompletableFuture.runAsync(() -> runOnMany(regionPosArray, runnable, future), ConfettiTickThread.getExecutor()));
 +                        return;
 +                    }
 +                }
@@ -633,15 +633,15 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +    }
 +
 +    private static void runAcrossLevels(ServerLevel level1, RegionPos regionPos1, ServerLevel level2, RegionPos regionPos2, Runnable runnable, CompletableFuture<Void> future) {
-+        ShreddedPaperRegionLocker.RegionLock lock1 = null;
-+        ShreddedPaperRegionLocker.RegionLock lock2 = null;
++        ConfettiRegionLocker.RegionLock lock1 = null;
++        ConfettiRegionLocker.RegionLock lock2 = null;
 +        try {
 +            try {
 +                lock1 = level1.chunkScheduler.locker.tryTakeLockNow(regionPos1);
 +                lock2 = lock1 == null ? null : level2.chunkScheduler.locker.tryTakeLockNow(regionPos2);
 +
 +                if (lock2 == null) {
-+                    Supplier<CompletableFuture<Void>> unlockCallback = () -> CompletableFuture.runAsync(() -> runAcrossLevels(level1, regionPos1, level2, regionPos2, runnable, future), ShreddedPaperTickThread.getExecutor());
++                    Supplier<CompletableFuture<Void>> unlockCallback = () -> CompletableFuture.runAsync(() -> runAcrossLevels(level1, regionPos1, level2, regionPos2, runnable, future), ConfettiTickThread.getExecutor());
 +                    if (lock1 == null) level1.chunkScheduler.locker.onUnlock(regionPos1, unlockCallback);
 +                    else level2.chunkScheduler.locker.onUnlock(regionPos2, unlockCallback);
 +                    return;
@@ -660,30 +660,30 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +        }
 +    }
 +
-+    public ShreddedPaperRegionLocker getRegionLocker() {
++    public ConfettiRegionLocker getRegionLocker() {
 +        return locker;
 +    }
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..4083ed79587332391cedf8108f8adeeeffe4a8ad
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
 @@ -0,0 +1,62 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import com.mojang.logging.LogUtils;
 +import io.papermc.paper.util.TickThread;
 +import org.slf4j.Logger;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
 +
 +import java.util.concurrent.ExecutorService;
 +import java.util.concurrent.Executors;
 +import java.util.concurrent.TimeUnit;
 +import java.util.concurrent.atomic.AtomicInteger;
 +
-+public class ShreddedPaperTickThread extends TickThread {
++public class ConfettiTickThread extends TickThread {
 +
 +    private static final Logger LOGGER = LogUtils.getClassLogger();
 +
@@ -694,7 +694,7 @@ index 0000000000000000000000000000000000000000..4083ed79587332391cedf8108f8adeee
 +    private static final ExecutorService executor;
 +
 +    static {
-+        int threadCount = ShreddedPaperConfiguration.get().multithreading.threadCount;
++        int threadCount = ConfettiConfiguration.get().multithreading.threadCount;
 +
 +        if (threadCount <= 0) {
 +            threadCount = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
@@ -702,18 +702,18 @@ index 0000000000000000000000000000000000000000..4083ed79587332391cedf8108f8adeee
 +
 +        THREAD_COUNT = threadCount;
 +
-+        executor = Executors.newFixedThreadPool(THREAD_COUNT, r -> new ShreddedPaperTickThread(r, "ShreddedPaperTickThread-%d"));
++        executor = Executors.newFixedThreadPool(THREAD_COUNT, r -> new ConfettiTickThread(r, "ConfettiTickThread-%d"));
 +
 +        LOGGER.info("Using {} threads", THREAD_COUNT);
 +    }
 +
-+    public ShreddedPaperTickThread(Runnable run, String name) {
++    public ConfettiTickThread(Runnable run, String name) {
 +        super(run, String.format(name, ID_GENERATOR.incrementAndGet()));
 +    }
 +
-+    public static boolean isShreddedPaperTickThread() {
-+        // Use this method to check if it's a shreddedpaper tick thread, to ensure future potential support for VirtualThreads
-+        return Thread.currentThread() instanceof ShreddedPaperTickThread;
++    public static boolean isConfettiTickThread() {
++        // Use this method to check if it's a confetti tick thread, to ensure future potential support for VirtualThreads
++        return Thread.currentThread() instanceof ConfettiTickThread;
 +    }
 +
 +    public static ExecutorService getExecutor() {
@@ -733,13 +733,13 @@ index 0000000000000000000000000000000000000000..4083ed79587332391cedf8108f8adeee
 +        }
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/util/ObjectHolder.java b/src/main/java/io/multipaper/shreddedpaper/util/ObjectHolder.java
+diff --git a/src/main/java/com/vulpeslab/confetti/util/ObjectHolder.java b/src/main/java/com/vulpeslab/confetti/util/ObjectHolder.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..f98327c487394dd1e1a97987518102786114fcad
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/util/ObjectHolder.java
++++ b/src/main/java/com/vulpeslab/confetti/util/ObjectHolder.java
 @@ -0,0 +1,22 @@
-+package io.multipaper.shreddedpaper.util;
++package com.vulpeslab.confetti.util;
 +
 +public class ObjectHolder <T> {
 +
@@ -769,7 +769,7 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..2c82a48867ab347f21822576baa03682
  import com.destroystokyo.paper.event.server.ServerExceptionEvent;
  import com.destroystokyo.paper.exception.ServerEventException;
  import com.google.common.collect.Sets;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
 +import io.papermc.paper.util.TickThread;
  import org.bukkit.Server;
  import org.bukkit.Warning;
@@ -779,7 +779,7 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..2c82a48867ab347f21822576baa03682
      // SimplePluginManager
      public void callEvent(@NotNull Event event) {
 -        if (event.isAsynchronous() && this.server.isPrimaryThread()) {
-+        if (event.isAsynchronous() && (Thread.currentThread() instanceof TickThread || ShreddedPaperTickThread.isShreddedPaperTickThread())) {
++        if (event.isAsynchronous() && (Thread.currentThread() instanceof TickThread || ConfettiTickThread.isConfettiTickThread())) {
              throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
          } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
              throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
@@ -790,7 +790,7 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
 @@ -1,5 +1,6 @@
  package io.papermc.paper.util;
  
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
  import net.minecraft.core.BlockPos;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerLevel;
@@ -798,7 +798,7 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
  import net.minecraft.world.phys.AABB;
  import net.minecraft.world.phys.Vec3;
  import org.bukkit.Bukkit;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
 +
 +import java.util.ArrayList;
 +import java.util.List;
@@ -810,7 +810,7 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
          ensureTickThread(reason);
      }
  
-+    // ShreddedPaper start
++    // Confetti start
 +    public static void failedTickThreadCheck(final String reason, final String extraData) {
 +        if (!isTickThread()) {
 +            MinecraftServer.LOGGER.error(Thread.currentThread().getName() + " tried to run a task async: " + reason);
@@ -836,7 +836,7 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
 +
 +        return strings;
 +    }
-+    // ShreddedPaper end
++    // Confetti end
 +
      /**
       * @deprecated
@@ -903,47 +903,47 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
  
      public static boolean isTickThread() {
 -        return Thread.currentThread() instanceof TickThread;
-+        return MinecraftServer.getServer().forceTicks || isShutdownThread() || Thread.currentThread() instanceof TickThread || ShreddedPaperTickThread.isShreddedPaperTickThread(); // ShreddedPaper
++        return MinecraftServer.getServer().forceTicks || isShutdownThread() || Thread.currentThread() instanceof TickThread || ConfettiTickThread.isConfettiTickThread(); // Confetti
      }
  
      public static boolean isShutdownThread() {
 -        return false;
-+        return Thread.currentThread() == MinecraftServer.getServer().shutdownThread; // ShreddedPaper
++        return Thread.currentThread() == MinecraftServer.getServer().shutdownThread; // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final BlockPos pos) {
 -        return isTickThread();
-+        return isTickThreadFor(world, new ChunkPos(pos)); // ShreddedPaper
++        return isTickThreadFor(world, new ChunkPos(pos)); // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final ChunkPos pos) {
 -        return isTickThread();
-+        return world.getServer().forceTicks || isShutdownThread() || world.chunkScheduler.getRegionLocker().hasLock(RegionPos.forChunk(pos)); // ShreddedPaper
++        return world.getServer().forceTicks || isShutdownThread() || world.chunkScheduler.getRegionLocker().hasLock(RegionPos.forChunk(pos)); // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final Vec3 pos) {
 -        return isTickThread();
-+        return isTickThreadFor(world, pos.x, pos.z); // ShreddedPaper
++        return isTickThreadFor(world, pos.x, pos.z); // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ) {
 -        return isTickThread();
-+        return isTickThreadFor(world, new ChunkPos(chunkX, chunkZ)); // ShreddedPaper
++        return isTickThreadFor(world, new ChunkPos(chunkX, chunkZ)); // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final AABB aabb) {
 -        return isTickThread();
-+        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(aabb.minX), CoordinateUtils.getChunkCoordinate(aabb.minZ), CoordinateUtils.getChunkCoordinate(aabb.maxX), CoordinateUtils.getChunkCoordinate(aabb.maxZ)); // ShreddedPaper
++        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(aabb.minX), CoordinateUtils.getChunkCoordinate(aabb.minZ), CoordinateUtils.getChunkCoordinate(aabb.maxX), CoordinateUtils.getChunkCoordinate(aabb.maxZ)); // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final double blockX, final double blockZ) {
 -        return isTickThread();
-+        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(blockX), CoordinateUtils.getChunkCoordinate(blockZ)); // ShreddedPaper
++        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(blockX), CoordinateUtils.getChunkCoordinate(blockZ)); // Confetti
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final Vec3 position, final Vec3 deltaMovement, final int buffer) {
 -        return isTickThread();
-+        // ShreddedPaper start
++        // Confetti start
 +        int fromChunkX = CoordinateUtils.getChunkCoordinate(position.x);
 +        int fromChunkZ = CoordinateUtils.getChunkCoordinate(position.z);
 +        int toChunkX = CoordinateUtils.getChunkCoordinate(position.x + deltaMovement.x);
@@ -955,12 +955,12 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
 +        int maxChunkZ = Math.max(fromChunkZ, toChunkZ) + buffer;
 +
 +        return isTickThreadFor(world, minChunkX, minChunkZ, maxChunkX, maxChunkZ);
-+        // ShreddedPaper end
++        // Confetti end
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final int fromChunkX, final int fromChunkZ, final int toChunkX, final int toChunkZ) {
 -        return isTickThread();
-+        // ShreddedPaper start
++        // Confetti start
 +        if (world.getServer().forceTicks || isShutdownThread()) return true;
 +
 +        int fromRegionX = fromChunkX >> RegionPos.REGION_SHIFT;
@@ -982,17 +982,17 @@ index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c359
 +        }
 +
 +        return true;
-+        // ShreddedPaper end
++        // Confetti end
      }
  
      public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ, final int radius) {
 -        return isTickThread();
-+        return isTickThreadFor(world, chunkX - radius, chunkZ - radius, chunkX + radius, chunkZ + radius); // ShreddedPaper
++        return isTickThreadFor(world, chunkX - radius, chunkZ - radius, chunkX + radius, chunkZ + radius); // Confetti
      }
  
      public static boolean isTickThreadFor(final Entity entity) {
 -        return isTickThread();
-+        return isTickThreadFor((ServerLevel) entity.level(), entity.chunkPosition()); // ShreddedPaper
++        return isTickThreadFor((ServerLevel) entity.level(), entity.chunkPosition()); // Confetti
      }
  }
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
@@ -1003,7 +1003,7 @@ index 76edb0f99033d4819b82118a8ea21063674dcdd8..c617f12b7e44859a4edafc0deff844cd
  // CraftBukkit end
  
  import co.aikar.timings.MinecraftTimings; // Paper
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
  
  public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements ServerInfo, CommandSource, AutoCloseable {
  
@@ -1011,7 +1011,7 @@ index 76edb0f99033d4819b82118a8ea21063674dcdd8..c617f12b7e44859a4edafc0deff844cd
          MinecraftServer.LOGGER.info("Stopping server");
          Commands.COMMAND_SENDING_POOL.shutdownNow(); // Paper - Perf: Async command map building; Shutdown and don't bother finishing
          MinecraftTimings.stopServer(); // Paper
-+        ShreddedPaperTickThread.stopServer(); // ShreddedPaper
++        ConfettiTickThread.stopServer(); // Confetti
          // Purpur start
          if (upnp) {
              if (dev.omega24.upnp4j.UPnP4J.close(this.getPort(), dev.omega24.upnp4j.util.Protocol.TCP)) {
@@ -1057,7 +1057,7 @@ index 4c5017026e8a07508a43b1baa9617e8c8b6e659f..e9eb7f3a28474bc6d3c9f787e8d09b4a
  import org.bukkit.event.server.MapInitializeEvent;
  import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  // CraftBukkit end
  
  public class ServerLevel extends Level implements WorldGenLevel {
@@ -1065,7 +1065,7 @@ index 4c5017026e8a07508a43b1baa9617e8c8b6e659f..e9eb7f3a28474bc6d3c9f787e8d09b4a
      private double preciseTime; // Purpur
      private boolean forceTime; // Purpur
      private final RandomSequences randomSequences;
-+    public final ShreddedPaperRegionScheduler chunkScheduler = new ShreddedPaperRegionScheduler(); // ShreddedPaper
++    public final ConfettiRegionScheduler chunkScheduler = new ConfettiRegionScheduler(); // Confetti
      public long lastMidTickExecuteFailure; // Paper - execute chunk tasks mid tick
  
      // CraftBukkit start
@@ -1077,7 +1077,7 @@ index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..cf28077748878476d7059828a04ea789
  import javax.annotation.Nullable;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
  
  public class ChunkPos {
      private static final int SAFETY_MARGIN = 1056;
@@ -1085,7 +1085,7 @@ index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..cf28077748878476d7059828a04ea789
      private static final int HASH_A = 1664525;
      private static final int HASH_C = 1013904223;
      private static final int HASH_Z_XOR = -559038737;
-+    @Nullable private RegionPos regionPos; // ShreddedPaper
++    @Nullable private RegionPos regionPos; // Confetti
  
      public ChunkPos(int x, int z) {
          this.x = x;
@@ -1093,7 +1093,7 @@ index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..cf28077748878476d7059828a04ea789
          this.longKey = asLong(this.x, this.z); // Paper
      }
  
-+    // ShreddedPaper start
++    // Confetti start
 +    public RegionPos getRegionPos() {
 +        if (this.regionPos == null) {
 +            // Cache the RegionPos to minimize object creation
@@ -1101,7 +1101,7 @@ index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..cf28077748878476d7059828a04ea789
 +        }
 +        return this.regionPos;
 +    }
-+    // ShreddedPaper end
++    // Confetti end
 +
      public static ChunkPos minFromRegion(int x, int z) {
          return new ChunkPos(x << 5, z << 5);

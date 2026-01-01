@@ -4,19 +4,19 @@ Date: Thu, 30 May 2024 20:37:51 +0900
 Subject: [PATCH] Threaded chunk changes broadcasting
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChangesBroadcaster.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChangesBroadcaster.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChangesBroadcaster.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChangesBroadcaster.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..ad7960c9a11cffc4b89a08dac45dd0056d12d668
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChangesBroadcaster.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChangesBroadcaster.java
 @@ -0,0 +1,53 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import io.papermc.paper.util.TickThread;
 +import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
 +import net.minecraft.server.level.ChunkHolder;
 +
-+public class ShreddedPaperChangesBroadcaster {
++public class ConfettiChangesBroadcaster {
 +
 +    private static final ThreadLocal<ReferenceOpenHashSet<ChunkHolder>> needsChangeBroadcastingThreadLocal = new ThreadLocal<>();
 +
@@ -63,33 +63,33 @@ index 0000000000000000000000000000000000000000..ad7960c9a11cffc4b89a08dac45dd005
 +        }
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index c6a2e84fd3a6b88fa4136dbffda04ffebd27f4bd..f014a81b107ed43e80431ca715e6c12a99c70269 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-@@ -62,6 +62,8 @@ public class ShreddedPaperChunkTicker {
-                 throw new IllegalStateException("Ticking region " + level.convertable.getLevelId() + " " + region.getRegionPos() + " outside of ShreddedPaperTickThread!");
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -62,6 +62,8 @@ public class ConfettiChunkTicker {
+                 throw new IllegalStateException("Ticking region " + level.convertable.getLevelId() + " " + region.getRegionPos() + " outside of ConfettiTickThread!");
              }
  
-+            ShreddedPaperChangesBroadcaster.setAsWorkerThread();
++            ConfettiChangesBroadcaster.setAsWorkerThread();
 +
              while (region.getInternalTaskQueue().executeTask()) ;
  
              level.chunkTaskScheduler.chunkHolderManager.processUnloads(region);
-@@ -92,6 +94,8 @@ public class ShreddedPaperChunkTicker {
+@@ -92,6 +94,8 @@ public class ConfettiChunkTicker {
  
              while (region.getInternalTaskQueue().executeTask()) ;
  
-+            ShreddedPaperChangesBroadcaster.broadcastChanges();
++            ConfettiChangesBroadcaster.broadcastChanges();
 +
              if (region.isEmpty()) {
                  level.chunkSource.tickingRegions.remove(region.getRegionPos());
              }
-@@ -101,6 +105,8 @@ public class ShreddedPaperChunkTicker {
+@@ -101,6 +105,8 @@ public class ConfettiChunkTicker {
      }
  
      private void _tickChunk(ServerLevel level, LevelChunk chunk1, NaturalSpawner.SpawnState spawnercreature_d) {
-+        if (chunk1.getChunkHolder().vanillaChunkHolder.needsBroadcastChanges()) ShreddedPaperChangesBroadcaster.add(chunk1.getChunkHolder().vanillaChunkHolder); // ShreddedPaper
++        if (chunk1.getChunkHolder().vanillaChunkHolder.needsBroadcastChanges()) ConfettiChangesBroadcaster.add(chunk1.getChunkHolder().vanillaChunkHolder); // Confetti
 +
          // Start - Import the same variables as the original chunk ticking method to make copying new changes easier
          int j = 1; // Inhabited time increment in ticks
@@ -101,8 +101,8 @@ index 0e0c3a010d5cfaa0c15bcb38c4e3b1a8d7ad39a1..8da6278f841e0ac032ae74ed75b7689d
 @@ -2,6 +2,7 @@ package net.minecraft.server.level;
  
  import com.mojang.datafixers.util.Pair;
- import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperChangesBroadcaster;
+ import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiChangesBroadcaster;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.shorts.ShortOpenHashSet;
  import it.unimi.dsi.fastutil.shorts.ShortSet;
@@ -111,7 +111,7 @@ index 0e0c3a010d5cfaa0c15bcb38c4e3b1a8d7ad39a1..8da6278f841e0ac032ae74ed75b7689d
          // Paper start - optimise chunk tick iteration
          if (this.needsBroadcastChanges()) {
 -            this.chunkMap.needsChangeBroadcasting.add(this);
-+            ShreddedPaperChangesBroadcaster.add(this); // this.chunkMap.needsChangeBroadcasting.add(this); // ShreddedPaper - handled by the regions
++            ConfettiChangesBroadcaster.add(this); // this.chunkMap.needsChangeBroadcasting.add(this); // Confetti - handled by the regions
          }
          // Paper end - optimise chunk tick iteration
      }
@@ -120,7 +120,7 @@ index 0e0c3a010d5cfaa0c15bcb38c4e3b1a8d7ad39a1..8da6278f841e0ac032ae74ed75b7689d
          // Paper start - optimise chunk tick iteration
          if (this.needsBroadcastChanges()) {
 -            this.chunkMap.needsChangeBroadcasting.remove(this);
-+            ShreddedPaperChangesBroadcaster.remove(this); // this.chunkMap.needsChangeBroadcasting.remove(this); // ShreddedPaper - handled by the regions
++            ConfettiChangesBroadcaster.remove(this); // this.chunkMap.needsChangeBroadcasting.remove(this); // Confetti - handled by the regions
          }
          // Paper end - optimise chunk tick iteration
      }
@@ -129,7 +129,7 @@ index 0e0c3a010d5cfaa0c15bcb38c4e3b1a8d7ad39a1..8da6278f841e0ac032ae74ed75b7689d
      private void addToBroadcastMap() {
          io.papermc.paper.util.TickThread.ensureTickThread(this.chunkMap.level, this.pos, "Asynchronous ChunkHolder update is not allowed");
 -        this.chunkMap.needsChangeBroadcasting.add(this);
-+        ShreddedPaperChangesBroadcaster.add(this); // this.chunkMap.needsChangeBroadcasting.add(this); // ShreddedPaper - handled by the regions
++        ConfettiChangesBroadcaster.add(this); // this.chunkMap.needsChangeBroadcasting.add(this); // Confetti - handled by the regions
      }
      // Paper end - optimise chunk tick iteration
  
@@ -140,8 +140,8 @@ index 8992460e60b9fc72b020e91edf59dcaf3ec7f7ce..a45a92b4cada4c23769cad17a7dbe10f
 @@ -15,6 +15,7 @@ import java.util.function.Supplier;
  import javax.annotation.Nullable;
  
- import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperChangesBroadcaster;
+ import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiChangesBroadcaster;
  import io.papermc.paper.util.TickThread;
  import net.minecraft.Util;
  import net.minecraft.core.BlockPos;
@@ -149,7 +149,7 @@ index 8992460e60b9fc72b020e91edf59dcaf3ec7f7ce..a45a92b4cada4c23769cad17a7dbe10f
              // Paper - optimise chunk tick iteration
                  //this.level.timings.broadcastChunkUpdates.startTiming(); // Paper - timing // Purpur
              // Paper start - optimise chunk tick iteration
--            future = future.thenRun(() -> { // ShreddedPaper - run async
+-            future = future.thenRun(() -> { // Confetti - run async
 -            if (!this.chunkMap.needsChangeBroadcasting.isEmpty()) {
 -                it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<ChunkHolder> copy = this.chunkMap.needsChangeBroadcasting.clone();
 -                this.chunkMap.needsChangeBroadcasting.clear();
@@ -161,9 +161,9 @@ index 8992460e60b9fc72b020e91edf59dcaf3ec7f7ce..a45a92b4cada4c23769cad17a7dbe10f
 -                    }
 -                }
 -            }
--            }); // ShreddedPaper - run async
-+            // ShreddedPaper start -  // ShreddedPaper - handled in the region
-+//            future = future.thenRun(() -> { // ShreddedPaper - run async
+-            }); // Confetti - run async
++            // Confetti start -  // Confetti - handled in the region
++//            future = future.thenRun(() -> { // Confetti - run async
 +//            if (!this.chunkMap.needsChangeBroadcasting.isEmpty()) {
 +//                it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<ChunkHolder> copy = this.chunkMap.needsChangeBroadcasting.clone();
 +//                this.chunkMap.needsChangeBroadcasting.clear();
@@ -175,8 +175,8 @@ index 8992460e60b9fc72b020e91edf59dcaf3ec7f7ce..a45a92b4cada4c23769cad17a7dbe10f
 +//                    }
 +//                }
 +//            }
-+//            }); // ShreddedPaper - run async
-+            // ShreddedPaper end - handled in the region
++//            }); // Confetti - run async
++            // Confetti end - handled in the region
              // Paper end - optimise chunk tick iteration
                  //this.level.timings.broadcastChunkUpdates.stopTiming(); // Paper - timing // Purpur
              // Paper - optimise chunk tick iteration
@@ -189,8 +189,8 @@ index 7424246750d6ceca1acd5d9ebfd48f0d66504c5d..0a1e3784a26c5b0058b80455e0b0a357
  import java.util.Objects;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperChunkTicker;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiChunkTicker;
  import net.minecraft.advancements.CriteriaTriggers;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Direction;
@@ -206,12 +206,12 @@ index 7424246750d6ceca1acd5d9ebfd48f0d66504c5d..0a1e3784a26c5b0058b80455e0b0a357
                  }
                  // Paper end - Trigger bee_nest_destroyed trigger in the correct place
  
-+                // ShreddedPaper start - broadcast block changes immediately if on the wrong thread
++                // Confetti start - broadcast block changes immediately if on the wrong thread
 +                LevelChunk levelChunk = this.level.getChunkIfLoaded(pos);
 +                if (levelChunk != null) {
 +                    levelChunk.getChunkHolder().vanillaChunkHolder.broadcastChanges(levelChunk);
 +                }
-+                // ShreddedPaper end - broadcast block changes immediately if on the wrong thread
++                // Confetti end - broadcast block changes immediately if on the wrong thread
 +
                  return true;
                  // CraftBukkit end

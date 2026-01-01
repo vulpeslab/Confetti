@@ -4,15 +4,15 @@ Date: Wed, 29 May 2024 23:48:40 +0900
 Subject: [PATCH] Tick chunks fully async
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 index 9c9fa516d451d67d8ed6c1721766572ed43c8a9e..fb56ba10568e8c08ad4320862aecc8756d8fcdba 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 @@ -1,6 +1,7 @@
- package io.multipaper.shreddedpaper.region;
+ package com.vulpeslab.confetti.region;
  
  import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionTicker;
++import com.vulpeslab.confetti.threading.ConfettiRegionTicker;
  import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
  import it.unimi.dsi.fastutil.objects.ObjectArrayList;
  import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
@@ -25,7 +25,7 @@ index 9c9fa516d451d67d8ed6c1721766572ed43c8a9e..fb56ba10568e8c08ad4320862aecc875
      public LevelChunkRegion(ServerLevel level, RegionPos regionPos) {
          this.level = level;
          this.regionPos = regionPos;
-+        ShreddedPaperRegionTicker.scheduleRegion(level, this);
++        ConfettiRegionTicker.scheduleRegion(level, this);
      }
  
      public synchronized void add(LevelChunk levelChunk) {
@@ -42,10 +42,10 @@ index 9c9fa516d451d67d8ed6c1721766572ed43c8a9e..fb56ba10568e8c08ad4320862aecc875
 +        return removed;
 +    }
  }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 index f6ccfb44265505042b210c61e59688a3450886d9..c23b9416a89b1b616eed7cff7b7f325d0006df0d 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 @@ -44,6 +44,8 @@ public class LevelChunkRegionMap {
              if (!region.isEmpty()) {
                  // Guess this region has been modified by another thread, re-add it
@@ -55,56 +55,56 @@ index f6ccfb44265505042b210c61e59688a3450886d9..c23b9416a89b1b616eed7cff7b7f325d
              }
          });
      }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index 6c684c701cdae2c87a553fdf01291800d5918279..30cfac48969a8789233eb10d5cf005c946cc5945 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 @@ -21,6 +21,8 @@ import java.util.concurrent.CompletableFuture;
- public class ShreddedPaperChunkTicker {
+ public class ConfettiChunkTicker {
  
      public static void tickChunks(ServerLevel level, NaturalSpawner.SpawnState spawnercreature_d) {
-+        if (true) return; // ShreddedPaper - we tick chunks fully async now
++        if (true) return; // Confetti - we tick chunks fully async now
 +
          List<CompletableFuture<Void>> futures = new ArrayList<>();
  
          MinecraftServer.getServer().executeMidTickTasks();
-@@ -46,7 +48,7 @@ public class ShreddedPaperChunkTicker {
+@@ -46,7 +48,7 @@ public class ConfettiChunkTicker {
          });
      }
  
 -    private static void _tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnercreature_d) {
-+    static void _tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnercreature_d) { // ShreddedPaper - make public
-         if (!(ShreddedPaperTickThread.isShreddedPaperTickThread())) {
-             throw new IllegalStateException("Ticking region " + level.convertable.getLevelId() + " " + region.getRegionPos() + " outside of ShreddedPaperTickThread!");
++    static void _tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnercreature_d) { // Confetti - make public
+         if (!(ConfettiTickThread.isConfettiTickThread())) {
+             throw new IllegalStateException("Ticking region " + level.convertable.getLevelId() + " " + region.getRegionPos() + " outside of ConfettiTickThread!");
          }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionTicker.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..1951fa500ed655f3b7bad419aaee59c0852d3138
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperRegionTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionTicker.java
 @@ -0,0 +1,106 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.region.LevelChunkRegion;
++import com.vulpeslab.confetti.region.LevelChunkRegion;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.TimeUnit;
 +
-+public class ShreddedPaperRegionTicker {
++public class ConfettiRegionTicker {
 +
 +    private static final int RETRY_TIME_NANOS = 1_000_000;
-+    private static ShreddedPaperRegionTickerFactory factory = new ShreddedPaperRegionTickerFactory();
++    private static ConfettiRegionTickerFactory factory = new ConfettiRegionTickerFactory();
 +
 +    protected final ServerLevel level;
 +    protected final LevelChunkRegion region;
 +    private long thisTickTimeNanos = System.nanoTime();
 +    private long thisTick = MinecraftServer.currentTickLong;
 +
-+    public static void setFactory(ShreddedPaperRegionTickerFactory factory) {
-+        ShreddedPaperRegionTicker.factory = factory;
++    public static void setFactory(ConfettiRegionTickerFactory factory) {
++        ConfettiRegionTicker.factory = factory;
 +    }
 +
 +    public static void scheduleRegion(ServerLevel level, LevelChunkRegion region) {
@@ -115,27 +115,27 @@ index 0000000000000000000000000000000000000000..1951fa500ed655f3b7bad419aaee59c0
 +        return factory.scheduleTask(timeNanos);
 +    }
 +
-+    public static class ShreddedPaperRegionTickerFactory {
++    public static class ConfettiRegionTickerFactory {
 +        void scheduleRegion(ServerLevel level, LevelChunkRegion region) {
-+            new ShreddedPaperRegionTicker(level, region).scheduleNextTick();
++            new ConfettiRegionTicker(level, region).scheduleNextTick();
 +        }
 +
 +        CompletableFuture<Void> scheduleTask(long timeNanos) {
 +            CompletableFuture<Void> future = new CompletableFuture<>();
-+            ShreddedPaperTickThread.getExecutor().schedule(() -> {
++            ConfettiTickThread.getExecutor().schedule(() -> {
 +                future.complete(null);
 +            }, timeNanos, TimeUnit.NANOSECONDS);
 +            return future;
 +        }
 +    }
 +
-+    public ShreddedPaperRegionTicker(ServerLevel level, LevelChunkRegion region) {
++    public ConfettiRegionTicker(ServerLevel level, LevelChunkRegion region) {
 +        this.level = level;
 +        this.region = region;
 +    }
 +
 +    public void schedule(long timeNanos) {
-+        ShreddedPaperTickThread.getExecutor().schedule(this::tick, timeNanos, TimeUnit.NANOSECONDS);
++        ConfettiTickThread.getExecutor().schedule(this::tick, timeNanos, TimeUnit.NANOSECONDS);
 +    }
 +
 +    public void scheduleNextTick() {
@@ -161,7 +161,7 @@ index 0000000000000000000000000000000000000000..1951fa500ed655f3b7bad419aaee59c0
 +
 +        boolean success = level.chunkScheduler.getRegionLocker().tryLockNow(region.getRegionPos(), () -> {
 +            try {
-+                ShreddedPaperChunkTicker._tickRegion(level, region, level.getChunkSource().getLastSpawnState());
++                ConfettiChunkTicker._tickRegion(level, region, level.getChunkSource().getLastSpawnState());
 +            } catch (Throwable t) {
 +                LogUtils.getClassLogger().error("Exception ticking region {}", region.getRegionPos(), t);
 +                MinecraftServer.chunkSystemCrash = new RuntimeException("Ticking thread crash while ticking region " + region.getRegionPos(), t);
@@ -189,20 +189,20 @@ index 0000000000000000000000000000000000000000..1951fa500ed655f3b7bad419aaee59c0
 +    }
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
 index 3949e39afcf36c4c5012e157ce95fd4d873126b5..665960a3604ab5d5610dcc1fb6484e6a92330eef 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperTickThread.java
-@@ -17,6 +17,8 @@ public class ShreddedPaperTickThread extends TickThread {
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
+@@ -17,6 +17,8 @@ public class ConfettiTickThread extends TickThread {
  
      private static final ScheduledThreadPoolExecutor executor;
  
 +    private static final ThreadLocal<Boolean> isTickThread = ThreadLocal.withInitial(() -> false);
 +
      static {
-         int threadCount = ShreddedPaperConfiguration.get().multithreading.threadCount;
+         int threadCount = ConfettiConfiguration.get().multithreading.threadCount;
  
-@@ -33,9 +35,13 @@ public class ShreddedPaperTickThread extends TickThread {
+@@ -33,9 +35,13 @@ public class ConfettiTickThread extends TickThread {
          super(run, String.format(name, ID_GENERATOR.incrementAndGet()));
      }
  
@@ -210,30 +210,30 @@ index 3949e39afcf36c4c5012e157ce95fd4d873126b5..665960a3604ab5d5610dcc1fb6484e6a
 +        isTickThread.set(true);
 +    }
 +
-     public static boolean isShreddedPaperTickThread() {
-         // Use this method to check if it's a shreddedpaper tick thread, to ensure future potential support for VirtualThreads
--        return Thread.currentThread() instanceof ShreddedPaperTickThread;
-+        return Thread.currentThread() instanceof ShreddedPaperTickThread || isTickThread.get();
+     public static boolean isConfettiTickThread() {
+         // Use this method to check if it's a confetti tick thread, to ensure future potential support for VirtualThreads
+-        return Thread.currentThread() instanceof ConfettiTickThread;
++        return Thread.currentThread() instanceof ConfettiTickThread || isTickThread.get();
      }
  
      static ScheduledThreadPoolExecutor getExecutor() {
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/VirtualThreadRegionTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/VirtualThreadRegionTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/VirtualThreadRegionTicker.java b/src/main/java/com/vulpeslab/confetti/threading/VirtualThreadRegionTicker.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..9cec4fe1454640e763e204f707711bfd12984bbf
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/VirtualThreadRegionTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/VirtualThreadRegionTicker.java
 @@ -0,0 +1,64 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
-+import io.multipaper.shreddedpaper.region.LevelChunkRegion;
++import com.vulpeslab.confetti.region.LevelChunkRegion;
 +import net.minecraft.server.level.ServerLevel;
 +
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.locks.LockSupport;
 +
-+public class VirtualThreadRegionTicker extends ShreddedPaperRegionTicker {
++public class VirtualThreadRegionTicker extends ConfettiRegionTicker {
 +
-+    public static class VirtualThreadRegionTickerFactory extends ShreddedPaperRegionTickerFactory {
++    public static class VirtualThreadRegionTickerFactory extends ConfettiRegionTickerFactory {
 +        @Override
 +        void scheduleRegion(ServerLevel level, LevelChunkRegion region) {
 +            new VirtualThreadRegionTicker(level, region).scheduleNextTick();
@@ -272,7 +272,7 @@ index 0000000000000000000000000000000000000000..9cec4fe1454640e763e204f707711bfd
 +    }
 +
 +    private void run() {
-+        ShreddedPaperTickThread.setThisThreadAsTickThread();
++        ConfettiTickThread.setThisThreadAsTickThread();
 +
 +        while (nextTimeNanos > 0) {
 +            long waitTime = Math.max(nextTimeNanos - System.nanoTime(), 1);
@@ -294,7 +294,7 @@ index 645e39222d81a5049888c86881ee381310fa7060..1346218abf884d9888e5bace43c26315
 @@ -1,5 +1,6 @@
  package io.papermc.paper.util;
  
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
  import net.minecraft.core.BlockPos;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerLevel;
@@ -303,7 +303,7 @@ index 645e39222d81a5049888c86881ee381310fa7060..1346218abf884d9888e5bace43c26315
  
      public static boolean isTickThread() {
 -        return Thread.currentThread() instanceof TickThread;
-+        return Thread.currentThread() instanceof TickThread || ShreddedPaperTickThread.isShreddedPaperTickThread(); // ShreddedPaper - virtual thread support
++        return Thread.currentThread() instanceof TickThread || ConfettiTickThread.isConfettiTickThread(); // Confetti - virtual thread support
      }
  
      public static boolean isShutdownThread() {
@@ -315,7 +315,7 @@ index 75933f0cb23d7b26b262111376816a40a87c61fe..7af5784d7b7e2f2345903bc17a4dc29e
  import com.mojang.authlib.minecraft.MinecraftSessionService;
  import com.mojang.datafixers.DataFixer;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionTicker;
++import com.vulpeslab.confetti.threading.ConfettiRegionTicker;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.longs.LongIterator;
  import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -331,10 +331,10 @@ index 75933f0cb23d7b26b262111376816a40a87c61fe..7af5784d7b7e2f2345903bc17a4dc29e
  
      protected void waitUntilNextTick() {
          //this.executeAll(); // Paper - move this into the tick method for timings
-+        CompletableFuture<Void> workerThreadSync = ShreddedPaperRegionTicker.scheduleTask(this.nextTickTimeNanos - Util.getNanos()); // ShreddedPaper - ensure tick threads aren't overwhelmed
++        CompletableFuture<Void> workerThreadSync = ConfettiRegionTicker.scheduleTask(this.nextTickTimeNanos - Util.getNanos()); // Confetti - ensure tick threads aren't overwhelmed
          this.managedBlock(() -> {
 -            return !this.canSleepForTickNoOversleep(); // Paper - move oversleep into full server tick
-+            return !this.canSleepForTickNoOversleep() && workerThreadSync.isDone(); // Paper - move oversleep into full server tick // ShreddedPaper - ensure tick threads aren't overwhelmed
++            return !this.canSleepForTickNoOversleep() && workerThreadSync.isDone(); // Paper - move oversleep into full server tick // Confetti - ensure tick threads aren't overwhelmed
          });
      }
  
@@ -347,10 +347,10 @@ index 419742f225a63a14c987dcc926997953d605faf2..e12486fb33e2059cf602e895fcacfa44
                          // Paper end - per player mob spawning backoff
                      }
 -                    spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, this.level.getAllEntities(), this::getFullChunk, null, true);
-+                    spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, this.level.entityTickList.getAll(), this::getFullChunk, null, true); // ShreddedPaper - use thread-safe entity iterator
++                    spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, this.level.entityTickList.getAll(), this::getFullChunk, null, true); // Confetti - use thread-safe entity iterator
                  } else {
 -                    spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, this.level.getAllEntities(), this::getFullChunk, !this.level.paperConfig().entities.spawning.perPlayerMobSpawns ? new LocalMobCapCalculator(this.chunkMap) : null, false);
-+                    spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, this.level.entityTickList.getAll(), this::getFullChunk, !this.level.paperConfig().entities.spawning.perPlayerMobSpawns ? new LocalMobCapCalculator(this.chunkMap) : null, false); // ShreddedPaper - use thread-safe entity iterator
++                    spawnercreature_d = NaturalSpawner.createState(naturalSpawnChunkCount, this.level.entityTickList.getAll(), this::getFullChunk, !this.level.paperConfig().entities.spawning.perPlayerMobSpawns ? new LocalMobCapCalculator(this.chunkMap) : null, false); // Confetti - use thread-safe entity iterator
                  }
                  // Paper end - Optional per player mob spawns
                  // this.level.timings.countNaturalMobs.stopTiming(); // Paper - timings // Purpur
@@ -392,22 +392,22 @@ index 951ff458efa225d814287bf83ed55cf759abad4a..9f2841c9e589d88feb396dcee4b70ebb
  
  public class EntityTickList {
 -    private final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<Entity> entities = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(true); // Paper - rewrite this, always keep this updated - why would we EVER tick an entity that's not ticking?
-+    // private final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<Entity> entities = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(true); // Paper - rewrite this, always keep this updated - why would we EVER tick an entity that's not ticking? // ShreddedPaper
-+    private final Set<Entity> entities = ConcurrentHashMap.newKeySet(); // ShreddedPaper
++    // private final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<Entity> entities = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(true); // Paper - rewrite this, always keep this updated - why would we EVER tick an entity that's not ticking? // Confetti
++    private final Set<Entity> entities = ConcurrentHashMap.newKeySet(); // Confetti
  
      private void ensureActiveIsNotIterated() {
          // Paper - replace with better logic, do not delay removals
      }
  
      public void add(Entity entity) {
--        if (true) return; // ShreddedPaper - disable the entity tick list
+-        if (true) return; // Confetti - disable the entity tick list
          io.papermc.paper.util.TickThread.ensureTickThread("Asynchronous entity ticklist addition"); // Paper
          this.ensureActiveIsNotIterated();
          this.entities.add(entity); // Paper - replace with better logic, do not delay removals/additions
      }
  
      public void remove(Entity entity) {
--        if (true) return; // ShreddedPaper - disable the entity tick list
+-        if (true) return; // Confetti - disable the entity tick list
          io.papermc.paper.util.TickThread.ensureTickThread("Asynchronous entity ticklist removal"); // Paper
          this.ensureActiveIsNotIterated();
          this.entities.remove(entity); // Paper - replace with better logic, do not delay removals/additions
@@ -434,9 +434,9 @@ index 951ff458efa225d814287bf83ed55cf759abad4a..9f2841c9e589d88feb396dcee4b70ebb
          // Paper end - replace with better logic, do not delay removals/additions
      }
 +
-+    // ShreddedPaper start - iterator
++    // Confetti start - iterator
 +    public Iterable<Entity> getAll() {
 +        return this.entities;
 +    }
-+    // ShreddedPaper end
++    // Confetti end
  }

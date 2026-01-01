@@ -1,4 +1,4 @@
-# shreddedpaper.yml
+# confetti.yml
 
 ```yaml
 
@@ -33,7 +33,7 @@ multithreading:
   # for single server instances.
   allow-unsupported-plugins-to-modify-chunks-via-global-scheduler: true
 
-# ShreddedPaper's optimizations settings
+# Confetti's optimizations settings
 optimizations:
   
   # Check entity activation range less often. Spigot does this every tick
@@ -56,7 +56,7 @@ optimizations:
   process-track-queue-in-parallel: true
   
   # Maximum number of players to render each entity to. Can be bypassed with the
-  # permission 'shreddedpaper.maximumtrackerbypass'
+  # permission 'confetti.maximumtrackerbypass'
   maximum-trackers-per-entity: 500
 
   # How often (in ticks) to do a full tracker update per entity. The vanilla

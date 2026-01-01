@@ -23,8 +23,8 @@ index ade6396885d63991640dbee0f7d1a56b02d22397..c11924979735e79655a2a0ae5485cd6e
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -16,6 +16,7 @@ import com.mojang.datafixers.DataFixer;
  import com.mojang.logging.LogUtils;
- import io.multipaper.shreddedpaper.ShreddedPaper;
- import io.multipaper.shreddedpaper.threading.ShreddedPaperPlayerTicker;
+ import com.vulpeslab.confetti.Confetti;
+ import com.vulpeslab.confetti.threading.ConfettiPlayerTicker;
 +import io.papermc.paper.threadedregions.RegionizedServerInitEvent;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.longs.LongIterator;
@@ -33,7 +33,7 @@ index ade6396885d63991640dbee0f7d1a56b02d22397..c11924979735e79655a2a0ae5485cd6e
              this.statusIcon = (ServerStatus.Favicon) this.loadStatusIcon().orElse(null); // CraftBukkit - decompile error
              this.status = this.buildServerStatus();
  
-+            new RegionizedServerInitEvent().callEvent(); // ShreddedPaper - Folia plugin support
++            new RegionizedServerInitEvent().callEvent(); // Confetti - Folia plugin support
 +
              // Spigot start
              // Paper start - move done tracking
@@ -46,7 +46,7 @@ index 0e0a098f543e19a41b4bae73156ece970b9f7d50..ea13875caf0d5df2750d6ab6758053a7
  import com.mojang.brigadier.exceptions.CommandSyntaxException;
  import com.mojang.serialization.Dynamic;
  import com.mojang.serialization.Lifecycle;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
 +import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
  import java.awt.image.BufferedImage;
@@ -55,12 +55,12 @@ index 0e0a098f543e19a41b4bae73156ece970b9f7d50..ea13875caf0d5df2750d6ab6758053a7
      }
      // Paper end - Folia reagion threading API
  
-+    // ShreddedPaper start - Folia region api
++    // Confetti start - Folia region api
 +    @Override
 +    public boolean isGlobalTickThread() {
-+        return TickThread.isTickThread() && !ShreddedPaperTickThread.isShreddedPaperTickThread();
++        return TickThread.isTickThread() && !ConfettiTickThread.isConfettiTickThread();
 +    }
-+    // ShreddedPaper end - Folia region api
++    // Confetti end - Folia region api
 +
      static {
          ConfigurationSerialization.registerClass(CraftOfflinePlayer.class);

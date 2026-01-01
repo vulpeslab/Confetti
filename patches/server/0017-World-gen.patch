@@ -12,7 +12,7 @@ index 5bfdd772f2e8933acca69ed62c04755a5655fa94..e1ee330b6fdd43114a1330677b1597bf
  import net.minecraft.world.level.block.state.BlockState;
  import net.minecraft.world.level.chunk.LevelChunk;
  import net.minecraft.world.level.levelgen.Heightmap;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
  
  public class PlayerRespawnLogic {
      @Nullable
@@ -20,7 +20,7 @@ index 5bfdd772f2e8933acca69ed62c04755a5655fa94..e1ee330b6fdd43114a1330677b1597bf
          if (SharedConstants.debugVoidTerrain(chunkPos)) {
              return null;
          } else {
-+            return world.chunkScheduler.getRegionLocker().lockRegion(RegionPos.forChunk(chunkPos), () -> { // ShreddedPaper - lock region
++            return world.chunkScheduler.getRegionLocker().lockRegion(RegionPos.forChunk(chunkPos), () -> { // Confetti - lock region
              for (int i = chunkPos.getMinBlockX(); i <= chunkPos.getMaxBlockX(); i++) {
                  for (int j = chunkPos.getMinBlockZ(); j <= chunkPos.getMaxBlockZ(); j++) {
                      BlockPos blockPos = getOverworldRespawnPos(world, i, j);
@@ -28,7 +28,7 @@ index 5bfdd772f2e8933acca69ed62c04755a5655fa94..e1ee330b6fdd43114a1330677b1597bf
              }
  
              return null;
-+            }); // ShreddedPaper
++            }); // Confetti
          }
      }
  }

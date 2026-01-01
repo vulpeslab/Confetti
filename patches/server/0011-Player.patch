@@ -4,11 +4,11 @@ Date: Sun, 12 May 2024 23:54:34 +0900
 Subject: [PATCH] Player
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 index e7ad3b17b47e7a2e7bc38d8f414d3920e6aa5b28..d1d8b5010228b8c8d6759967515e62d850a3dc25 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-@@ -2,7 +2,10 @@ package io.multipaper.shreddedpaper.region;
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -2,7 +2,10 @@ package com.vulpeslab.confetti.region;
  
  import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
  import io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet;
@@ -58,11 +58,11 @@ index e7ad3b17b47e7a2e7bc38d8f414d3920e6aa5b28..d1d8b5010228b8c8d6759967515e62d8
 +                && players.isEmpty();
      }
  }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
 index af1f3ba71e44b4b49c106d1e45331641e030ec6c..bff6f98036e74a9716649b71a60c9f9d7d5278d3 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegionMap.java
-@@ -2,6 +2,7 @@ package io.multipaper.shreddedpaper.region;
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -2,6 +2,7 @@ package com.vulpeslab.confetti.region;
  
  import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
  import net.minecraft.server.level.ServerLevel;
@@ -96,33 +96,33 @@ index af1f3ba71e44b4b49c106d1e45331641e030ec6c..bff6f98036e74a9716649b71a60c9f9d
 +        }
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index b8ed3237b88f39f172b2b2ccb43077db35378c77..97c5021b1728f942b5115884b03832cb2ec667aa 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-@@ -79,6 +79,8 @@ public class ShreddedPaperChunkTicker {
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -79,6 +79,8 @@ public class ConfettiChunkTicker {
  
-             region.forEachTickingEntity(ShreddedPaperEntityTicker::tickEntity);
+             region.forEachTickingEntity(ConfettiEntityTicker::tickEntity);
  
-+            region.getPlayers().forEach(ShreddedPaperPlayerTicker::tickPlayer);
++            region.getPlayers().forEach(ConfettiPlayerTicker::tickPlayer);
 +
              while (region.getInternalTaskQueue().executeTask()) ;
  
              if (region.isEmpty()) {
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperPlayerTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperPlayerTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiPlayerTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiPlayerTicker.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..5c514aa0e9bb89aa58359752dc15c8b452202d52
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperPlayerTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiPlayerTicker.java
 @@ -0,0 +1,19 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import io.papermc.paper.chunk.system.RegionizedPlayerChunkLoader;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +
-+public class ShreddedPaperPlayerTicker {
++public class ConfettiPlayerTicker {
 +
 +    public static void tickPlayer(ServerPlayer serverPlayer) {
 +        serverPlayer.connection.connection.tick();
@@ -142,9 +142,9 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
  import ca.spottedleaf.concurrentutil.collection.SRSWLinkedQueue;
  import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor;
  import ca.spottedleaf.concurrentutil.util.ConcurrentUtil;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
-+import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperChunkTicker;
++import com.vulpeslab.confetti.Confetti;
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiChunkTicker;
  import io.papermc.paper.chunk.system.scheduling.ChunkHolderManager;
  import io.papermc.paper.configuration.GlobalConfiguration;
  import io.papermc.paper.util.CoordinateUtils;
@@ -160,7 +160,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
  
      public void tick() {
          TickThread.ensureTickThread("Cannot tick player chunk loader async");
-+        if (true) return; // ShreddedPaper - why is this not just run under the player ticking system?
++        if (true) return; // Confetti - why is this not just run under the player ticking system?
          long currTime = System.nanoTime();
          for (final ServerPlayer player : new java.util.ArrayList<>(this.world.players())) {
              final PlayerChunkLoaderData loader = player.chunkLoader;
@@ -168,7 +168,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
                  Math.abs(c2x - centerX) + Math.abs(c2z - centerZ)
              );
          };
-+        private final LongArrayList retryLaterSendQueue = new LongArrayList(); // ShreddedPaper
++        private final LongArrayList retryLaterSendQueue = new LongArrayList(); // Confetti
          private final LongHeapPriorityQueue sendQueue = new LongHeapPriorityQueue(CLOSEST_MANHATTAN_DIST);
          private final LongHeapPriorityQueue tickingQueue = new LongHeapPriorityQueue(CLOSEST_MANHATTAN_DIST);
          private final LongHeapPriorityQueue generatingQueue = new LongHeapPriorityQueue(CLOSEST_MANHATTAN_DIST);
@@ -177,7 +177,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
          }
  
 -        void updateQueues(final long time) {
-+        public void updateQueues(final long time) { // ShreddedPaper - make public
++        public void updateQueues(final long time) { // Confetti - make public
              TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async");
              if (this.removed) {
                  throw new IllegalStateException("Ticking removed player chunk loader");
@@ -185,23 +185,23 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
              final long maxSends = Math.max(0L, Math.min(MAX_RATE, Integer.MAX_VALUE)); // no logic to track concurrent sends
              final int maxSendsThisTick = Math.min((int)this.chunkSendLimiter.takeAllocation(time, sendRate, maxSends), this.sendQueue.size());
              // we do not return sends that we took from the allocation back because we want to limit the max send rate, not target it
-+            int j = 0; // ShreddedPaper
++            int j = 0; // Confetti
              for (int i = 0; i < maxSendsThisTick; ++i) {
                  final long pendingSend = this.sendQueue.firstLong();
                  final int pendingSendX = CoordinateUtils.getChunkX(pendingSend);
                  final int pendingSendZ = CoordinateUtils.getChunkZ(pendingSend);
                  final LevelChunk chunk = this.world.chunkSource.getChunkAtIfLoadedMainThreadNoCache(pendingSendX, pendingSendZ);
 -                if (!chunk.areNeighboursLoaded(1) || !TickThread.isTickThreadFor(this.world, pendingSendX, pendingSendZ)) {
-+                if (chunk == null || !chunk.areNeighboursLoaded(1)) { // ShreddedPaper - do thread check later / chunk could have been unloaded before sending
++                if (chunk == null || !chunk.areNeighboursLoaded(1)) { // Confetti - do thread check later / chunk could have been unloaded before sending
                      // nothing to do
                      // the target chunk may not be owned by this region, but this should be resolved in the future
                      break;
                  }
                  if (!chunk.isPostProcessingDone) {
-+                    // ShreddedPaper start - run post-processing on the tick thread
-+                    if (!ShreddedPaperChunkTicker.isCurrentlyTickingRegion(this.world, RegionPos.forChunk(chunk.getPos()))) {
++                    // Confetti start - run post-processing on the tick thread
++                    if (!ConfettiChunkTicker.isCurrentlyTickingRegion(this.world, RegionPos.forChunk(chunk.getPos()))) {
 +                        this.retryLaterSendQueue.add(this.sendQueue.dequeueLong());
-+                        ShreddedPaper.runSync(this.world, chunk.getPos(), () -> {
++                        Confetti.runSync(this.world, chunk.getPos(), () -> {
 +                            final LevelChunk chunk2 = this.world.chunkSource.getChunkAtIfLoadedMainThreadNoCache(pendingSendX, pendingSendZ);
 +                            if (chunk2 != null && chunk2.areNeighboursLoaded(1) && !chunk2.isPostProcessingDone) {
 +                                chunk2.postProcessGeneration();
@@ -210,7 +210,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
 +                        if (maxSendsThisTick - i - 1 > this.sendQueue.size() && j++ < maxSendsThisTick * 2) i--; // Let us try sending more chunks, up to a threshold
 +                        continue;
 +                    }
-+                    // ShreddedPaper end - run post-processing on the tick thread
++                    // Confetti end - run post-processing on the tick thread
                      // not yet post-processed, need to do this so that tile entities can properly be sent to clients
                      chunk.postProcessGeneration();
                      // check if there was any recursive action
@@ -219,7 +219,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
                  this.sendQueue.dequeueLong();
  
 -                this.sendChunk(pendingSendX, pendingSendZ);
-+                // ShreddedPaper start - send on both player and tick thread
++                // Confetti start - send on both player and tick thread
 +                if (TickThread.isTickThreadFor(this.world, chunk.getPos())) {
 +                    this.sendChunk(pendingSendX, pendingSendZ);
 +                } else if (!this.world.chunkScheduler.getRegionLocker().tryReadOnlyLockNow(RegionPos.forChunk(chunk.getPos()), () -> {
@@ -229,21 +229,21 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
 +                    if (maxSendsThisTick - i - 1 > this.sendQueue.size() && j++ < maxSendsThisTick * 2) i--; // Let us try sending more chunks, up to a threshold
 +                    continue;
 +                }
-+                // ShreddedPaper end - send on both player and tick thread
++                // Confetti end - send on both player and tick thread
                  if (this.removed) {
                      // sendChunk may invoke plugin logic
                      return;
                  }
              }
  
-+            // ShreddedPaper start - requeue retry send chunks
++            // Confetti start - requeue retry send chunks
 +            if (!this.retryLaterSendQueue.isEmpty()) {
 +                for (final long chunk : this.retryLaterSendQueue) {
 +                    this.sendQueue.enqueue(chunk);
 +                }
 +                this.retryLaterSendQueue.clear();
 +            }
-+            // ShreddedPaper end - requeue retry send chunks
++            // Confetti end - requeue retry send chunks
 +
              this.flushDelayedTicketOps();
              // we assume propagate ticket levels happens after this call
@@ -253,7 +253,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
          }
  
 -        void update() {
-+        public void update() { // ShreddedPaper - make public
++        public void update() { // Confetti - make public
              TickThread.ensureTickThread(this.player, "Cannot update player asynchronously");
              if (this.removed) {
                  throw new IllegalStateException("Updating removed player chunk loader");
@@ -261,7 +261,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
                  this.player.connection.send(this.updateClientSimulationDistance(tickViewDistance));
              }
  
-+            this.retryLaterSendQueue.clear(); // ShreddedPaper
++            this.retryLaterSendQueue.clear(); // Confetti
              this.sendQueue.clear();
              this.tickingQueue.clear();
              this.generatingQueue.clear();
@@ -269,7 +269,7 @@ index 149cfb0587299f72fcfddf395fb71b70438986c1..cab027d5bde4fe7f4123f35a0a7a8a87
              this.tickMap.remove();
  
              // purge queues
-+            this.retryLaterSendQueue.clear(); // ShreddedPaper
++            this.retryLaterSendQueue.clear(); // Confetti
              this.sendQueue.clear();
              this.tickingQueue.clear();
              this.generatingQueue.clear();
@@ -298,7 +298,7 @@ index 3b66ecc4f110d0f2dc0ef6c560801296d7e0be64..61327dfa158b385bfba4768493fd7724
      private static int currTick; // Paper - Buffer joins to world
      private static int tickSecond; // Purpur
      public void tick() {
-+        if (this.packetListener instanceof ServerGamePacketListenerImpl serverGamePacketListener && !TickThread.isTickThreadFor(serverGamePacketListener.player)) return; // ShreddedPaper
++        if (this.packetListener instanceof ServerGamePacketListenerImpl serverGamePacketListener && !TickThread.isTickThreadFor(serverGamePacketListener.player)) return; // Confetti
          this.flushQueue();
          // Paper start - Buffer joins to world
          if (Connection.currTick != net.minecraft.server.MinecraftServer.currentTick) {
@@ -323,7 +323,7 @@ index 8c134a642ccaf3530022f2e675a858d726e1dda4..f5154194df9e44f8bcf431029f4bbed6
  import net.minecraft.server.network.ServerCommonPacketListenerImpl;
  // CraftBukkit end
  import net.minecraft.util.thread.BlockableEventLoop;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  
  public class PacketUtils {
  
@@ -331,10 +331,10 @@ index 8c134a642ccaf3530022f2e675a858d726e1dda4..f5154194df9e44f8bcf431029f4bbed6
      }
  
      public static <T extends PacketListener> void ensureRunningOnSameThread(Packet<T> packet, T listener, BlockableEventLoop<?> engine) throws RunningOnDifferentThreadException {
-+        // ShreddedPaper start - run on player's thread
++        // Confetti start - run on player's thread
 +        if (listener instanceof ServerGamePacketListenerImpl gamePacketListener) {
 +            if (TickThread.isTickThreadFor(gamePacketListener.player)) return;
-+            ShreddedPaper.runSync(gamePacketListener.player, () -> {
++            Confetti.runSync(gamePacketListener.player, () -> {
 +                if (listener instanceof ServerCommonPacketListenerImpl serverCommonPacketListener && serverCommonPacketListener.processedDisconnect) return; // CraftBukkit - Don't handle sync packets for kicked players
 +                if (listener.shouldHandleMessage(packet)) {
 +                    co.aikar.timings.Timing timing = co.aikar.timings.MinecraftTimings.getPacketTiming(packet); // Paper - timings
@@ -357,7 +357,7 @@ index 8c134a642ccaf3530022f2e675a858d726e1dda4..f5154194df9e44f8bcf431029f4bbed6
 +            });
 +            throw RunningOnDifferentThreadException.RUNNING_ON_DIFFERENT_THREAD;
 +        }
-+        // ShreddedPaper end - run on player's thread
++        // Confetti end - run on player's thread
          if (!engine.isSameThread()) {
              engine.executeIfPossible(() -> {
                  packetProcessing.push(listener); // Paper - detailed watchdog information
@@ -369,8 +369,8 @@ index e112595be1320264bc6c6d7b38091224971a8ac6..8d57bfea0e20127cfff33bae8307ad4b
  import com.mojang.authlib.minecraft.MinecraftSessionService;
  import com.mojang.datafixers.DataFixer;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperPlayerTicker;
++import com.vulpeslab.confetti.Confetti;
++import com.vulpeslab.confetti.threading.ConfettiPlayerTicker;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.longs.LongIterator;
  import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -378,29 +378,29 @@ index e112595be1320264bc6c6d7b38091224971a8ac6..8d57bfea0e20127cfff33bae8307ad4b
          }
          // Paper end - Perf: Optimize time updates
          //MinecraftTimings.timeUpdateTimer.stopTiming(); // Spigot // Paper // Purpur
-+        this.getConnection().tick(); // ShreddedPaper - moved up
++        this.getConnection().tick(); // Confetti - moved up
 +
-+        // ShreddedPaper start - some players aren't registered in their level if they're dead, let's manually add a task for them to process them
++        // Confetti start - some players aren't registered in their level if they're dead, let's manually add a task for them to process them
 +        for (ServerPlayer player : this.playerList.getPlayers()) {
 +            if (player.isRemoved()) {
-+                ShreddedPaper.runSync((ServerLevel) player.level(), player.chunkPosition(), () -> {
++                Confetti.runSync((ServerLevel) player.level(), player.chunkPosition(), () -> {
 +                    if (TickThread.isTickThreadFor(player)) {
 +                        player.getBukkitEntity().taskScheduler.executeTick();
-+                        ShreddedPaperPlayerTicker.tickPlayer(player);
++                        ConfettiPlayerTicker.tickPlayer(player);
 +                    }
 +                });
 +            }
 +        }
-+        // ShreddedPaper end
++        // Confetti end
  
          this.isIteratingOverLevels = true; // Paper - Throw exception on world create while being ticked
-         List<CompletableFuture<Void>> futures = new ArrayList<>(); // ShreddedPaper - tick worlds async
+         List<CompletableFuture<Void>> futures = new ArrayList<>(); // Confetti - tick worlds async
 @@ -1852,7 +1868,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          //this.profiler.popPush("connection"); // Purpur
          // MinecraftTimings.connectionTimer.startTiming(); // Spigot // Paper // Purpur
 -        this.getConnection().tick();
-+        // this.getConnection().tick(); // ShreddedPaper - move up
++        // this.getConnection().tick(); // Confetti - move up
          // MinecraftTimings.connectionTimer.stopTiming(); // Spigot // Paper // Purpur
          //this.profiler.popPush("players"); // Purpur
          //MinecraftTimings.playerListTimer.startTiming(); // Spigot // Paper // Purpur
@@ -421,15 +421,15 @@ index 39dd25f6c87634004c5a0cec49016d1c43b68476..9d10c5e5c806a92852ce5b4d708929d1
          this.uuid = WorldUUID.getUUID(convertable_conversionsession.levelDirectory.path().toFile());
          // CraftBukkit end
 -        this.players = Lists.newArrayList();
-+        this.players = new CopyOnWriteArrayList<>(); // ShreddedPaper - thread-safe (players should not be changing worlds often, thus copy-on-write is sufficient)
-         // this.entityTickList = new EntityTickList(); // ShreddedPaper - moved into each region
++        this.players = new CopyOnWriteArrayList<>(); // Confetti - thread-safe (players should not be changing worlds often, thus copy-on-write is sufficient)
+         // this.entityTickList = new EntityTickList(); // Confetti - moved into each region
          this.blockTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
          this.fluidTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
 @@ -2784,6 +2785,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
              // ServerLevel.this.getChunkSource().addEntity(entity); // Paper - ignore and warn about illegal addEntity calls instead of crashing server; moved down below valid=true
              if (entity instanceof ServerPlayer entityplayer) {
                  ServerLevel.this.players.add(entityplayer);
-+                ServerLevel.this.getChunkSource().tickingRegions.addPlayer(entityplayer); // ShreddedPaper - add player to region
++                ServerLevel.this.getChunkSource().tickingRegions.addPlayer(entityplayer); // Confetti - add player to region
                  ServerLevel.this.updateSleepingPlayerList();
              }
  
@@ -437,15 +437,15 @@ index 39dd25f6c87634004c5a0cec49016d1c43b68476..9d10c5e5c806a92852ce5b4d708929d1
              ServerLevel.this.getChunkSource().removeEntity(entity);
              if (entity instanceof ServerPlayer entityplayer) {
                  ServerLevel.this.players.remove(entityplayer);
-+                ServerLevel.this.getChunkSource().tickingRegions.removePlayer(entityplayer); // ShreddedPaper - remove player from region
++                ServerLevel.this.getChunkSource().tickingRegions.removePlayer(entityplayer); // Confetti - remove player from region
                  ServerLevel.this.updateSleepingPlayerList();
              }
  
 @@ -2904,6 +2907,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          public void onSectionChange(Entity entity) {
              entity.updateDynamicGameEventListener(DynamicGameEventListener::move);
-             ServerLevel.this.chunkSource.tickingRegions.moveTickingEntity(entity); // ShreddedPaper - move ticking entity into the new region
-+            if (entity instanceof ServerPlayer serverPlayer) ServerLevel.this.chunkSource.tickingRegions.movePlayer(serverPlayer); // ShreddedPaper - move player into the new region
+             ServerLevel.this.chunkSource.tickingRegions.moveTickingEntity(entity); // Confetti - move ticking entity into the new region
++            if (entity instanceof ServerPlayer serverPlayer) ServerLevel.this.chunkSource.tickingRegions.movePlayer(serverPlayer); // Confetti - move player into the new region
          }
      }
  
@@ -469,7 +469,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
  import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  import org.bukkit.event.player.PlayerToggleSneakEvent;
  import org.bukkit.inventory.MainHand;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  // CraftBukkit end
  
  public class ServerPlayer extends Player {
@@ -477,7 +477,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
      private Vec3 enteredLavaOnVehiclePosition;
      private SectionPos lastSectionPos;
      private ChunkTrackingView chunkTrackingView;
-+    public ChunkPos previousChunkPosRegion; // ShreddedPaper
++    public ChunkPos previousChunkPosRegion; // Confetti
      private ResourceKey<Level> respawnDimension;
      @Nullable
      private BlockPos respawnPosition;
@@ -486,7 +486,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
      // CraftBukkit end
  
 -    public void fudgeSpawnLocation(ServerLevel world) {
-+    public void fudgeSpawnLocation(ServerLevel world, Runnable onComplete) { // ShreddedPaper - run on region's thread
++    public void fudgeSpawnLocation(ServerLevel world, Runnable onComplete) { // Confetti - run on region's thread
          BlockPos blockposition = world.getSharedSpawnPos();
  
          if (world.dimensionType().hasSkyLight() && world.serverLevelData.getGameType() != GameType.ADVENTURE) { // CraftBukkit
@@ -499,10 +499,10 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
 -                int j2 = i2 % (i * 2 + 1);
 -                int k2 = i2 / (i * 2 + 1);
 -                BlockPos blockposition1 = PlayerRespawnLogic.getOverworldRespawnPos(world, blockposition.getX() + j2 - i, blockposition.getZ() + k2 - i);
-+            this.findSpawnLocation(world, blockposition, i, i1, j1, k1, 0, onComplete); // ShreddedPaper - run on region's thread
++            this.findSpawnLocation(world, blockposition, i, i1, j1, k1, 0, onComplete); // Confetti - run on region's thread
 +        } else {
-+            // ShreddedPaper start - run on region's thread
-+            ShreddedPaper.ensureSync(world, blockposition, () -> {
++            // Confetti start - run on region's thread
++            Confetti.ensureSync(world, blockposition, () -> {
 +                this.moveTo(blockposition, world.getSharedSpawnAngle(), 0.0F); // Paper - MC-200092 - fix first spawn pos yaw being ignored
  
 -                if (blockposition1 != null) {
@@ -517,7 +517,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
 -        } else {
 -            this.moveTo(blockposition, world.getSharedSpawnAngle(), 0.0F); // Paper - MC-200092 - fix first spawn pos yaw being ignored
 +            });
-+            // ShreddedPaper end - run on region's thread
++            // Confetti end - run on region's thread
 +        }
  
 -            while (!world.noCollision(this, this.getBoundingBox(), true) && this.getY() < (double) (world.getMaxBuildHeight() - 1)) { // Paper - make sure this loads chunks, we default to NOT loading now
@@ -525,7 +525,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
 -            }
 +    }
 +
-+    // ShreddedPaper start - run on region's thread
++    // Confetti start - run on region's thread
 +    private void findSpawnLocation(ServerLevel world, BlockPos blockposition, int i, int i1, int j1, int k1, int l1, Runnable onComplete) {
 +        if (l1 >= i1) {
 +            onComplete.run();
@@ -535,7 +535,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
 +        int i2 = (k1 + j1 * l1) % i1;
 +        int j2 = i2 % (i * 2 + 1);
 +        int k2 = i2 / (i * 2 + 1);
-+        ShreddedPaper.ensureSync(world, new BlockPos(blockposition.getX() + j2 - i, 0, blockposition.getZ() + k2 - i), () -> {
++        Confetti.ensureSync(world, new BlockPos(blockposition.getX() + j2 - i, 0, blockposition.getZ() + k2 - i), () -> {
 +            BlockPos blockposition1 = PlayerRespawnLogic.getOverworldRespawnPos(world, blockposition.getX() + j2 - i, blockposition.getZ() + k2 - i);
 +
 +            if (blockposition1 != null) {
@@ -549,7 +549,7 @@ index 4a29e90ff2a0fe9c5be094400d79ab89e61c437d..ca36526379158b027b3ccebb78c0a0f4
 +            this.findSpawnLocation(world, blockposition, i, i1, j1, k1, l1 + 1, onComplete);
 +        });
      }
-+    // ShreddedPaper end
++    // Confetti end
  
      private int getCoprime(int horizontalSpawnArea) {
          return horizontalSpawnArea <= 16 ? horizontalSpawnArea - 1 : 17;
@@ -562,8 +562,8 @@ index dcc3cb2c476831d6093928ce0a14424634b100ec..efd4456c59c51862ffaf0c17d5b49514
  import java.util.Objects;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.Confetti;
++import com.vulpeslab.confetti.region.RegionPos;
 +import io.papermc.paper.util.TickThread;
  import net.minecraft.ChatFormatting;
  import net.minecraft.CrashReport;
@@ -573,7 +573,7 @@ index dcc3cb2c476831d6093928ce0a14424634b100ec..efd4456c59c51862ffaf0c17d5b49514
          } else if (!this.isSingleplayerOwner()) {
              // Paper start - This needs to be handled on the main thread for plugins
 -            server.submit(() -> {
-+            ShreddedPaper.runSync(this.player, () -> { // ShreddedPaper - run on player's thread
++            Confetti.runSync(this.player, () -> { // Confetti - run on player's thread
                  this.disconnect(ServerCommonPacketListenerImpl.TIMEOUT_DISCONNECTION_MESSAGE, org.bukkit.event.player.PlayerKickEvent.Cause.TIMEOUT); // Paper - kick event cause
              });
              // Paper end - This needs to be handled on the main thread for plugins
@@ -582,7 +582,7 @@ index dcc3cb2c476831d6093928ce0a14424634b100ec..efd4456c59c51862ffaf0c17d5b49514
              return;
          }
 -        if (!this.cserver.isPrimaryThread()) {
-+        if (!TickThread.isTickThreadFor(this.player)) { // ShreddedPaper - run on player's thread
++        if (!TickThread.isTickThreadFor(this.player)) { // Confetti - run on player's thread
              Waitable waitable = new Waitable() {
                  @Override
                  protected Object evaluate() {
@@ -591,16 +591,16 @@ index dcc3cb2c476831d6093928ce0a14424634b100ec..efd4456c59c51862ffaf0c17d5b49514
              };
  
 -            this.server.processQueue.add(waitable);
-+            // ShreddedPaper start - run on player's thread
++            // Confetti start - run on player's thread
 +            if (TickThread.isTickThread()) {
 +                this.player.serverLevel().chunkSource.tickingRegions.execute(RegionPos.forChunk(this.player.chunkPosition()), waitable);
 +            } else {
-+                ShreddedPaper.runSync(this.player, waitable); // this.server.processQueue.add(waitable);
++                Confetti.runSync(this.player, waitable); // this.server.processQueue.add(waitable);
 +            }
-+            // ShreddedPaper end - run on player's thread
++            // Confetti end - run on player's thread
  
              try {
-+                if (TickThread.isTickThread()) this.player.serverLevel().chunkSource.mainThreadProcessor.managedBlock(waitable::isDone); // ShreddedPaper - don't block when waiting
++                if (TickThread.isTickThread()) this.player.serverLevel().chunkSource.mainThreadProcessor.managedBlock(waitable::isDone); // Confetti - don't block when waiting
                  waitable.get();
              } catch (InterruptedException e) {
                  Thread.currentThread().interrupt();
@@ -612,7 +612,7 @@ index 176e54f1c5f4feb98bee8876c304f6e248909e9c..ca7895a57139352d2f1c522dc7b64b62
  import com.mojang.brigadier.StringReader;
  import com.mojang.brigadier.suggestion.Suggestions;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap.Entry;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
  import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
@@ -620,11 +620,11 @@ index 176e54f1c5f4feb98bee8876c304f6e248909e9c..ca7895a57139352d2f1c522dc7b64b62
              this.processedDisconnect = true;
          }
          // CraftBukkit end
-+        player.getBukkitEntity().taskScheduler.schedule(e -> { // ShreddedPaper - run on player's thread
++        player.getBukkitEntity().taskScheduler.schedule(e -> { // Confetti - run on player's thread
          ServerGamePacketListenerImpl.LOGGER.info("{} lost connection: {}", this.player.getName().getString(), reason.getString());
          this.removePlayerFromWorld(quitMessage); // Paper - Fix kick event leave message not being sent
          super.onDisconnect(reason, quitMessage); // Paper - Fix kick event leave message not being sent
-+        }, e -> LOGGER.error("Failed to run disconnect task for player {}", player.getName().getString(), new Exception("Disconnect task retired")), 1); // ShreddedPaper - run on player's thread
++        }, e -> LOGGER.error("Failed to run disconnect task for player {}", player.getName().getString(), new Exception("Disconnect task retired")), 1); // Confetti - run on player's thread
      }
  
      // Paper start - Fix kick event leave message not being sent
@@ -633,7 +633,7 @@ index 176e54f1c5f4feb98bee8876c304f6e248909e9c..ca7895a57139352d2f1c522dc7b64b62
              // CraftBukkit start
              if (sync) {
 -                this.server.execute(runnable);
-+                ShreddedPaper.runSync(player, runnable); // ShreddedPaper - run on player's thread
++                Confetti.runSync(player, runnable); // Confetti - run on player's thread
              } else {
                  runnable.run();
              }
@@ -645,7 +645,7 @@ index b863f6fe65c796a1d3102cc3eddb5d6c5becd3ac..900891527ca401858d9c2678ae154928
  import org.bukkit.event.player.PlayerRespawnEvent;
  import org.bukkit.event.player.PlayerRespawnEvent.RespawnReason;
  import org.bukkit.event.player.PlayerSpawnChangeEvent;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  // CraftBukkit end
  
  public abstract class PlayerList {
@@ -653,20 +653,20 @@ index b863f6fe65c796a1d3102cc3eddb5d6c5becd3ac..900891527ca401858d9c2678ae154928
              player.spawnReason = org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT; // set Player SpawnReason to DEFAULT on first login
              // Paper start - reset to main world spawn if first spawn or invalid world
          }
-+        // ShreddedPaper start - join the region's thread
++        // Confetti start - join the region's thread
 +        String finalS = s;
 +        Runnable onComplete = () -> placeNewPlayer2(connection, player, clientData, worldserver1, optional, finalS);
          if (optional.isEmpty() || invalidPlayerWorld[0]) {
              // Paper end - reset to main world spawn if first spawn or invalid world
 -            player.fudgeSpawnLocation(worldserver1); // Paper - Don't move existing players to world spawn
-+            player.fudgeSpawnLocation(worldserver1, onComplete); // Paper - Don't move existing players to world spawn // ShreddedPaper - join the region's thread
++            player.fudgeSpawnLocation(worldserver1, onComplete); // Paper - Don't move existing players to world spawn // Confetti - join the region's thread
 +        } else {
-+            ShreddedPaper.ensureSync(worldserver1, player.blockPosition(), onComplete);
++            Confetti.ensureSync(worldserver1, player.blockPosition(), onComplete);
          }
 +    }
 +
 +    public void placeNewPlayer2(Connection connection, ServerPlayer player, CommonListenerCookie clientData, ServerLevel worldserver1, Optional<CompoundTag> optional, String s) {
-+        // ShreddedPaper end - join the region's thread
++        // Confetti end - join the region's thread
 +
          // Paper end - Entity#getEntitySpawnReason
          player.setServerLevel(worldserver1);
@@ -675,12 +675,12 @@ index b863f6fe65c796a1d3102cc3eddb5d6c5becd3ac..900891527ca401858d9c2678ae154928
          this.cserver.getPluginManager().callEvent(ev);
  
          Location loc = ev.getSpawnLocation();
-+        // ShreddedPaper start - join the region's thread
-+        ShreddedPaper.ensureSync(loc, () -> placeNewPlayer3(connection, player, clientData, worldserver1, loc, optional, s, s1));
++        // Confetti start - join the region's thread
++        Confetti.ensureSync(loc, () -> placeNewPlayer3(connection, player, clientData, worldserver1, loc, optional, s, s1));
 +    }
 +
 +    public void placeNewPlayer3(Connection connection, ServerPlayer player, CommonListenerCookie clientData, ServerLevel worldserver1, Location loc, Optional<CompoundTag> optional, String s, String s1) {
-+        // ShreddedPaper end - join the region's thread
++        // Confetti end - join the region's thread
 +
          worldserver1 = ((CraftWorld) loc.getWorld()).getHandle();
  
@@ -693,11 +693,11 @@ index 864a213adaef77cf24327ed5de61cd5cae10176d..fa4b350d42a773843f45bfdda5fbc8c5
  
      protected abstract T evaluate();
  
-+    // ShreddedPaper start
++    // Confetti start
 +    public boolean isDone() {
 +        return this.status == Status.FINISHED;
 +    }
-+    // ShreddedPaper end
++    // Confetti end
 +
      public synchronized T get() throws InterruptedException, ExecutionException {
          while (this.status != Status.FINISHED) {

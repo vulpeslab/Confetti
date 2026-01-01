@@ -4,11 +4,11 @@ Date: Sun, 19 May 2024 18:20:55 +0900
 Subject: [PATCH] Chunk unloading
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
 index 0a6cb829f89af7c8c6efd08c5f06051302e1afd4..88fd9775db97671fb40a311e729aee038eaaf6d4 100644
---- a/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelChunkRegion.java
-@@ -2,6 +2,7 @@ package io.multipaper.shreddedpaper.region;
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -2,6 +2,7 @@ package com.vulpeslab.confetti.region;
  
  import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
  import io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet;
@@ -34,11 +34,11 @@ index 0a6cb829f89af7c8c6efd08c5f06051302e1afd4..88fd9775db97671fb40a311e729aee03
 +                ;
      }
  }
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index 824b4535b6afffbef92df8be166e51411415fcf0..a33e68c626464fdb9efe67a2fb911f5d1683c06f 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-@@ -64,6 +64,8 @@ public class ShreddedPaperChunkTicker {
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -64,6 +64,8 @@ public class ConfettiChunkTicker {
  
              while (region.getInternalTaskQueue().executeTask()) ;
  
@@ -54,10 +54,10 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
 @@ -38,6 +38,8 @@ import net.minecraft.world.level.ChunkPos;
  import org.bukkit.plugin.Plugin;
  import org.slf4j.Logger;
- import io.multipaper.shreddedpaper.ShreddedPaper;
-+import io.multipaper.shreddedpaper.region.LevelChunkRegion;
-+import io.multipaper.shreddedpaper.threading.ShreddedPaperTickThread;
- import io.multipaper.shreddedpaper.util.SimpleStampedLock;
+ import com.vulpeslab.confetti.Confetti;
++import com.vulpeslab.confetti.region.LevelChunkRegion;
++import com.vulpeslab.confetti.threading.ConfettiTickThread;
+ import com.vulpeslab.confetti.util.SimpleStampedLock;
  
  import java.io.IOException;
 @@ -71,7 +73,7 @@ public final class ChunkHolderManager {
@@ -65,7 +65,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
      private final ConcurrentHashMap<RegionFileIOThread.ChunkCoordinate, SortedArraySet<Ticket<?>>> tickets = new java.util.concurrent.ConcurrentHashMap<>();
      private final ConcurrentHashMap<RegionFileIOThread.ChunkCoordinate, Long2IntOpenHashMap> sectionToChunkToExpireCount = new java.util.concurrent.ConcurrentHashMap<>();
 -    final ChunkQueue unloadQueue;
-+    // final ChunkQueue unloadQueue; // ShreddedPaper - use our own unload queue
++    // final ChunkQueue unloadQueue; // Confetti - use our own unload queue
  
      public boolean processTicketUpdates(final int posX, final int posZ) {
          final int ticketShift = ThreadedTicketLevelPropagator.SECTION_SHIFT;
@@ -74,7 +74,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
          this.taskScheduler = taskScheduler;
          this.ticketLockArea = new ReentrantAreaLock(taskScheduler.getChunkSystemLockShift());
 -        this.unloadQueue = new ChunkQueue(world.getRegionChunkShift());
-+        // this.unloadQueue = new ChunkQueue(world.getRegionChunkShift()); // ShreddedPaper - use our own unload queue
++        // this.unloadQueue = new ChunkQueue(world.getRegionChunkShift()); // Confetti - use our own unload queue
      }
  
      private final AtomicLong statusUpgradeId = new AtomicLong();
@@ -83,8 +83,8 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
  
      // note: never call while inside the chunk system, this will absolutely break everything
 -    public void processUnloads() {
-+    public void processUnloads(LevelChunkRegion region) { // ShreddedPaper
-+        if (region.unloadQueue.isEmpty()) return; // ShreddedPaper
++    public void processUnloads(LevelChunkRegion region) { // Confetti
++        if (region.unloadQueue.isEmpty()) return; // Confetti
 +
          TickThread.ensureTickThread("Cannot unload chunks off-main");
  
@@ -141,7 +141,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
          this.processTicketUpdates();
  
 -        final int toUnloadCount = Math.max(50, (int)(unloadCountTentative * 0.05));
-+        final int toUnloadCount = 50; // Math.max(50, (int)(unloadCountTentative * 0.05)); // ShreddedPaper
++        final int toUnloadCount = 50; // Math.max(50, (int)(unloadCountTentative * 0.05)); // Confetti
          int processedCount = 0;
  
 -        for (final ChunkQueue.SectionToUnload sectionRef : unloadSectionsForRegion) {
@@ -151,8 +151,8 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
  
 -            final int sectionLowerX = sectionRef.sectionX() << sectionShift;
 -            final int sectionLowerZ = sectionRef.sectionZ() << sectionShift;
-+            final int sectionLowerX = region.getRegionPos().getLowerChunkX(); // sectionRef.sectionX() << sectionShift; // ShreddedPaper
-+            final int sectionLowerZ = region.getRegionPos().getLowerChunkZ(); // sectionRef.sectionZ() << sectionShift; // ShreddedPaper
++            final int sectionLowerX = region.getRegionPos().getLowerChunkX(); // sectionRef.sectionX() << sectionShift; // Confetti
++            final int sectionLowerZ = region.getRegionPos().getLowerChunkZ(); // sectionRef.sectionZ() << sectionShift; // Confetti
  
              // stage 1: set up for stage 2 while holding critical locks
              ReentrantAreaLock.Node ticketLock = this.ticketLockArea.lock(sectionLowerX, sectionLowerZ);
@@ -192,7 +192,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
 -                                throw new IllegalStateException();
 -                            }
 -                            stage1.add(holder);
-+                    // ShreddedPaper start
++                    // Confetti start
 +                    while (processedCount < toUnloadCount && !region.unloadQueue.isEmpty()) {
 +                        final NewChunkHolder holder = this.chunkHolders.get(region.unloadQueue.removeFirstLong());
 +                        if (holder == null) {
@@ -201,7 +201,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
 +                        stage1.add(holder);
 +                        processedCount++;
                      }
-+                    // ShreddedPaper end
++                    // Confetti end
 +//                    final ChunkQueue.UnloadSection section
 +//                        = this.unloadQueue.getSectionUnsynchronized(sectionRef.sectionX(), sectionRef.sectionZ());
 +//
@@ -263,7 +263,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
  
          final JsonArray unloadQueue = new JsonArray();
 -        ret.add("unload_queue", unloadQueue);
-+//        ret.add("unload_queue", unloadQueue); // ShreddedPaper - removed unloadQueue
++//        ret.add("unload_queue", unloadQueue); // Confetti - removed unloadQueue
          ret.addProperty("lock_shift", Integer.valueOf(this.taskScheduler.getChunkSystemLockShift()));
          ret.addProperty("ticket_shift", Integer.valueOf(ThreadedTicketLevelPropagator.SECTION_SHIFT));
          ret.addProperty("region_shift", Integer.valueOf(this.world.getRegionChunkShift()));
@@ -288,7 +288,7 @@ index bb31681d91f54c7d4e242579081f64dfcf481340..758c155c23d95c3cc952cb14f864c703
 -                coordinateJson.addProperty("chunkZ", Integer.valueOf(CoordinateUtils.getChunkZ(coordinate)));
 -            }
 -        }
-+//        for (final ChunkQueue.SectionToUnload section : this.unloadQueue.retrieveForAllRegions()) { // ShreddedPaper - removed unloadQueue
++//        for (final ChunkQueue.SectionToUnload section : this.unloadQueue.retrieveForAllRegions()) { // Confetti - removed unloadQueue
 +//            final JsonObject sectionJson = new JsonObject();
 +//            unloadQueue.add(sectionJson);
 +//            sectionJson.addProperty("sectionX", section.sectionX());
@@ -320,7 +320,7 @@ index 47e9d18a4c4981e0b561eeaf52bf6e5bec102680..e6d0b0250d058e60a7ae7a22770f8a18
  import net.minecraft.world.level.chunk.storage.ChunkSerializer;
  import net.minecraft.world.level.chunk.storage.EntityStorage;
  import org.slf4j.Logger;
-+import io.multipaper.shreddedpaper.region.RegionPos;
++import com.vulpeslab.confetti.region.RegionPos;
 +
  import java.lang.invoke.VarHandle;
  import java.util.ArrayList;
@@ -337,11 +337,11 @@ index 47e9d18a4c4981e0b561eeaf52bf6e5bec102680..e6d0b0250d058e60a7ae7a22770f8a18
          if (this.isSafeToUnload() == null) {
              // ensure in unload queue
 -            this.scheduler.chunkHolderManager.unloadQueue.addChunk(this.chunkX, this.chunkZ);
-+            world.chunkSource.tickingRegions.getOrCreate(RegionPos.forChunk(vanillaChunkHolder.pos)).unloadQueue.add(vanillaChunkHolder.pos.longKey); // this.scheduler.chunkHolderManager.unloadQueue.addChunk(this.chunkX, this.chunkZ); // ShreddedPaper
++            world.chunkSource.tickingRegions.getOrCreate(RegionPos.forChunk(vanillaChunkHolder.pos)).unloadQueue.add(vanillaChunkHolder.pos.longKey); // this.scheduler.chunkHolderManager.unloadQueue.addChunk(this.chunkX, this.chunkZ); // Confetti
          } else {
              // ensure not in unload queue
 -            this.scheduler.chunkHolderManager.unloadQueue.removeChunk(this.chunkX, this.chunkZ);
-+            Optional.ofNullable(world.chunkSource.tickingRegions.get(RegionPos.forChunk(vanillaChunkHolder.pos))).ifPresent(v -> v.unloadQueue.remove(vanillaChunkHolder.pos.longKey)); // this.scheduler.chunkHolderManager.unloadQueue.removeChunk(this.chunkX, this.chunkZ); // ShreddedPaper
++            Optional.ofNullable(world.chunkSource.tickingRegions.get(RegionPos.forChunk(vanillaChunkHolder.pos))).ifPresent(v -> v.unloadQueue.remove(vanillaChunkHolder.pos.longKey)); // this.scheduler.chunkHolderManager.unloadQueue.removeChunk(this.chunkX, this.chunkZ); // Confetti
          }
      }
  
@@ -354,7 +354,7 @@ index 5e856f53652658bd4c99ff9e61590fe94dcd8816..29613c4d48f90c5e355a8b4f9b76c459
  
      private void processUnloads(BooleanSupplier shouldKeepTicking) {
 -        this.level.chunkTaskScheduler.chunkHolderManager.processUnloads(); // Paper - rewrite chunk system
-+        // this.level.chunkTaskScheduler.chunkHolderManager.processUnloads(); // Paper - rewrite chunk system // ShreddedPaper - we unload chunks on the chunk thread
++        // this.level.chunkTaskScheduler.chunkHolderManager.processUnloads(); // Paper - rewrite chunk system // Confetti - we unload chunks on the chunk thread
  
      }
  

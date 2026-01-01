@@ -4,13 +4,13 @@ Date: Sun, 5 May 2024 01:31:47 +0900
 Subject: [PATCH] Thread-safe NeigbhorUpdater
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/PerThreadNeighborUpdater.java b/src/main/java/io/multipaper/shreddedpaper/threading/PerThreadNeighborUpdater.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/PerThreadNeighborUpdater.java b/src/main/java/com/vulpeslab/confetti/threading/PerThreadNeighborUpdater.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..e01ca0d4a18a5cea678d0fd4809291f6b7bdc731
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/PerThreadNeighborUpdater.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/PerThreadNeighborUpdater.java
 @@ -0,0 +1,44 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.core.Direction;
@@ -62,7 +62,7 @@ index 5e04a2cc65eca2d0cc20b1580b3d7518010f1e78..adf6379f1ebd7ead6368d7b58f60bf79
  import org.bukkit.craftbukkit.util.CraftSpawnCategory;
  import org.bukkit.entity.SpawnCategory;
  import org.bukkit.event.block.BlockPhysicsEvent;
-+import io.multipaper.shreddedpaper.threading.PerThreadNeighborUpdater;
++import com.vulpeslab.confetti.threading.PerThreadNeighborUpdater;
  // CraftBukkit end
  
  public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -71,7 +71,7 @@ index 5e04a2cc65eca2d0cc20b1580b3d7518010f1e78..adf6379f1ebd7ead6368d7b58f60bf79
          this.biomeManager = new BiomeManager(this, i);
          this.isDebug = flag1;
 -        this.neighborUpdater = new CollectingNeighborUpdater(this, j);
-+        this.neighborUpdater = new PerThreadNeighborUpdater(() -> new CollectingNeighborUpdater(this, j)); // ShreddedPaper - thread-safe
++        this.neighborUpdater = new PerThreadNeighborUpdater(() -> new CollectingNeighborUpdater(this, j)); // Confetti - thread-safe
          this.registryAccess = iregistrycustom;
          this.damageSources = new DamageSources(iregistrycustom);
          // CraftBukkit start

@@ -13,7 +13,7 @@ index 7dae2a7c759fc3e004f806c59e083f52c3a460b2..4c7b3c900f7fceafe34e2da34e7060e3
                  this.setUnderLavaMovement();
              } else {
 -                this.applyGravity();
-+                if (!this.onGround()) this.applyGravity(); // ShreddedPaper - only apply gravity if not on ground
++                if (!this.onGround()) this.applyGravity(); // Confetti - only apply gravity if not on ground
              }
  
              if (this.level().isClientSide) {

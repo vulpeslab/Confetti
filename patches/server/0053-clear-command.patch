@@ -15,7 +15,7 @@ index 4e6171ca870649114d4c7460baad2982173da09e..f3efba187cfb35e08458de59a171c82b
 +import java.util.concurrent.CompletableFuture;
  import java.util.function.Predicate;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.commands.CommandBuildContext;
  import net.minecraft.commands.CommandSourceStack;
  import net.minecraft.commands.Commands;
@@ -26,16 +26,16 @@ index 4e6171ca870649114d4c7460baad2982173da09e..f3efba187cfb35e08458de59a171c82b
 -            i += serverPlayer.getInventory().clearOrCountMatchingItems(item, maxCount, serverPlayer.inventoryMenu.getCraftSlots());
 -            serverPlayer.containerMenu.broadcastChanges();
 -            serverPlayer.inventoryMenu.slotsChanged(serverPlayer.getInventory());
-+            // ShreddedPaper start - run on correct thread
++            // Confetti start - run on correct thread
 +            CompletableFuture<Integer> future = new CompletableFuture<>();
-+            ShreddedPaper.ensureSync(serverPlayer, () -> {
++            Confetti.ensureSync(serverPlayer, () -> {
 +                int j = serverPlayer.getInventory().clearOrCountMatchingItems(item, maxCount, serverPlayer.inventoryMenu.getCraftSlots());
 +                serverPlayer.containerMenu.broadcastChanges();
 +                serverPlayer.inventoryMenu.slotsChanged(serverPlayer.getInventory());
 +                future.complete(j);
 +            });
-+            i += future.getNow(1); // ShreddedPaper - default to 1 if player in on a different thread
-+            // ShreddedPaper end - run on correct thread
++            i += future.getNow(1); // Confetti - default to 1 if player in on a different thread
++            // Confetti end - run on correct thread
          }
  
          if (i == 0) {

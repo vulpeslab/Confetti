@@ -13,7 +13,7 @@ index e6bfcc50cdf728216084bc00a5bb8b6b3b8f72e4..14fc959b1ec12a0edb67b4fc528fc258
  import java.util.Date;
  import javax.annotation.Nullable;
 +
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
@@ -27,14 +27,14 @@ index e6bfcc50cdf728216084bc00a5bb8b6b3b8f72e4..14fc959b1ec12a0edb67b4fc528fc258
      @Override
      public void sendSystemMessage(Component message) {
          if (this.trackOutput) {
-+            ShreddedPaper.ensureSync(this.getLevel(), new BlockPos((int) this.getPosition().x(), (int) this.getPosition().y(), (int) this.getPosition().z()), () -> { // ShreddedPaper - run sync
++            Confetti.ensureSync(this.getLevel(), new BlockPos((int) this.getPosition().x(), (int) this.getPosition().y(), (int) this.getPosition().z()), () -> { // Confetti - run sync
              org.spigotmc.AsyncCatcher.catchOp("sendSystemMessage to a command block"); // Paper - Don't broadcast messages to command blocks
              SimpleDateFormat simpledateformat = BaseCommandBlock.TIME_FORMAT;
              Date date = new Date();
  
              this.lastOutput = Component.literal("[" + simpledateformat.format(date) + "] ").append(message);
              this.onUpdated();
-+            }); // ShreddedPaper - run sync
++            }); // Confetti - run sync
          }
  
      }

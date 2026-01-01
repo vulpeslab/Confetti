@@ -12,7 +12,7 @@ index d2494f38d1208e2e21daf7c45ccbfe07f3e02f7c..bb28c13015a2aa7622d2f762dc797eb0
  import com.google.common.collect.Queues;
  import com.google.common.util.concurrent.ThreadFactoryBuilder;
  import com.mojang.logging.LogUtils;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
  import io.netty.bootstrap.Bootstrap;
  import io.netty.channel.Channel;
  import io.netty.channel.ChannelException;
@@ -28,14 +28,14 @@ index d2494f38d1208e2e21daf7c45ccbfe07f3e02f7c..bb28c13015a2aa7622d2f762dc797eb0
          if (this.channel.eventLoop().inEventLoop()) {
              this.doSendPacket(packet, callbacks, flush);
          } else {
-+            // ShreddedPaper start - Use lazyExecute if we aren't flushing
-+            if (ShreddedPaperConfiguration.get().optimizations.useLazyExecuteWhenNotFlushing && !flush) {
++            // Confetti start - Use lazyExecute if we aren't flushing
++            if (ConfettiConfiguration.get().optimizations.useLazyExecuteWhenNotFlushing && !flush) {
 +                ((AbstractEventExecutor) this.channel.eventLoop()).lazyExecute(() -> {
 +                    this.doSendPacket(packet, callbacks, flush);
 +                });
 +                return;
 +            }
-+            // ShreddedPaper end - Use lazyExecute if we aren't flushing
++            // Confetti end - Use lazyExecute if we aren't flushing
              this.channel.eventLoop().execute(() -> {
                  this.doSendPacket(packet, callbacks, flush);
              });

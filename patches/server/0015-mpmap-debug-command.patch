@@ -4,13 +4,13 @@ Date: Tue, 21 May 2024 23:54:30 +0900
 Subject: [PATCH] mpmap debug command
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/commands/MPMapCommand.java b/src/main/java/io/multipaper/shreddedpaper/commands/MPMapCommand.java
+diff --git a/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java b/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..6fad03268943c9e4d4a6be3afac14f43da5e83d2
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/commands/MPMapCommand.java
++++ b/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
 @@ -0,0 +1,48 @@
-+package io.multipaper.shreddedpaper.commands;
++package com.vulpeslab.confetti.commands;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
 +import net.kyori.adventure.text.format.NamedTextColor;
@@ -19,13 +19,13 @@ index 0000000000000000000000000000000000000000..6fad03268943c9e4d4a6be3afac14f43
 +import net.minecraft.world.level.ChunkPos;
 +import org.bukkit.craftbukkit.entity.CraftPlayer;
 +import org.bukkit.entity.Player;
-+import io.multipaper.shreddedpaper.ShreddedPaper;
++import com.vulpeslab.confetti.Confetti;
 +
 +public class MPMapCommand extends MapCommandBase {
 +
 +    public MPMapCommand(String command) {
 +        super(command);
-+        setPermission("shreddedpaper.command.mpmap");
++        setPermission("confetti.command.mpmap");
 +    }
 +
 +    @Override
@@ -58,13 +58,13 @@ index 0000000000000000000000000000000000000000..6fad03268943c9e4d4a6be3afac14f43
 +        return new ChunkStatus(color, name);
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/commands/MapCommandBase.java b/src/main/java/io/multipaper/shreddedpaper/commands/MapCommandBase.java
+diff --git a/src/main/java/com/vulpeslab/confetti/commands/MapCommandBase.java b/src/main/java/com/vulpeslab/confetti/commands/MapCommandBase.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..da00cc8e1cc540b5d042996837b4f546b2b361cb
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/commands/MapCommandBase.java
++++ b/src/main/java/com/vulpeslab/confetti/commands/MapCommandBase.java
 @@ -0,0 +1,93 @@
-+package io.multipaper.shreddedpaper.commands;
++package com.vulpeslab.confetti.commands;
 +
 +import net.kyori.adventure.text.Component;
 +import net.kyori.adventure.text.event.HoverEvent;
@@ -157,13 +157,13 @@ index 0000000000000000000000000000000000000000..da00cc8e1cc540b5d042996837b4f546
 +
 +    protected record ChunkStatus(NamedTextColor color, @Nullable String description) {};
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/commands/ShreddedPaperCommands.java b/src/main/java/io/multipaper/shreddedpaper/commands/ShreddedPaperCommands.java
+diff --git a/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java b/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..4dd39bce7ed93bf96cc893cc5e3cf539f44763fe
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/commands/ShreddedPaperCommands.java
++++ b/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java
 @@ -0,0 +1,26 @@
-+package io.multipaper.shreddedpaper.commands;
++package com.vulpeslab.confetti.commands;
 +
 +import net.minecraft.server.MinecraftServer;
 +import org.bukkit.command.Command;
@@ -171,7 +171,7 @@ index 0000000000000000000000000000000000000000..4dd39bce7ed93bf96cc893cc5e3cf539
 +import java.util.HashMap;
 +import java.util.Map;
 +
-+public class ShreddedPaperCommands {
++public class ConfettiCommands {
 +
 +    private static final Map<String, Command> COMMANDS = new HashMap<>();
 +    static {
@@ -184,26 +184,26 @@ index 0000000000000000000000000000000000000000..4dd39bce7ed93bf96cc893cc5e3cf539
 +
 +    public static void registerCommands(final MinecraftServer server) {
 +        COMMANDS.forEach((s, command) -> {
-+            server.server.getCommandMap().register(s, "shreddedpaper", command);
++            server.server.getCommandMap().register(s, "confetti", command);
 +        });
 +    }
 +
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java b/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java
+diff --git a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 index 53dcfbdf38f007fc86064ac1a495288d5f25f598..89436f82a49d69f3bd21195bf44dfc4fa9bd4df7 100644
---- a/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/permissions/ShreddedPaperCommandPermissions.java
+--- a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
++++ b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 @@ -1,6 +1,7 @@
- package io.multipaper.shreddedpaper.permissions;
+ package com.vulpeslab.confetti.permissions;
  
  import org.bukkit.permissions.Permission;
 +import org.bukkit.permissions.PermissionDefault;
  import org.bukkit.util.permissions.DefaultPermissions;
  import org.jetbrains.annotations.NotNull;
  
-@@ -11,6 +12,7 @@ public class ShreddedPaperCommandPermissions {
+@@ -11,6 +12,7 @@ public class ConfettiCommandPermissions {
      public static void registerPermissions(@NotNull Permission parent) {
-         Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all ShreddedPaper commands", parent);
+         Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all Confetti commands", parent);
  
 +        DefaultPermissions.registerPermission(PREFIX + "mpmap", "MPMap command", PermissionDefault.TRUE, commands);
  
@@ -217,7 +217,7 @@ index 60444929e3e0fb6e53f6df2b41cbc52222d26600..d281fe5f75f6f99f869fa3cc8da4f1ff
  import org.bukkit.event.server.ServerCommandEvent;
  import org.bukkit.craftbukkit.util.Waitable; // Paper
  import org.bukkit.event.server.RemoteServerCommandEvent;
-+import io.multipaper.shreddedpaper.commands.ShreddedPaperCommands;
++import com.vulpeslab.confetti.commands.ConfettiCommands;
  // CraftBukkit end
  
  public class DedicatedServer extends MinecraftServer implements ServerInterface {
@@ -225,7 +225,7 @@ index 60444929e3e0fb6e53f6df2b41cbc52222d26600..d281fe5f75f6f99f869fa3cc8da4f1ff
          }
          org.purpurmc.purpur.PurpurConfig.registerCommands();
          // Purpur end
-+        ShreddedPaperCommands.registerCommands(this); // ShreddedPaper
++        ConfettiCommands.registerCommands(this); // Confetti
          com.destroystokyo.paper.VersionHistoryManager.INSTANCE.getClass(); // Paper - load version history now
          gg.pufferfish.pufferfish.PufferfishConfig.load(); // Pufferfish
          gg.pufferfish.pufferfish.PufferfishCommand.init(); // Pufferfish

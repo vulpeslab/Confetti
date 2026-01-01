@@ -58,7 +58,7 @@ subprojects {
 }
 
 paperweight {
-    serverProject.set(project(":shreddedpaper-server"))
+    serverProject.set(project(":confetti-server"))
 
     remapRepo.set("https://repo.papermc.io/repository/maven-public/")
     decompileRepo.set("https://repo.papermc.io/repository/maven-public/")
@@ -70,11 +70,11 @@ paperweight {
         withStandardPatcher {
             apiSourceDirPath.set("Purpur-API") 
             apiPatchDir.set(layout.projectDirectory.dir("patches/api"))
-            apiOutputDir.set(layout.projectDirectory.dir("shreddedpaper-api"))
+            apiOutputDir.set(layout.projectDirectory.dir("confetti-api"))
 
             serverSourceDirPath.set("Purpur-Server")
             serverPatchDir.set(layout.projectDirectory.dir("patches/server"))
-            serverOutputDir.set(layout.projectDirectory.dir("shreddedpaper-server"))
+            serverOutputDir.set(layout.projectDirectory.dir("confetti-server"))
         }
 
         patchTasks.register("generatedApi") {
@@ -118,7 +118,7 @@ paperweight {
 }
 
 tasks.generateDevelopmentBundle {
-    apiCoordinates.set("io.multipaper.shreddedpaper:shreddedpaper-api")
+    apiCoordinates.set("com.vulpeslab.confetti:confetti-api")
     libraryRepositories.set(
         listOf(
             "https://repo.maven.apache.org/maven2/",

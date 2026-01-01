@@ -13,7 +13,7 @@ index bb28c13015a2aa7622d2f762dc797eb0344400db..51f67289fcf62614a5fd610474ab4235
      public void send(Packet<?> packet, @Nullable PacketSendListener callbacks, boolean flush) {
          // Paper start - Optimize network: Handle oversized packets better
 -        final boolean connected = this.isConnected();
-+        final boolean connected = true || this.isConnected(); // ShreddedPaper - Checking if the player is connected is expensive
++        final boolean connected = true || this.isConnected(); // Confetti - Checking if the player is connected is expensive
          if (!connected && !this.preparing) {
              return;
          }

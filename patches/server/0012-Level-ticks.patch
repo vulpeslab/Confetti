@@ -4,13 +4,13 @@ Date: Fri, 17 May 2024 00:26:43 +0900
 Subject: [PATCH] Level ticks
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/region/LevelTicksRegionProxy.java b/src/main/java/io/multipaper/shreddedpaper/region/LevelTicksRegionProxy.java
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelTicksRegionProxy.java b/src/main/java/com/vulpeslab/confetti/region/LevelTicksRegionProxy.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..051e74363aea1aff0a9d3da4300fca9002369fc3
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/region/LevelTicksRegionProxy.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelTicksRegionProxy.java
 @@ -0,0 +1,114 @@
-+package io.multipaper.shreddedpaper.region;
++package com.vulpeslab.confetti.region;
 +
 +import com.mojang.logging.LogUtils;
 +import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -24,7 +24,7 @@ index 0000000000000000000000000000000000000000..051e74363aea1aff0a9d3da4300fca90
 +import net.minecraft.world.ticks.LevelTicks;
 +import net.minecraft.world.ticks.ScheduledTick;
 +import org.slf4j.Logger;
-+import io.multipaper.shreddedpaper.util.SimpleStampedLock;
++import com.vulpeslab.confetti.util.SimpleStampedLock;
 +
 +import java.util.Optional;
 +import java.util.function.BiConsumer;
@@ -124,11 +124,11 @@ index 0000000000000000000000000000000000000000..051e74363aea1aff0a9d3da4300fca90
 +        return -1;
 +    }
 +}
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 index 97c5021b1728f942b5115884b03832cb2ec667aa..4366fd0455388eb7ed4787991bce01350fce53bb 100644
---- a/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/ShreddedPaperChunkTicker.java
-@@ -74,6 +74,9 @@ public class ShreddedPaperChunkTicker {
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -74,6 +74,9 @@ public class ConfettiChunkTicker {
              region.tickTasks();
  
              if (level.tickRateManager().runsNormally()) {
@@ -146,9 +146,9 @@ index 9d10c5e5c806a92852ce5b4d708929d14f44a9d6..a613cf638c36d46e3ff3230b4cdcf417
  import org.bukkit.event.server.MapInitializeEvent;
  import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
-+import io.multipaper.shreddedpaper.region.LevelTicksRegionProxy;
- import io.multipaper.shreddedpaper.region.RegionPos;
- import io.multipaper.shreddedpaper.threading.ShreddedPaperRegionScheduler;
++import com.vulpeslab.confetti.region.LevelTicksRegionProxy;
+ import com.vulpeslab.confetti.region.RegionPos;
+ import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
  // CraftBukkit end
 @@ -202,8 +203,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      private final SleepStatus sleepStatus;
@@ -156,19 +156,19 @@ index 9d10c5e5c806a92852ce5b4d708929d14f44a9d6..a613cf638c36d46e3ff3230b4cdcf417
      private final PortalForcer portalForcer;
 -    private final LevelTicks<Block> blockTicks;
 -    private final LevelTicks<Fluid> fluidTicks;
-+    public final LevelTicksRegionProxy<Block> blockTicks; // ShreddedPaper
-+    public final LevelTicksRegionProxy<Fluid> fluidTicks; // ShreddedPaper
++    public final LevelTicksRegionProxy<Block> blockTicks; // Confetti
++    public final LevelTicksRegionProxy<Fluid> fluidTicks; // Confetti
      private final PathTypeCache pathTypesByPosCache;
      final Set<Mob> navigatingMobs;
      volatile boolean isUpdatingNavigations;
 @@ -706,8 +707,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
          // CraftBukkit end
-         this.players = new CopyOnWriteArrayList<>(); // ShreddedPaper - thread-safe (players should not be changing worlds often, thus copy-on-write is sufficient)
-         // this.entityTickList = new EntityTickList(); // ShreddedPaper - moved into each region
+         this.players = new CopyOnWriteArrayList<>(); // Confetti - thread-safe (players should not be changing worlds often, thus copy-on-write is sufficient)
+         // this.entityTickList = new EntityTickList(); // Confetti - moved into each region
 -        this.blockTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
 -        this.fluidTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
-+        this.blockTicks = new LevelTicksRegionProxy<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // ShreddedPaper
-+        this.fluidTicks = new LevelTicksRegionProxy<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // ShreddedPaper
++        this.blockTicks = new LevelTicksRegionProxy<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // Confetti
++        this.fluidTicks = new LevelTicksRegionProxy<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // Confetti
          this.pathTypesByPosCache = new PathTypeCache();
          this.navigatingMobs = new ObjectOpenHashSet();
          this.blockEvents = new ObjectLinkedOpenHashSet();
@@ -177,28 +177,28 @@ index 9d10c5e5c806a92852ce5b4d708929d14f44a9d6..a613cf638c36d46e3ff3230b4cdcf417
      }
  
 -    private void tickFluid(BlockPos pos, Fluid fluid) {
-+    public void tickFluid(BlockPos pos, Fluid fluid) { // ShreddedPaper - make public
-+        TickThread.ensureTickThread(this, pos, "Cannot tick fluid outside of tick thread"); // ShreddedPaper
++    public void tickFluid(BlockPos pos, Fluid fluid) { // Confetti - make public
++        TickThread.ensureTickThread(this, pos, "Cannot tick fluid outside of tick thread"); // Confetti
          FluidState fluid1 = this.getFluidState(pos);
  
          if (fluid1.is(fluid)) {
              fluid1.tick(this, pos);
          }
 -        MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick
-+        // MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick // ShreddedPaper - unnecessary now
++        // MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick // Confetti - unnecessary now
  
      }
  
 -    private void tickBlock(BlockPos pos, Block block) {
-+    public void tickBlock(BlockPos pos, Block block) { // ShreddedPaper - make public
-+        TickThread.ensureTickThread(this, pos, "Cannot tick block outside of tick thread"); // ShreddedPaper
++    public void tickBlock(BlockPos pos, Block block) { // Confetti - make public
++        TickThread.ensureTickThread(this, pos, "Cannot tick block outside of tick thread"); // Confetti
          BlockState iblockdata = this.getBlockState(pos);
  
          if (iblockdata.is(block)) {
              iblockdata.tick(this, pos, this.random);
          }
 -        MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick
-+        // MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick // ShreddedPaper - unnecessary now
++        // MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick // Confetti - unnecessary now
  
      }
  
@@ -227,24 +227,24 @@ index 54d13eebc9b01e9d77f51011b7de95b80bc21669..4712c018da6b4b8c6c512f71133b76a1
      }
  
      default void scheduleTick(BlockPos pos, Block block, int delay, TickPriority priority) {
-+        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // ShreddedPaper
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // Confetti
          this.getBlockTicks().schedule(this.createTick(pos, block, delay, priority));
      }
  
      default void scheduleTick(BlockPos pos, Block block, int delay) {
-+        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // ShreddedPaper
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // Confetti
          this.getBlockTicks().schedule(this.createTick(pos, block, delay));
      }
  
      LevelTickAccess<Fluid> getFluidTicks();
  
      default void scheduleTick(BlockPos pos, Fluid fluid, int delay, TickPriority priority) {
-+        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // ShreddedPaper
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // Confetti
          this.getFluidTicks().schedule(this.createTick(pos, fluid, delay, priority));
      }
  
      default void scheduleTick(BlockPos pos, Fluid fluid, int delay) {
-+        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // ShreddedPaper
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // Confetti
          this.getFluidTicks().schedule(this.createTick(pos, fluid, delay));
      }
  
@@ -257,9 +257,9 @@ index a6d62abd3102770652f914b9d697c6d3c2533cfc..5d7aeaa8dc31906713e65808f675830d
          void accept(long chunkPos, LevelChunkTicks<T> chunkTickScheduler);
      }
 +
-+    // ShreddedPaper start
++    // Confetti start
 +    public boolean isEmpty() {
 +        return this.allContainers.isEmpty();
 +    }
-+    // ShreddedPaper end
++    // Confetti end
  }

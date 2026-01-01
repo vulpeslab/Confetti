@@ -4,19 +4,19 @@ Date: Sat, 25 May 2024 19:27:42 +0900
 Subject: [PATCH] Run unsupported plugins in sync
 
 
-diff --git a/src/main/java/io/multipaper/shreddedpaper/threading/SynchronousPluginExecution.java b/src/main/java/io/multipaper/shreddedpaper/threading/SynchronousPluginExecution.java
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/SynchronousPluginExecution.java b/src/main/java/com/vulpeslab/confetti/threading/SynchronousPluginExecution.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..3625ee53f17766aae695c0d9e35d755e331e6c56
 --- /dev/null
-+++ b/src/main/java/io/multipaper/shreddedpaper/threading/SynchronousPluginExecution.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/SynchronousPluginExecution.java
 @@ -0,0 +1,180 @@
-+package io.multipaper.shreddedpaper.threading;
++package com.vulpeslab.confetti.threading;
 +
 +import com.mojang.logging.LogUtils;
 +import io.papermc.paper.util.TickThread;
 +import org.bukkit.plugin.Plugin;
 +import org.slf4j.Logger;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
 +
 +import java.lang.ref.WeakReference;
 +import java.util.ArrayList;
@@ -54,7 +54,7 @@ index 0000000000000000000000000000000000000000..3625ee53f17766aae695c0d9e35d755e
 +    }
 +
 +    public static void execute(Plugin plugin, RunnableWithException runnable) throws Exception {
-+        if (plugin == null || !ShreddedPaperConfiguration.get().multithreading.runUnsupportedPluginsInSync || plugin.getDescription().isFoliaSupported() || TickThread.isShutdownThread()) {
++        if (plugin == null || !ConfettiConfiguration.get().multithreading.runUnsupportedPluginsInSync || plugin.getDescription().isFoliaSupported() || TickThread.isShutdownThread()) {
 +            // Multi-thread safe plugin, run it straight away
 +            runnable.run();
 +            return;
@@ -198,7 +198,7 @@ index e94224ed280247ee69dfdff8dc960f2b8729be33..9025b44a3ef50e95dcbb4351763f550c
  import com.google.common.collect.Lists;
  import io.leangen.geantyref.GenericTypeReflector;
  import io.leangen.geantyref.TypeToken;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
  import io.papermc.paper.plugin.configuration.PluginMeta;
  import io.papermc.paper.plugin.entrypoint.Entrypoint;
  import io.papermc.paper.plugin.entrypoint.LaunchEntryPointHandler;
@@ -218,7 +218,7 @@ index e94224ed280247ee69dfdff8dc960f2b8729be33..9025b44a3ef50e95dcbb4351763f550c
 +
      private static final Component LEGACY_PLUGIN_STAR = Component.text('*', TextColor.color(255, 212, 42)).hoverEvent(LEGACY_PLUGIN_INFO);
 -    private static final Component INFO_ICON_START = Component.text("ℹ ", INFO_COLOR);
-+    private static final Component NON_FOLIA_PLUGIN_STAR = Component.text('⁺', TextColor.color(255, 212, 42)).hoverEvent(NON_FOLIA_PLUGIN_INFO); // ShreddedPaper
++    private static final Component NON_FOLIA_PLUGIN_STAR = Component.text('⁺', TextColor.color(255, 212, 42)).hoverEvent(NON_FOLIA_PLUGIN_INFO); // Confetti
      private static final Component PAPER_HEADER = Component.text("Paper Plugins:", TextColor.color(2, 136, 209));
      private static final Component BUKKIT_HEADER = Component.text("Bukkit Plugins:", TextColor.color(237, 129, 6));
      private static final Component PLUGIN_TICK = Component.text("- ", NamedTextColor.DARK_GRAY);
@@ -226,11 +226,11 @@ index e94224ed280247ee69dfdff8dc960f2b8729be33..9025b44a3ef50e95dcbb4351763f550c
              builder.append(LEGACY_PLUGIN_STAR);
          }
  
-+        // ShreddedPaper start
-+        if (provider instanceof SpigotPluginProvider spigotPluginProvider && ShreddedPaperConfiguration.get().multithreading.threadCount != 1 && !spigotPluginProvider.getMeta().isFoliaSupported()) {
++        // Confetti start
++        if (provider instanceof SpigotPluginProvider spigotPluginProvider && ConfettiConfiguration.get().multithreading.threadCount != 1 && !spigotPluginProvider.getMeta().isFoliaSupported()) {
 +            builder.append(NON_FOLIA_PLUGIN_STAR);
 +        }
-+        // ShreddedPaper end
++        // Confetti end
 +
          String name = provider.getMeta().getName();
          Component pluginName = Component.text(name, fromStatus(provider))
@@ -244,8 +244,8 @@ index 24121a43aeb5e9bce013f30c92dddd15f99736c6..c234deec92e155336078cbbce1f726d8
  import org.bukkit.command.CommandException;
  import org.bukkit.command.CommandSender;
 +import org.bukkit.command.PluginCommand;
-+import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
-+import io.multipaper.shreddedpaper.util.ObjectHolder;
++import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
++import com.vulpeslab.confetti.util.ObjectHolder;
  
  import java.util.Arrays;
  import java.util.List;
@@ -254,14 +254,14 @@ index 24121a43aeb5e9bce013f30c92dddd15f99736c6..c234deec92e155336078cbbce1f726d8
              //try (Timing ignored = this.command.timings.startTiming()) { // Purpur
                  // Note: we don't return the result of target.execute as thats success / failure, we return handled (true) or not handled (false)
 -                this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
-+                // ShreddedPaper start - run unsupported plugins in sync
++                // Confetti start - run unsupported plugins in sync
 +                Runnable runnable = () -> this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
 +                if (this.command instanceof PluginCommand pluginCommand) {
 +                    SynchronousPluginExecution.executeNoException(pluginCommand.getPlugin(), runnable::run);
 +                } else {
 +                    runnable.run();
 +                }
-+                // ShreddedPaper end
++                // Confetti end
              //} // Purpur
  
              // return true as command was handled
@@ -270,11 +270,11 @@ index 24121a43aeb5e9bce013f30c92dddd15f99736c6..c234deec92e155336078cbbce1f726d8
              String[] args = builder.getRemaining().split(" ", -1); // We need the command included -- Set limit to -1, allow for trailing spaces
  
 -            List<String> results = null;
-+            ObjectHolder<List<String>> results = new ObjectHolder<>(); // ShreddedPaper
++            ObjectHolder<List<String>> results = new ObjectHolder<>(); // Confetti
              Location pos = context.getSource().getLocation();
              try {
 -                results = this.command.tabComplete(sender, this.literal, args, pos.clone());
-+                // ShreddedPaper start - run unsupported plugins in sync
++                // Confetti start - run unsupported plugins in sync
 +                try {
 +                    SynchronousPluginExecution.RunnableWithException runnable = () -> results.value(this.command.tabComplete(sender, this.literal, args, pos.clone()));
 +                    if (this.command instanceof PluginCommand pluginCommand) {
@@ -287,7 +287,7 @@ index 24121a43aeb5e9bce013f30c92dddd15f99736c6..c234deec92e155336078cbbce1f726d8
 +                } catch (Exception e) {
 +                    throw new RuntimeException(e);
 +                }
-+                // ShreddedPaper end
++                // Confetti end
              } catch (CommandException ex) {
                  sender.sendMessage(ChatColor.RED + "An internal error occurred while attempting to tab-complete this command");
                  Bukkit.getServer().getLogger().log(Level.SEVERE, "Exception when " + sender.getName() + " attempted to tab complete " + builder.getRemaining(), ex);
@@ -295,18 +295,18 @@ index 24121a43aeb5e9bce013f30c92dddd15f99736c6..c234deec92e155336078cbbce1f726d8
  
              if (sender instanceof final Player player) {
 -                TabCompleteEvent tabEvent = new org.bukkit.event.server.TabCompleteEvent(player, builder.getInput(), results != null ? results : new ArrayList<>(), true, pos); // Paper - AsyncTabCompleteEvent
-+                TabCompleteEvent tabEvent = new org.bukkit.event.server.TabCompleteEvent(player, builder.getInput(), results.value() != null ? results.value() : new ArrayList<>(), true, pos); // Paper - AsyncTabCompleteEvent // ShreddedPaper
++                TabCompleteEvent tabEvent = new org.bukkit.event.server.TabCompleteEvent(player, builder.getInput(), results.value() != null ? results.value() : new ArrayList<>(), true, pos); // Paper - AsyncTabCompleteEvent // Confetti
                  if (!tabEvent.callEvent()) {
 -                    results = null;
-+                    results.value(null); // ShreddedPaper
++                    results.value(null); // Confetti
                  } else {
 -                    results = tabEvent.getCompletions();
-+                    results.value(tabEvent.getCompletions()); // ShreddedPaper
++                    results.value(tabEvent.getCompletions()); // Confetti
                  }
              }
              // Paper end
 -            if (results == null) {
-+            if (results.value() == null) { // ShreddedPaper
++            if (results.value() == null) { // Confetti
                  return builder.buildFuture();
              }
  
@@ -314,7 +314,7 @@ index 24121a43aeb5e9bce013f30c92dddd15f99736c6..c234deec92e155336078cbbce1f726d8
              builder = builder.createOffset(builder.getInput().lastIndexOf(' ') + 1);
  
 -            for (String s : results) {
-+            for (String s : results.value()) { // ShreddedPaper
++            for (String s : results.value()) { // Confetti
                  builder.suggest(s);
              }
  
@@ -326,8 +326,8 @@ index 2c82a48867ab347f21822576baa0368273242f82..143638f994a842472e827cb9b4efc160
  import org.bukkit.plugin.Plugin;
  import org.bukkit.plugin.RegisteredListener;
  import org.jetbrains.annotations.NotNull;
-+import io.multipaper.shreddedpaper.config.ShreddedPaperConfiguration;
-+import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
++import com.vulpeslab.confetti.config.ConfettiConfiguration;
++import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
  
  import java.lang.reflect.Method;
  import java.util.Arrays;
@@ -336,7 +336,7 @@ index 2c82a48867ab347f21822576baa0368273242f82..143638f994a842472e827cb9b4efc160
  
              try {
 -                registration.callEvent(event);
-+                // ShreddedPaper start - run unsupported plugins in sync
++                // Confetti start - run unsupported plugins in sync
 +                if (event.isAsynchronous()) {
 +                    registration.callEvent(event);
 +                } else {
@@ -344,7 +344,7 @@ index 2c82a48867ab347f21822576baa0368273242f82..143638f994a842472e827cb9b4efc160
 +                        registration.callEvent(event);
 +                    });
 +                }
-+                // ShreddedPaper end - run unsupported plugins in sync
++                // Confetti end - run unsupported plugins in sync
              } catch (AuthorNagException ex) {
                  Plugin plugin = registration.getPlugin();
  
@@ -354,9 +354,9 @@ index 91a7816968b3eb7ec2bc471a328d4b75eec09770..0ab40a285b72ab548a575edc38554228
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableMap;
  import com.mojang.datafixers.util.Pair;
- import io.multipaper.shreddedpaper.ShreddedPaper;
- import io.multipaper.shreddedpaper.region.RegionPos;
-+import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
+ import com.vulpeslab.confetti.Confetti;
+ import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
  import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
  import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -364,14 +364,14 @@ index 91a7816968b3eb7ec2bc471a328d4b75eec09770..0ab40a285b72ab548a575edc38554228
          }
  
          java.util.concurrent.CompletableFuture<Chunk> ret = new java.util.concurrent.CompletableFuture<>();
-+        Plugin plugin = SynchronousPluginExecution.getCurrentPlugin(); // ShreddedPaper - synchronous plugin execution
++        Plugin plugin = SynchronousPluginExecution.getCurrentPlugin(); // Confetti - synchronous plugin execution
  
          io.papermc.paper.chunk.system.ChunkSystem.scheduleChunkLoad(this.getHandle(), x, z, gen, ChunkStatus.FULL, true, priority, (c) -> {
-             if (c != null) this.addTicket(x, z); // Paper // ShreddedPaper - add the ticket before scheduling on correct thread
-             ShreddedPaper.ensureSync(this.getHandle(), c.getPos(), () -> { // ShreddedPaper - ensure on correct thread
+             if (c != null) this.addTicket(x, z); // Paper // Confetti - add the ticket before scheduling on correct thread
+             Confetti.ensureSync(this.getHandle(), c.getPos(), () -> { // Confetti - ensure on correct thread
                  net.minecraft.world.level.chunk.LevelChunk chunk = (net.minecraft.world.level.chunk.LevelChunk)c;
 -                ret.complete(chunk == null ? null : new CraftChunk(chunk));
-+                SynchronousPluginExecution.executeNoException(plugin, () -> ret.complete(chunk == null ? null : new CraftChunk(chunk))); // ShreddedPaper - synchronous plugin execution
++                SynchronousPluginExecution.executeNoException(plugin, () -> ret.complete(chunk == null ? null : new CraftChunk(chunk))); // Confetti - synchronous plugin execution
              });
          });
  
@@ -382,8 +382,8 @@ index 8bdb226269e931d31d3876a10f24f4e7810d4aae..99fad810a700952b15f71ca89d984ccd
 @@ -10,6 +10,7 @@ import java.util.Set;
  import java.util.UUID;
  
- import io.multipaper.shreddedpaper.ShreddedPaper;
-+import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
+ import com.vulpeslab.confetti.Confetti;
++import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.Tag;
  import net.minecraft.network.chat.Component;
@@ -391,23 +391,23 @@ index 8bdb226269e931d31d3876a10f24f4e7810d4aae..99fad810a700952b15f71ca89d984ccd
  
          net.minecraft.server.level.ServerLevel world = ((CraftWorld)locationClone.getWorld()).getHandle();
          java.util.concurrent.CompletableFuture<Boolean> ret = new java.util.concurrent.CompletableFuture<>();
-+        Plugin plugin = SynchronousPluginExecution.getCurrentPlugin(); // ShreddedPaper - synchronous plugin execution
++        Plugin plugin = SynchronousPluginExecution.getCurrentPlugin(); // Confetti - synchronous plugin execution
  
-         // ShreddedPaper start - run sync if possible
+         // Confetti start - run sync if possible
          ChunkPos fromChunkPos = this.getHandle().chunkPosition();
 @@ -1100,13 +1102,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
                          world, RegionPos.forLocation(locationClone),
-                         () -> { // ShreddedPaper - Run teleports on the correct threads
+                         () -> { // Confetti - Run teleports on the correct threads
                      try {
 -                        ret.complete(CraftEntity.this.teleport(locationClone, cause, teleportFlags) ? Boolean.TRUE : Boolean.FALSE);
-+                        SynchronousPluginExecution.executeNoException(plugin, () -> ret.complete(CraftEntity.this.teleport(locationClone, cause, teleportFlags) ? Boolean.TRUE : Boolean.FALSE)); // ShreddedPaper - synchronous plugin execution
++                        SynchronousPluginExecution.executeNoException(plugin, () -> ret.complete(CraftEntity.this.teleport(locationClone, cause, teleportFlags) ? Boolean.TRUE : Boolean.FALSE)); // Confetti - synchronous plugin execution
                      } catch (Throwable throwable) {
                          if (throwable instanceof ThreadDeath) {
                              throw (ThreadDeath)throwable;
                          }
                          net.minecraft.server.MinecraftServer.LOGGER.error("Failed to teleport entity " + CraftEntity.this, throwable);
 -                        ret.completeExceptionally(throwable);
-+                        SynchronousPluginExecution.executeNoException(plugin, () -> ret.completeExceptionally(throwable)); // ShreddedPaper - synchronous plugin execution
++                        SynchronousPluginExecution.executeNoException(plugin, () -> ret.completeExceptionally(throwable)); // Confetti - synchronous plugin execution
                      }
                  });
              });
@@ -419,7 +419,7 @@ index 57f0342513205e4fc536f31d47623b6564efc8b7..e8437d039af0457fc6fc877def12f973
  import org.bukkit.scheduler.BukkitScheduler;
  import org.bukkit.scheduler.BukkitTask;
  import org.bukkit.scheduler.BukkitWorker;
-+import io.multipaper.shreddedpaper.threading.SynchronousPluginExecution;
++import com.vulpeslab.confetti.threading.SynchronousPluginExecution;
  
  /**
   * The fundamental concepts for this implementation:
@@ -428,7 +428,7 @@ index 57f0342513205e4fc536f31d47623b6564efc8b7..e8437d039af0457fc6fc877def12f973
                  this.currentTask = task;
                  try {
 -                    task.run();
-+                    SynchronousPluginExecution.execute(task.getOwner(), task::run); // ShreddedPaper - run unsupported plugins in sync
++                    SynchronousPluginExecution.execute(task.getOwner(), task::run); // Confetti - run unsupported plugins in sync
                  } catch (final Throwable throwable) {
                      // Paper start
                      String msg = String.format(
