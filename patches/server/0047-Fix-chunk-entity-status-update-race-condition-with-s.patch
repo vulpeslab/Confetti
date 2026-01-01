@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 00:29:57 +0100
+Subject: [PATCH] Fix chunk entity status update race condition with spin-wait
+
+Instead of immediately failing when another thread is updating chunk status,
+use spin-wait with bounded retries to wait for the lock to be released.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+index f8293a7e851d66f502acb5aafa034d6b9bc7497f..f630d28dba0182d9ba210b85ad1495a69929e6ae 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+@@ -228,11 +228,19 @@ public final class ChunkEntitySlices {
+         }
+     }
+ 
+-    // Confetti start - thread-safe status update prevention
++    // Confetti start - thread-safe status update prevention with spin-wait
+     private final AtomicBoolean preventStatusUpdates = new AtomicBoolean(false);
+     public boolean startPreventingStatusUpdates() {
+-        // Returns true if already preventing (another thread beat us), false if we successfully set it
+-        return !this.preventStatusUpdates.compareAndSet(false, true);
++        // Spin-wait until we can acquire the lock, with bounded retries
++        for (int i = 0; i < 1000; i++) {
++            if (this.preventStatusUpdates.compareAndSet(false, true)) {
++                return false; // Successfully acquired
++            }
++            // Brief yield to allow other thread to finish
++            Thread.onSpinWait();
++        }
++        // After many retries, still couldn't acquire - return true to indicate failure
++        return true;
+     }
+ 
+     public boolean isPreventingStatusUpdates() {
