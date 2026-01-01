@@ -54,3 +54,7 @@ paper-api-generator
 confetti.jar
 
 !gradle/wrapper/gradle-wrapper.jar
+
+# Test Server
+test-server/
+!test-server/start.sh
