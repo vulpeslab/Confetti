@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 23:20:24 +0100
+Subject: [PATCH] Fix thread safety in advancement system
+
+
+diff --git a/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java b/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
+index 35772110e9318df46a2729dbc0b5879b290011b7..fcdd7df6eb460f244a33e6484c6b0e2f53bce06e 100644
+--- a/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
++++ b/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
+@@ -19,28 +19,40 @@ public abstract class SimpleCriterionTrigger<T extends SimpleCriterionTrigger.Si
+ 
+     @Override
+     public final void addPlayerListener(PlayerAdvancements manager, CriterionTrigger.Listener<T> conditions) {
+-        manager.criterionData.computeIfAbsent(this, managerx -> Sets.newHashSet()).add(conditions);  // Paper - fix AdvancementDataPlayer leak
++        synchronized (manager) { // Confetti - thread safety
++            manager.criterionData.computeIfAbsent(this, managerx -> Sets.newHashSet()).add(conditions);  // Paper - fix AdvancementDataPlayer leak
++        } // Confetti - thread safety
+     }
+ 
+     @Override
+     public final void removePlayerListener(PlayerAdvancements manager, CriterionTrigger.Listener<T> conditions) {
+-        Set<CriterionTrigger.Listener<T>> set = (Set) manager.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
+-        if (set != null) {
+-            set.remove(conditions);
+-            if (set.isEmpty()) {
+-                manager.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
++        synchronized (manager) { // Confetti - thread safety
++            Set<CriterionTrigger.Listener<T>> set = (Set) manager.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
++            if (set != null) {
++                set.remove(conditions);
++                if (set.isEmpty()) {
++                    manager.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
++                }
+             }
+-        }
++        } // Confetti - thread safety
+     }
+ 
+     @Override
+     public final void removePlayerListeners(PlayerAdvancements tracker) {
+-        tracker.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
++        synchronized (tracker) { // Confetti - thread safety
++            tracker.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
++        } // Confetti - thread safety
+     }
+ 
+     protected void trigger(ServerPlayer player, Predicate<T> predicate) {
+         PlayerAdvancements playerAdvancements = player.getAdvancements();
+-        Set<CriterionTrigger.Listener<T>> set = (Set) playerAdvancements.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
++        Set<CriterionTrigger.Listener<T>> set;
++        synchronized (playerAdvancements) { // Confetti - thread safety
++            Set<CriterionTrigger.Listener<T>> originalSet = (Set) playerAdvancements.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
++            if (originalSet == null || originalSet.isEmpty()) return;
++            set = Sets.newHashSet(originalSet);
++        } // Confetti - thread safety
++
+         if (set != null && !set.isEmpty()) {
+             LootContext lootContext = null; // EntityPredicate.createContext(player, player); // Paper - Perf: lazily create LootContext for criterions
+             List<CriterionTrigger.Listener<T>> list = null;
+diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+index fc87e3cfff1221a6cbaf3463ce972870f17c776a..e7a9ab3c6798f1424f9ecc6e93e289c17c19c041 100644
+--- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
++++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+@@ -80,7 +80,7 @@ public class PlayerAdvancements {
+         this.player = owner;
+     }
+ 
+-    public void stopListening() {
++    public synchronized void stopListening() {
+         Iterator iterator = BuiltInRegistries.TRIGGER_TYPES.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -91,7 +91,7 @@ public class PlayerAdvancements {
+ 
+     }
+ 
+-    public void reload(ServerAdvancementManager advancementLoader) {
++    public synchronized void reload(ServerAdvancementManager advancementLoader) {
+         this.stopListening();
+         this.progress.clear();
+         this.visible.clear();
+@@ -164,7 +164,10 @@ public class PlayerAdvancements {
+ 
+     public void save() {
+         if (org.spigotmc.SpigotConfig.disableAdvancementSaving) return; // Spigot
+-        JsonElement jsonelement = (JsonElement) this.codec.encodeStart(JsonOps.INSTANCE, this.asData()).getOrThrow();
++        JsonElement jsonelement;
++        synchronized (this) { // Confetti - thread safety
++            jsonelement = (JsonElement) this.codec.encodeStart(JsonOps.INSTANCE, this.asData()).getOrThrow();
++        } // Confetti - thread safety
+ 
+         try {
+             FileUtil.createDirectoriesSafe(this.playerSavePath.getParent());
+@@ -221,7 +224,7 @@ public class PlayerAdvancements {
+         return new PlayerAdvancements.Data(map);
+     }
+ 
+-    public boolean award(AdvancementHolder advancement, String criterionName) {
++    public synchronized boolean award(AdvancementHolder advancement, String criterionName) {
+         boolean flag = false;
+         AdvancementProgress advancementprogress = this.getOrStartProgress(advancement);
+         boolean flag1 = advancementprogress.isDone();
+@@ -266,7 +269,7 @@ public class PlayerAdvancements {
+         return flag;
+     }
+ 
+-    public boolean revoke(AdvancementHolder advancement, String criterionName) {
++    public synchronized boolean revoke(AdvancementHolder advancement, String criterionName) {
+         boolean flag = false;
+         AdvancementProgress advancementprogress = this.getOrStartProgress(advancement);
+         boolean flag1 = advancementprogress.isDone();
+@@ -334,7 +337,7 @@ public class PlayerAdvancements {
+         criterion.trigger().removePlayerListener(this, new CriterionTrigger.Listener<>(criterion.triggerInstance(), advancement, id));
+     }
+ 
+-    public void flushDirty(ServerPlayer player) {
++    public synchronized void flushDirty(ServerPlayer player) {
+         if (this.isFirstPacket || !this.rootsToUpdate.isEmpty() || !this.progressChanged.isEmpty()) {
+             Map<ResourceLocation, AdvancementProgress> map = new HashMap();
+             Set<AdvancementHolder> set = new HashSet();
+@@ -367,7 +370,7 @@ public class PlayerAdvancements {
+         this.isFirstPacket = false;
+     }
+ 
+-    public void setSelectedTab(@Nullable AdvancementHolder advancement) {
++    public synchronized void setSelectedTab(@Nullable AdvancementHolder advancement) {
+         AdvancementHolder advancementholder1 = this.lastSelectedTab;
+ 
+         if (advancement != null && advancement.value().isRoot() && advancement.value().display().isPresent()) {
+@@ -382,7 +385,7 @@ public class PlayerAdvancements {
+ 
+     }
+ 
+-    public AdvancementProgress getOrStartProgress(AdvancementHolder advancement) {
++    public synchronized AdvancementProgress getOrStartProgress(AdvancementHolder advancement) {
+         AdvancementProgress advancementprogress = (AdvancementProgress) this.progress.get(advancement);
+ 
+         if (advancementprogress == null) {

@@ -1,0 +1,1864 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 23:16:12 +0100
+Subject: [PATCH] Fix various race conditions and thread-safety issues
+
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/list/ReferenceList.java b/src/main/java/ca/spottedleaf/moonrise/common/list/ReferenceList.java
+index 2e876b918672e8ef3b5197b7e6b1597247fdeaa1..b60f2876d3d08b738ce0050a7ded5112659cf406 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/list/ReferenceList.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/list/ReferenceList.java
+@@ -29,19 +29,20 @@ public final class ReferenceList<E> implements Iterable<E> {
+         this.referenceToIndex = referenceToIndex;
+     }
+ 
+-    public ReferenceList<E> copy() {
++    // Confetti start - synchronized for thread safety
++    public synchronized ReferenceList<E> copy() {
+         return new ReferenceList<>(this.references.clone(), this.count, this.referenceToIndex.clone());
+     }
+ 
+-    public int size() {
++    public synchronized int size() {
+         return this.count;
+     }
+ 
+-    public boolean contains(final E obj) {
++    public synchronized boolean contains(final E obj) {
+         return this.referenceToIndex.containsKey(obj);
+     }
+ 
+-    public boolean remove(final E obj) {
++    public synchronized boolean remove(final E obj) {
+         final int index = this.referenceToIndex.removeInt(obj);
+         if (index == Integer.MIN_VALUE) {
+             return false;
+@@ -60,7 +61,7 @@ public final class ReferenceList<E> implements Iterable<E> {
+         return true;
+     }
+ 
+-    public boolean add(final E obj) {
++    public synchronized boolean add(final E obj) {
+         final int count = this.count;
+         final int currIndex = this.referenceToIndex.putIfAbsent(obj, count);
+ 
+@@ -81,30 +82,31 @@ public final class ReferenceList<E> implements Iterable<E> {
+         return true;
+     }
+ 
+-    public E getChecked(final int index) {
++    public synchronized E getChecked(final int index) {
+         if (index < 0 || index >= this.count) {
+             throw new IndexOutOfBoundsException("Index: " + index + " is out of bounds, size: " + this.count);
+         }
+         return this.references[index];
+     }
+ 
+-    public E getUnchecked(final int index) {
++    public synchronized E getUnchecked(final int index) {
+         return this.references[index];
+     }
+ 
+-    public Object[] getRawData() {
++    public synchronized Object[] getRawData() {
+         return this.references;
+     }
+ 
+-    public E[] getRawDataUnchecked() {
++    public synchronized E[] getRawDataUnchecked() {
+         return this.references;
+     }
+ 
+-    public void clear() {
++    public synchronized void clear() {
+         this.referenceToIndex.clear();
+         Arrays.fill(this.references, 0, this.count, null);
+         this.count = 0;
+     }
++    // Confetti end
+ 
+     @Override
+     public Iterator<E> iterator() {
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java b/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
+index ab093b0e8ac6f762921eb1d15f5217345c4eba05..1f3daf19c6201fc1302d8496deb94ee85c574d4a 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
+@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.level.ChunkPos;
++import com.vulpeslab.confetti.util.SimpleStampedLock; // Confetti - thread safety
+ 
+ public final class NearbyPlayers {
+ 
+@@ -36,7 +37,9 @@ public final class NearbyPlayers {
+ 
+     private final ServerLevel world;
+     private final Reference2ReferenceOpenHashMap<ServerPlayer, TrackedPlayer[]> players = new Reference2ReferenceOpenHashMap<>();
++    private final SimpleStampedLock playersLock = new SimpleStampedLock(); // Confetti - thread safety
+     private final Long2ReferenceOpenHashMap<TrackedChunk> byChunk = new Long2ReferenceOpenHashMap<>();
++    private final SimpleStampedLock byChunkLock = new SimpleStampedLock(); // Confetti - thread safety
+ 
+     public NearbyPlayers(final ServerLevel world) {
+         this.world = world;
+@@ -44,9 +47,11 @@ public final class NearbyPlayers {
+ 
+     public void addPlayer(final ServerPlayer player) {
+         final TrackedPlayer[] newTrackers = new TrackedPlayer[TOTAL_MAP_TYPES];
++        this.playersLock.write(() -> { // Confetti - thread safety
+         if (this.players.putIfAbsent(player, newTrackers) != null) {
+             throw new IllegalStateException("Already have player " + player);
+         }
++        }); // Confetti - thread safety
+ 
+         final ChunkPos chunk = player.chunkPosition();
+ 
+@@ -60,7 +65,7 @@ public final class NearbyPlayers {
+     }
+ 
+     public void removePlayer(final ServerPlayer player) {
+-        final TrackedPlayer[] players = this.players.remove(player);
++        final TrackedPlayer[] players = this.playersLock.write(() -> this.players.remove(player)); // Confetti - thread safety
+         if (players == null) {
+             return; // May be called during teleportation before the player is actually placed
+         }
+@@ -71,7 +76,7 @@ public final class NearbyPlayers {
+     }
+ 
+     public void tickPlayer(final ServerPlayer player) {
+-        final TrackedPlayer[] players = this.players.get(player);
++        final TrackedPlayer[] players = this.playersLock.optimisticRead(() -> this.players.get(player)); // Confetti - thread safety
+         if (players == null) {
+             throw new IllegalStateException("Don't have player " + player);
+         }
+@@ -87,33 +92,33 @@ public final class NearbyPlayers {
+     }
+ 
+     public TrackedChunk getChunk(final ChunkPos pos) {
+-        return this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        return this.byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // Confetti - thread safety
+     }
+ 
+     public TrackedChunk getChunk(final BlockPos pos) {
+-        return this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        return this.byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // Confetti - thread safety
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayers(final BlockPos pos, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        final TrackedChunk chunk = this.byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // Confetti - thread safety
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayers(final ChunkPos pos, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        final TrackedChunk chunk = this.byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // Confetti - thread safety
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayersByChunk(final int chunkX, final int chunkZ, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(chunkX, chunkZ));
++        final TrackedChunk chunk = this.byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(chunkX, chunkZ))); // Confetti - thread safety
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayersByBlock(final int blockX, final int blockZ, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(blockX >> 4, blockZ >> 4));
++        final TrackedChunk chunk = this.byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(blockX >> 4, blockZ >> 4))); // Confetti - thread safety
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+@@ -138,7 +143,7 @@ public final class NearbyPlayers {
+             return this.players[type.ordinal()];
+         }
+ 
+-        public void addPlayer(final ServerPlayer player, final NearbyMapType type) {
++        public synchronized void addPlayer(final ServerPlayer player, final NearbyMapType type) { // Confetti - synchronized for thread safety
+             ++this.updateCount;
+ 
+             final int idx = type.ordinal();
+@@ -154,7 +159,7 @@ public final class NearbyPlayers {
+             }
+         }
+ 
+-        public void removePlayer(final ServerPlayer player, final NearbyMapType type) {
++        public synchronized void removePlayer(final ServerPlayer player, final NearbyMapType type) { // Confetti - synchronized for thread safety
+             ++this.updateCount;
+ 
+             final int idx = type.ordinal();
+@@ -187,25 +192,46 @@ public final class NearbyPlayers {
+         protected void addCallback(final ServerPlayer parameter, final int chunkX, final int chunkZ) {
+             final long chunkKey = CoordinateUtils.getChunkKey(chunkX, chunkZ);
+ 
+-            NearbyPlayers.this.byChunk.computeIfAbsent(chunkKey, (final long keyInMap) -> {
+-                return new TrackedChunk();
+-            }).addPlayer(parameter, this.type);
++            // Confetti start - thread safety
++            TrackedChunk chunk = NearbyPlayers.this.byChunkLock.optimisticRead(() -> NearbyPlayers.this.byChunk.get(chunkKey));
++
++            if (chunk == null) {
++                chunk = NearbyPlayers.this.byChunkLock.write(() -> {
++                    return NearbyPlayers.this.byChunk.computeIfAbsent(chunkKey, (final long keyInMap) -> {
++                        return new TrackedChunk();
++                    });
++                });
++            }
++
++            chunk.addPlayer(parameter, this.type);
++
++            if (NearbyPlayers.this.byChunkLock.optimisticRead(() -> NearbyPlayers.this.byChunk.get(chunkKey)) != chunk) {
++                // Chunk was removed by another thread, retry
++                this.addCallback(parameter, chunkX, chunkZ);
++            }
++            // Confetti end
+         }
+ 
+         @Override
+         protected void removeCallback(final ServerPlayer parameter, final int chunkX, final int chunkZ) {
+             final long chunkKey = CoordinateUtils.getChunkKey(chunkX, chunkZ);
+ 
+-            final TrackedChunk chunk = NearbyPlayers.this.byChunk.get(chunkKey);
++            final TrackedChunk chunk = NearbyPlayers.this.byChunkLock.optimisticRead(() -> NearbyPlayers.this.byChunk.get(chunkKey)); // Confetti - thread safety
+             if (chunk == null) {
+                 throw new IllegalStateException("Chunk should exist at " + new ChunkPos(chunkKey));
+             }
+ 
+             chunk.removePlayer(parameter, this.type);
+ 
+-            if (chunk.isEmpty()) {
+-                NearbyPlayers.this.byChunk.remove(chunkKey);
++            // Confetti start - thread safety
++            if (chunk.isEmpty()) { // Optimistic empty check to avoid locking
++                NearbyPlayers.this.byChunkLock.write(() -> {
++                    if (chunk.isEmpty()) { // Double-check it's still empty within the lock
++                        NearbyPlayers.this.byChunk.remove(chunkKey);
++                    }
++                });
+             }
++            // Confetti end
+         }
+     }
+ }
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+index 87d2b3ec165e2e9e4bdbedd7adddaa2130ed507b..cb4d7802bd4460bad62566955cdd213a6be7095d 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+@@ -25,6 +25,7 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.concurrent.atomic.AtomicBoolean; // Confetti
+ import java.util.function.Predicate;
+ import org.bukkit.event.entity.EntityRemoveEvent;
+ 
+@@ -226,20 +227,21 @@ public final class ChunkEntitySlices {
+         }
+     }
+ 
+-    private boolean preventStatusUpdates;
++    // Confetti start - thread-safe status update prevention
++    private final AtomicBoolean preventStatusUpdates = new AtomicBoolean(false);
+     public boolean startPreventingStatusUpdates() {
+-        final boolean ret = this.preventStatusUpdates;
+-        this.preventStatusUpdates = true;
+-        return ret;
++        // Returns true if already preventing (another thread beat us), false if we successfully set it
++        return !this.preventStatusUpdates.compareAndSet(false, true);
+     }
+ 
+     public boolean isPreventingStatusUpdates() {
+-        return this.preventStatusUpdates;
++        return this.preventStatusUpdates.get();
+     }
+ 
+     public void stopPreventingStatusUpdates(final boolean prev) {
+-        this.preventStatusUpdates = prev;
++        this.preventStatusUpdates.set(prev);
+     }
++    // Confetti end
+ 
+     public void updateStatus(final FullChunkStatus status, final EntityLookup lookup) {
+         this.status = status;
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+index 203efe5925828be0d69ac08f6c306d11d360a12e..85386e04b1f2cb247cb9f64a2260262e167a17a2 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+@@ -339,7 +339,7 @@ public final class RegionizedPlayerChunkLoader {
+ 
+         private boolean canGenerateChunks = true;
+ 
+-        private final ArrayDeque<ChunkHolderManager.TicketOperation<?, ?>> delayedTicketOps = new ArrayDeque<>();
++        private final java.util.concurrent.ConcurrentLinkedDeque<ChunkHolderManager.TicketOperation<?, ?>> delayedTicketOps = new java.util.concurrent.ConcurrentLinkedDeque<>(); // Confetti - thread-safe
+         private final LongOpenHashSet sentChunks = new LongOpenHashSet();
+ 
+         private static final byte CHUNK_TICKET_STAGE_NONE           = 0;
+@@ -397,13 +397,21 @@ public final class RegionizedPlayerChunkLoader {
+             this.player = player;
+         }
+ 
++        // Confetti start - thread-safe flush using poll instead of iteration
+         private void flushDelayedTicketOps() {
+             if (this.delayedTicketOps.isEmpty()) {
+                 return;
+             }
+-            ((ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager.performTicketUpdates(this.delayedTicketOps);
+-            this.delayedTicketOps.clear();
++            final java.util.ArrayList<ChunkHolderManager.TicketOperation<?, ?>> ops = new java.util.ArrayList<>();
++            ChunkHolderManager.TicketOperation<?, ?> op;
++            while ((op = this.delayedTicketOps.poll()) != null) {
++                ops.add(op);
++            }
++            if (!ops.isEmpty()) {
++                ((ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager.performTicketUpdates(ops);
++            }
+         }
++        // Confetti end
+ 
+         private void pushDelayedTicketOp(final ChunkHolderManager.TicketOperation<?, ?> op) {
+             this.delayedTicketOps.addLast(op);
+@@ -633,10 +641,11 @@ public final class RegionizedPlayerChunkLoader {
+             return true;
+         }
+ 
+-        public void updateQueues(final long time) { // Confetti - make public
+-            TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async");
++        public synchronized void updateQueues(final long time) { // Confetti - make public and synchronized
++            // TickThread.ensureTickThread(this.player, "Cannot tick player chunk loader async"); // Confetti - disable check, we synchronize instead
+             if (this.removed) {
+-                throw new IllegalStateException("Ticking removed player chunk loader");
++                // throw new IllegalStateException("Ticking removed player chunk loader"); // Confetti - don't throw, just return
++                return;
+             }
+             // update rate limits
+             final double loadRate = this.getMaxChunkLoadRate();
+@@ -901,10 +910,11 @@ public final class RegionizedPlayerChunkLoader {
+             );
+         }
+ 
+-        public void update() { // Confetti - make public
+-            TickThread.ensureTickThread(this.player, "Cannot update player asynchronously");
++        public synchronized void update() { // Confetti - make public and synchronized
++            // TickThread.ensureTickThread(this.player, "Cannot update player asynchronously"); // Confetti - disable check, we synchronize instead
+             if (this.removed) {
+-                throw new IllegalStateException("Updating removed player chunk loader");
++                // throw new IllegalStateException("Updating removed player chunk loader"); // Confetti - don't throw, just return
++                return;
+             }
+             final ViewDistances playerDistances = ((ChunkSystemServerPlayer)this.player).moonrise$getViewDistanceHolder().getViewDistances();
+             final ViewDistances worldDistances = ((ChunkSystemServerLevel)this.world).moonrise$getViewDistanceHolder().getViewDistances();
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+index 58d3d1a47e9f2423c467bb329c2d5f4b58a8b5ef..c2227d3a8146bc2b53f971974d333bd7b44c7d1b 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+@@ -48,6 +48,7 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Iterator;
+ import java.util.List;
++import com.vulpeslab.confetti.util.SimpleStampedLock; // Confetti - thread-safe autoSaveQueue
+ import java.util.Objects;
+ import java.util.PrimitiveIterator;
+ import java.util.concurrent.TimeUnit;
+@@ -81,6 +82,7 @@ public final class ChunkHolderManager {
+     private long currentTick;
+ 
+     private final ArrayDeque<NewChunkHolder> pendingFullLoadUpdate = new ArrayDeque<>();
++    private final SimpleStampedLock autoSaveQueueLock = new SimpleStampedLock(); // Confetti - thread-safe autoSaveQueue
+     private final ObjectRBTreeSet<NewChunkHolder> autoSaveQueue = new ObjectRBTreeSet<>((final NewChunkHolder c1, final NewChunkHolder c2) -> {
+         if (c1 == c2) {
+             return 0;
+@@ -221,9 +223,9 @@ public final class ChunkHolderManager {
+     }
+ 
+     void ensureInAutosave(final NewChunkHolder holder) {
+-        if (!this.autoSaveQueue.contains(holder)) {
++        if (!this.autoSaveQueueLock.optimisticRead(() -> this.autoSaveQueue.contains(holder))) { // Confetti - thread-safe autoSaveQueue
+             holder.lastAutoSave = this.currentTick;
+-            this.autoSaveQueue.add(holder);
++            this.autoSaveQueueLock.write(() -> this.autoSaveQueue.add(holder)); // Confetti - thread-safe autoSaveQueue
+         }
+     }
+ 
+@@ -232,14 +234,19 @@ public final class ChunkHolderManager {
+         final long currentTick = this.currentTick;
+         final long maxSaveTime = currentTick - Math.max(1L, this.world.paperConfig().chunks.autoSaveInterval.value());
+         final int maxToSave = this.world.paperConfig().chunks.maxAutoSaveChunksPerTick;
+-        for (int autoSaved = 0; autoSaved < maxToSave && !this.autoSaveQueue.isEmpty();) {
+-            final NewChunkHolder holder = this.autoSaveQueue.first();
++        for (int autoSaved = 0; autoSaved < maxToSave;) {
++            // Confetti start - thread-safe autoSaveQueue
++            final NewChunkHolder holder = this.autoSaveQueueLock.optimisticRead(() -> this.autoSaveQueue.isEmpty() ? null : this.autoSaveQueue.first());
++            if (holder == null) {
++                break;
++            }
++            // Confetti end - thread-safe autoSaveQueue
+ 
+             if (holder.lastAutoSave > maxSaveTime) {
+                 break;
+             }
+ 
+-            this.autoSaveQueue.remove(holder);
++            this.autoSaveQueueLock.write(() -> this.autoSaveQueue.remove(holder)); // Confetti - thread-safe autoSaveQueue
+ 
+             holder.lastAutoSave = currentTick;
+             if (holder.save(false) != null) {
+@@ -251,11 +258,15 @@ public final class ChunkHolderManager {
+             }
+         }
+ 
+-        for (final NewChunkHolder holder : reschedule) {
+-            if (holder.getChunkStatus().isOrAfter(FullChunkStatus.FULL)) {
+-                this.autoSaveQueue.add(holder);
++        // Confetti start - thread-safe autoSaveQueue
++        this.autoSaveQueueLock.write(() -> {
++            for (final NewChunkHolder holder : reschedule) {
++                if (holder.getChunkStatus().isOrAfter(FullChunkStatus.FULL)) {
++                    this.autoSaveQueue.add(holder);
++                }
+             }
+-        }
++        });
++        // Confetti end - thread-safe autoSaveQueue
+     }
+ 
+     public void saveAllChunks(final boolean flush, final boolean shutdown, final boolean logProgress) {
+@@ -1029,7 +1040,7 @@ public final class ChunkHolderManager {
+ 
+     private void removeChunkHolder(final NewChunkHolder holder) {
+         holder.markUnloaded();
+-        this.autoSaveQueue.remove(holder);
++        this.autoSaveQueueLock.write(() -> this.autoSaveQueue.remove(holder)); // Confetti - thread-safe autoSaveQueue
+         ChunkSystem.onChunkHolderDelete(this.world, holder.vanillaChunkHolder);
+         this.chunkHolders.remove(CoordinateUtils.getChunkKey(holder.chunkX, holder.chunkZ));
+ 
+diff --git a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java b/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
+index 9f17170179cc99d84ad25a1e838aff3d8cc66f93..c073c9a879e7f771c1f61a070c16398ec42cd6b0 100644
+--- a/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
++++ b/src/main/java/com/destroystokyo/paper/util/RedstoneWireTurbo.java
+@@ -833,14 +833,14 @@ public class RedstoneWireTurbo {
+         j = getMaxCurrentStrength(upd, j);
+         int l = 0;
+ 
+-        wire.shouldSignal = false;
++        wire.shouldSignalThreadLocal.set(false); // Confetti - use thread local for shouldSignal
+         // Unfortunately, World.isBlockIndirectlyGettingPowered is complicated,
+         // and I'm not ready to try to replicate even more functionality from
+         // elsewhere in Minecraft into this accelerator.  So sadly, we must
+         // suffer the performance hit of this very expensive call.  If there
+         // is consistency to what this call returns, we may be able to cache it.
+         final int k = worldIn.getBestNeighborSignal(upd.self);
+-        wire.shouldSignal = true;
++        wire.shouldSignalThreadLocal.set(true); // Confetti - use thread local for shouldSignal
+ 
+         // The variable 'k' holds the maximum redstone power value of any adjacent blocks.
+         // If 'k' has the highest level of all neighbors, then the power level of this
+diff --git a/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java b/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java
+index 0e99c74bae8740c74ff9391a7ac705ee2e451c15..fb11f70b49c391d20745d1dcd74372c691e81b23 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java
++++ b/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java
+@@ -3,19 +3,21 @@ package com.vulpeslab.confetti.region;
+ import com.mojang.logging.LogUtils;
+ import org.slf4j.Logger;
+ 
++import java.util.concurrent.atomic.AtomicLong;
++
+ public class DelayedTask implements Runnable {
+     private static final Logger LOGGER = LogUtils.getClassLogger();
+ 
+     private final Runnable task;
+-    private long delay;
++    private final AtomicLong delay; // Confetti - atomic for thread safety
+ 
+     public DelayedTask(Runnable task, long delay) {
+         this.task = task;
+-        this.delay = delay;
++        this.delay = new AtomicLong(delay);
+     }
+ 
+     public boolean shouldRun() {
+-        return --delay <= 0;
++        return delay.decrementAndGet() <= 0; // Confetti - atomic decrement
+     }
+ 
+     public void run() {
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+index 1e8f5c87a46257397745731ec4e89ee74de8bfca..7748ac1cec834d7e013afee3a7063b3fd9b69aa4 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -83,9 +83,19 @@ public class LevelChunkRegion {
+         }
+     }
+ 
+-    public synchronized void forEachTrackedEntity(Consumer<Entity> action) {
+-        this.trackedEntities.forEach(action);
++    // Confetti start - thread-safe forEachTrackedEntity by copying first
++    public void forEachTrackedEntity(Consumer<Entity> action) {
++        List<Entity> snapshot;
++        synchronized (this) {
++            snapshot = new ArrayList<>(this.trackedEntities);
++        }
++        for (Entity entity : snapshot) {
++            if (entity != null) {
++                action.accept(entity);
++            }
++        }
+     }
++    // Confetti end
+ 
+     public synchronized void addNavigatingMob(Mob mob) {
+         navigatingMobs.add(mob);
+@@ -131,34 +141,43 @@ public class LevelChunkRegion {
+         return regionPos;
+     }
+ 
++    // Confetti start - thread-safe forEach by copying first
+     public void forEach(Consumer<LevelChunk> consumer) {
+-        // This method has the chance of skipping a chunk if a chunk is removed via another thread during this iteration
+-        for (int i = 0; i < levelChunks.size(); i++) {
+-            try {
+-                LevelChunk levelChunk = levelChunks.get(i);
+-                if (levelChunk != null) {
+-                    consumer.accept(levelChunk);
+-                }
+-            } catch (IndexOutOfBoundsException e) {
+-                // Ignore - multithreaded modification
++        List<LevelChunk> snapshot;
++        synchronized (this) {
++            snapshot = new ArrayList<>(this.levelChunks);
++        }
++        for (LevelChunk levelChunk : snapshot) {
++            if (levelChunk != null) {
++                consumer.accept(levelChunk);
+             }
+         }
+     }
++    // Confetti end
+ 
++    // Confetti start - thread-safe tickTasks using poll
+     public void tickTasks() {
+         if (scheduledTasks.isEmpty()) return;
+ 
++        List<DelayedTask> deferred = new ArrayList<>();
+         List<DelayedTask> toRun = new ArrayList<>();
+-        for (DelayedTask task : scheduledTasks) {
+-            // Check if a task should run before executing the tasks, as tasks may add more tasks while they are running
++        
++        DelayedTask task;
++        while ((task = scheduledTasks.poll()) != null) {
+             if (task.shouldRun()) {
+                 toRun.add(task);
++            } else {
++                deferred.add(task);
+             }
+         }
+-
+-        scheduledTasks.removeAll(toRun);
++        
++        // Re-add deferred tasks
++        scheduledTasks.addAll(deferred);
++        
++        // Run tasks outside of collection operations
+         toRun.forEach(DelayedTask::run);
+     }
++    // Confetti end
+ 
+     // Block event methods
+     public synchronized void addBlockEvent(BlockEventData blockEvent) {
+@@ -181,7 +200,8 @@ public class LevelChunkRegion {
+         this.blockEvents.removeIf(predicate);
+     }
+ 
+-    public boolean isEmpty() {
++    // Confetti start - thread-safe isEmpty check
++    public synchronized boolean isEmpty() {
+         return levelChunks.isEmpty()
+                 && tickingEntities.size() == 0
+                 && trackedEntities.isEmpty()
+@@ -191,5 +211,6 @@ public class LevelChunkRegion {
+                 && scheduledTasks.isEmpty()
+                 && internalTasks.getTotalTasksExecuted() >= internalTasks.getTotalTasksScheduled();
+     }
++    // Confetti end
+ 
+ }
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
+index df06ba01129c228ec58b174e98ed2e17a6771e7c..c7551ad2ea7a84c3eae74a6fa55c88b0e210f878 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
+@@ -3,13 +3,18 @@ package com.vulpeslab.confetti.threading;
+ import net.minecraft.server.level.ChunkMap;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.Level;
+ 
+ import java.util.Objects;
+ 
+ public class ConfettiEntityTicker {
+ 
+     public static void tickEntity(Entity entity) {
+-        ServerLevel level = (ServerLevel) entity.level();
++        // Confetti start - null safety
++        if (entity == null) return;
++        Level levelRaw = entity.level();
++        if (!(levelRaw instanceof ServerLevel level)) return;
++        // Confetti end - null safety
+ 
+         entity.activatedPriorityReset = false; // Pufferfish - DAB
+         if (!entity.isRemoved()) {
+@@ -33,11 +38,17 @@ public class ConfettiEntityTicker {
+     }
+ 
+     public static void processTrackQueue(Entity entity) {
++        // Confetti start - null safety
++        if (entity == null) return;
++        Level levelRaw = entity.level();
++        if (!(levelRaw instanceof ServerLevel level)) return;
++        // Confetti end - null safety
++        
+         ChunkMap.TrackedEntity tracker = ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerEntity) entity).moonrise$getTrackedEntity();
+         if (tracker == null) {
+             return;
+         }
+-        ca.spottedleaf.moonrise.common.misc.NearbyPlayers nearbyPlayers = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel) entity.level()).moonrise$getNearbyPlayers();
++        ca.spottedleaf.moonrise.common.misc.NearbyPlayers nearbyPlayers = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel) level).moonrise$getNearbyPlayers();
+         ((ca.spottedleaf.moonrise.patches.entity_tracker.EntityTrackerTrackedEntity) tracker).moonrise$tick(nearbyPlayers.getChunk(entity.chunkPosition()));
+         tracker.serverEntity.sendChanges();
+     }
+diff --git a/src/main/java/net/minecraft/core/dispenser/BoatDispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/BoatDispenseItemBehavior.java
+index 6df0db8b4cdab23494ea34236949ece4989110a3..9ef517fb96e3c1847581e08405f72e0a2ee1c077 100644
+--- a/src/main/java/net/minecraft/core/dispenser/BoatDispenseItemBehavior.java
++++ b/src/main/java/net/minecraft/core/dispenser/BoatDispenseItemBehavior.java
+@@ -63,7 +63,7 @@ public class BoatDispenseItemBehavior extends DefaultDispenseItemBehavior {
+         CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+         BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(d1, d2 + d4, d3));
+-        if (!DispenserBlock.eventFired) {
++        if (!DispenserBlock.eventFiredThreadLocal.get()) {
+             worldserver.getCraftServer().getPluginManager().callEvent(event);
+         }
+ 
+diff --git a/src/main/java/net/minecraft/core/dispenser/DefaultDispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/DefaultDispenseItemBehavior.java
+index 39c96f5db6e90a470404c6387fa0c1d5531822e5..f28dc8097670a2a8d1e872939e0ab4372afc4f08 100644
+--- a/src/main/java/net/minecraft/core/dispenser/DefaultDispenseItemBehavior.java
++++ b/src/main/java/net/minecraft/core/dispenser/DefaultDispenseItemBehavior.java
+@@ -87,7 +87,7 @@ public class DefaultDispenseItemBehavior implements DispenseItemBehavior {
+         CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack);
+ 
+         BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), CraftVector.toBukkit(entityitem.getDeltaMovement()));
+-        if (!DispenserBlock.eventFired) {
++        if (!DispenserBlock.eventFiredThreadLocal.get()) {
+             world.getCraftServer().getPluginManager().callEvent(event);
+         }
+ 
+diff --git a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
+index c473c3dcdbbc793134639246dcb24c8abe5868fb..f9786a2c290e970b2a50cf4bf48f242cd0d7b8b0 100644
+--- a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
++++ b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java
+@@ -115,7 +115,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -174,7 +174,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -229,7 +229,7 @@ public interface DispenseItemBehavior {
+                     CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                     BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) list.get(0).getBukkitEntity());
+-                    if (!DispenserBlock.eventFired) {
++                    if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                         world.getCraftServer().getPluginManager().callEvent(event);
+                     }
+ 
+@@ -285,7 +285,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                 BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityhorseabstract.getBukkitEntity());
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     world.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -359,7 +359,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                 BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityhorsechestedabstract.getBukkitEntity());
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     world.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -431,7 +431,7 @@ public interface DispenseItemBehavior {
+                     CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - single item in event
+ 
+                     BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(x, y, z));
+-                    if (!DispenserBlock.eventFired) {
++                    if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                         worldserver.getCraftServer().getPluginManager().callEvent(event);
+                     }
+ 
+@@ -496,7 +496,7 @@ public interface DispenseItemBehavior {
+                         CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - single item in event
+ 
+                         BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
+-                        if (!DispenserBlock.eventFired) {
++                        if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                             worldserver.getCraftServer().getPluginManager().callEvent(event);
+                         }
+ 
+@@ -534,7 +534,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack); // Paper - ignore stack size on damageable items
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -596,7 +596,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - single item in event
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -665,7 +665,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector((double) blockposition.getX() + 0.5D, (double) blockposition.getY(), (double) blockposition.getZ() + 0.5D));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                    worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -722,7 +722,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - single item in event
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -771,7 +771,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - single item in event
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -833,7 +833,7 @@ public interface DispenseItemBehavior {
+                 CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - only single item in event
+ 
+                 BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
+-                if (!DispenserBlock.eventFired) {
++                if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                     worldserver.getCraftServer().getPluginManager().callEvent(event);
+                 }
+ 
+@@ -915,7 +915,7 @@ public interface DispenseItemBehavior {
+                     CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+                     BlockDispenseEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) list.get(0).getBukkitEntity());
+-                    if (!DispenserBlock.eventFired) {
++                    if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                         world.getCraftServer().getPluginManager().callEvent(event);
+                     }
+ 
+diff --git a/src/main/java/net/minecraft/core/dispenser/ProjectileDispenseBehavior.java b/src/main/java/net/minecraft/core/dispenser/ProjectileDispenseBehavior.java
+index e37d2d29f3ba67cfe28abe4847a3dca07121f0be..deaaf43e1d2d5015f95e48a98cebc0fee66b0f5a 100644
+--- a/src/main/java/net/minecraft/core/dispenser/ProjectileDispenseBehavior.java
++++ b/src/main/java/net/minecraft/core/dispenser/ProjectileDispenseBehavior.java
+@@ -45,7 +45,7 @@ public class ProjectileDispenseBehavior extends DefaultDispenseItemBehavior {
+         CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+         BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), new org.bukkit.util.Vector((double) enumdirection.getStepX(), (double) enumdirection.getStepY(), (double) enumdirection.getStepZ()));
+-        if (!DispenserBlock.eventFired) {
++        if (!DispenserBlock.eventFiredThreadLocal.get()) {
+             worldserver.getCraftServer().getPluginManager().callEvent(event);
+         }
+ 
+diff --git a/src/main/java/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
+index 68632372c8704058f35f12e0ae6cdd98ebd55937..b1deb2848e9b5db83bd6e2e09d576f1c7562a3b4 100644
+--- a/src/main/java/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
++++ b/src/main/java/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
+@@ -41,7 +41,7 @@ public class ShearsDispenseItemBehavior extends OptionalDispenseItemBehavior {
+         CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack); // Paper - ignore stack size on damageable items
+ 
+         BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
+-        if (!DispenserBlock.eventFired) {
++        if (!DispenserBlock.eventFiredThreadLocal.get()) {
+             worldserver.getCraftServer().getPluginManager().callEvent(event);
+         }
+ 
+diff --git a/src/main/java/net/minecraft/core/dispenser/ShulkerBoxDispenseBehavior.java b/src/main/java/net/minecraft/core/dispenser/ShulkerBoxDispenseBehavior.java
+index cb308808906a8cdb127df8284e106e00553473ca..5bc68ca91350bad96bb6963ca86d8538b11f267c 100644
+--- a/src/main/java/net/minecraft/core/dispenser/ShulkerBoxDispenseBehavior.java
++++ b/src/main/java/net/minecraft/core/dispenser/ShulkerBoxDispenseBehavior.java
+@@ -37,7 +37,7 @@ public class ShulkerBoxDispenseBehavior extends OptionalDispenseItemBehavior {
+             CraftItemStack craftItem = CraftItemStack.asCraftMirror(stack.copyWithCount(1)); // Paper - single item in event
+ 
+             BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
+-            if (!DispenserBlock.eventFired) {
++            if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                 pointer.level().getCraftServer().getPluginManager().callEvent(event);
+             }
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59d7c9dc7d 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -248,7 +248,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         }
+         final ServerPlayer[] backingSet = inRange.getRawDataUnchecked();
+         for (int i = 0, len = inRange.size(); i < len; i++) {
+-            ++(backingSet[i].mobCounts[index]);
++            final ServerPlayer player = backingSet[i]; // Confetti - capture reference to avoid race condition
++            if (player == null) continue; // Confetti - player may have disconnected
++            ++(player.mobCounts[index]);
+         }
+     }
+     // Paper start - per player mob count backoff
+@@ -264,7 +266,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         }
+         final ServerPlayer[] backingSet = inRange.getRawDataUnchecked();
+         for (int i = 0, len = inRange.size(); i < len; i++) {
+-            ++(backingSet[i].mobBackoffCounts[idx]);
++            final ServerPlayer player = backingSet[i]; // Confetti - capture reference to avoid race condition
++            if (player == null) continue; // Confetti - player may have disconnected
++            ++(player.mobBackoffCounts[idx]);
+         }
+     }
+     // Paper end - per player mob count backoff
+@@ -1130,13 +1134,13 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         public final ServerEntity serverEntity;
+         final Entity entity;
+         private final int range;
+-        SectionPos lastSectionPos;
++        volatile SectionPos lastSectionPos; // Confetti - volatile for thread visibility
+         private final ReentrantLock seenByLock = new ReentrantLock(); // Confetti - seenBy thread safety
+         public final Set<ServerPlayerConnection> seenBy = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>(); // Paper - Perf: optimise map impl
+ 
+         // Paper start - optimise entity tracker
+-        private long lastChunkUpdate = -1L;
+-        private ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk lastTrackedChunk;
++        private volatile long lastChunkUpdate = -1L; // Confetti - volatile for thread visibility
++        private volatile ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk lastTrackedChunk; // Confetti - volatile for thread visibility
+ 
+         @Override
+         public final void moonrise$tick(final ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk chunk) {
+@@ -1171,7 +1175,19 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+             for (int i = 0, len = players.size(); i < len; ++i) {
+                 final ServerPlayer player = playersRaw[i];
+-                if (fullTrackerUpdate || !this.seenBy.contains(player.connection)) this.updatePlayer(player); // Confetti - trackerFullUpdateFrequency
++                if (player == null) continue; // Confetti - player may have disconnected
++                // Confetti start - seenBy thread safety - check inside lock
++                boolean shouldUpdate = fullTrackerUpdate;
++                if (!shouldUpdate) {
++                    seenByLock.lock();
++                    try {
++                        shouldUpdate = !this.seenBy.contains(player.connection);
++                    } finally {
++                        seenByLock.unlock();
++                    }
++                }
++                if (shouldUpdate) this.updatePlayer(player);
++                // Confetti end - seenBy thread safety
+             }
+ 
+             if (!fullTrackerUpdate) return; // Confetti - trackerFullUpdateFrequency
+@@ -1181,6 +1197,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                 seenByLock.lock(); try { // Confetti - seenBy thread safety
+                 for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
+                     final ServerPlayer player = conn.getPlayer();
++                    if (player == null) continue; // Confetti - player may have disconnected
+                     if (!players.contains(player)) {
+                         this.removePlayer(player);
+                     }
+diff --git a/src/main/java/net/minecraft/server/level/PlayerMap.java b/src/main/java/net/minecraft/server/level/PlayerMap.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f58fcae82cd87e29ea172adbf479ca84f6336fb1
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/level/PlayerMap.java
+@@ -0,0 +1,48 @@
++package net.minecraft.server.level;
++
++import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
++import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
++import com.vulpeslab.confetti.util.SimpleStampedLock;
++
++import java.util.List;
++import java.util.Set;
++import java.util.concurrent.CopyOnWriteArrayList;
++
++public final class PlayerMap {
++    private final Object2BooleanMap<ServerPlayer> players = new Object2BooleanOpenHashMap<>();
++    private final SimpleStampedLock playersLock = new SimpleStampedLock(); // Confetti
++    private final CopyOnWriteArrayList<ServerPlayer> playersList = new CopyOnWriteArrayList<>(); // Confetti
++
++    public List<ServerPlayer> getAllPlayers() { // Confetti
++        // Confetti - change to a CopyOnWriteArrayList cache of the player key set to allow for thread-safe iteration
++        //  - Players aren't added/removed often, so a CopyOnWriteArrayList is sufficient
++        // return this.players.keySet(); // Confetti
++        return this.playersList; // Confetti
++    }
++
++    public void addPlayer(ServerPlayer player, boolean inactive) {
++        this.playersLock.write(() -> this.players.put(player, inactive)); // Confetti
++        this.playersList.add(player); // Confetti
++    }
++
++    public void removePlayer(ServerPlayer player) {
++        this.playersLock.write(() -> this.players.removeBoolean(player)); // Confetti
++        this.playersList.remove(player); // Confetti
++    }
++
++    public void ignorePlayer(ServerPlayer player) {
++        this.playersLock.write(() -> this.players.replace(player, true)); // Confetti
++    }
++
++    public void unIgnorePlayer(ServerPlayer player) {
++        this.playersLock.write(() -> this.players.replace(player, false)); // Confetti
++    }
++
++    public boolean ignoredOrUnknown(ServerPlayer player) {
++        return this.playersLock.optimisticRead(() -> this.players.getOrDefault(player, true)); // Confetti
++    }
++
++    public boolean ignored(ServerPlayer player) {
++        return this.playersLock.optimisticRead(() -> this.players.getBoolean(player)); // Confetti
++    }
++}
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index d3c271b638ae7b8f044000c551daba7dd05d8fb2..cdb44dede0e8985dc674ae8bc0a584b7e059a44c 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -2048,13 +2048,14 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+ 
+         final net.minecraft.world.level.saveddata.SavedData existing = storage.cache.get(id.key());
+         if (existing == null && !storage.cache.containsKey(id.key())) {
+-            final MapItemSavedData worldmap = (MapItemSavedData) this.getServer().overworld().getDataStorage().get(MapItemSavedData.factory(), id.key());
+-            storage.cache.put(id.key(), worldmap);
++            final MapItemSavedData worldmap = (MapItemSavedData) this.getServer().overworld().getDataStorage().get(MapItemSavedData.factory(), id.key()); // Confetti - this is already a thread-safe cache fill
++            // storage.cache.put(id.key(), worldmap); // Confetti - unnecessary and thread-unsafe - The .get() above already puts it in the cache thread-safely
+             if (worldmap != null) {
+                 worldmap.id = id;
+-                new MapInitializeEvent(worldmap.mapView).callEvent();
++                if (worldmap.hasCalledMapInitializeEvent.compareAndSet(false, true)) new MapInitializeEvent(worldmap.mapView).callEvent(); // Confetti - ensure only called once
+                 return worldmap;
+             }
++            return worldmap; // Confetti
+         } else if (existing instanceof MapItemSavedData mapItemSavedData) {
+             mapItemSavedData.id = id;
+         }
+@@ -2068,7 +2069,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         // CraftBukkit start
+         state.id = id;
+         MapInitializeEvent event = new MapInitializeEvent(state.mapView);
+-        Bukkit.getServer().getPluginManager().callEvent(event);
++        if (state.hasCalledMapInitializeEvent.compareAndSet(false, true)) Bukkit.getServer().getPluginManager().callEvent(event); // Confetti - ensure only called once
+         // CraftBukkit end
+         this.getServer().overworld().getDataStorage().set(id.key(), state);
+     }
+@@ -2392,7 +2393,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+     public void blockUpdated(BlockPos pos, Block block) {
+         if (!this.isDebug()) {
+             // CraftBukkit start
+-            if (this.populating) {
++            if (this.populatingThreadLocal.get()) { // Confetti - thread local for populating
+                 return;
+             }
+             // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java b/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java
+index f22fb84c7e7929d6c80c44b13179cf385d8a43f9..d7928fdfb9cdb46b4a0b5cc06658cfdc87e0039b 100644
+--- a/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java
++++ b/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java
+@@ -115,6 +115,7 @@ public abstract class BlockableEventLoop<R extends Runnable> implements Profiler
+         }
+     }
+ 
++    // Confetti start - thread-safe pollTask using poll() instead of peek()+remove()
+     public boolean pollTask() {
+         R runnable = this.pendingRunnables.peek();
+         if (runnable == null) {
+@@ -122,10 +123,15 @@ public abstract class BlockableEventLoop<R extends Runnable> implements Profiler
+         } else if (this.blockingCount == 0 && !this.shouldRun(runnable)) {
+             return false;
+         } else {
+-            this.doRunTask(this.pendingRunnables.remove());
+-            return true;
++            R task = this.pendingRunnables.poll();
++            if (task != null) {
++                this.doRunTask(task);
++                return true;
++            }
++            return false;
+         }
+     }
++    // Confetti end
+ 
+     public void managedBlock(BooleanSupplier stopCondition) {
+         this.blockingCount++;
+diff --git a/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java b/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..80da7213a3dc11cbefb1d2e4c18e6fb4db1a0e60
+--- /dev/null
++++ b/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java
+@@ -0,0 +1,32 @@
++package net.minecraft.util.thread;
++
++import java.util.concurrent.atomic.AtomicInteger;
++
++// Confetti - use AtomicInteger for thread safety
++public abstract class ReentrantBlockableEventLoop<R extends Runnable> extends BlockableEventLoop<R> {
++    private final AtomicInteger reentrantCount = new AtomicInteger(); // Confetti - use AtomicInteger
++
++    public ReentrantBlockableEventLoop(String name) {
++        super(name);
++    }
++
++    @Override
++    public boolean scheduleExecutables() {
++        return this.runningTask() || super.scheduleExecutables();
++    }
++
++    protected boolean runningTask() {
++        return this.reentrantCount.get() != 0; // Confetti - use AtomicInteger
++    }
++
++    @Override
++    public void doRunTask(R task) {
++        this.reentrantCount.getAndIncrement(); // Confetti - use AtomicInteger
++
++        try {
++            super.doRunTask(task);
++        } finally {
++            this.reentrantCount.getAndDecrement(); // Confetti - use AtomicInteger
++        }
++    }
++}
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 6b9901d28cd250dbfd38d537ca0f1298216beb52..e4e775c7952b820b6780cf4f5cac519749adce38 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -470,7 +470,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     private int sectionX = Integer.MIN_VALUE;
+     private int sectionY = Integer.MIN_VALUE;
+     private int sectionZ = Integer.MIN_VALUE;
+-    private boolean updatingSectionStatus;
++    private final ThreadLocal<Boolean> updatingSectionStatus = ThreadLocal.withInitial(() -> false); // Confetti - ThreadLocal for thread safety
+ 
+     @Override
+     public final boolean moonrise$isHardColliding() {
+@@ -519,12 +519,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     @Override
+     public final boolean moonrise$isUpdatingSectionStatus() {
+-        return this.updatingSectionStatus;
++        return this.updatingSectionStatus.get(); // Confetti - ThreadLocal
+     }
+ 
+     @Override
+     public final void moonrise$setUpdatingSectionStatus(final boolean to) {
+-        this.updatingSectionStatus = to;
++        this.updatingSectionStatus.set(to); // Confetti - ThreadLocal
+     }
+ 
+     @Override
+@@ -4786,7 +4786,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+     public final void setPosRaw(double x, double y, double z, boolean forceBoundingBoxUpdate) {
+         // Paper start - rewrite chunk system
+-        if (this.updatingSectionStatus) {
++        if (this.updatingSectionStatus.get()) { // Confetti - ThreadLocal
+             LOGGER.error(
+                 "Refusing to update position for entity " + this + " to position " + new Vec3(x, y, z)
+                     + " since it is processing a section status update", new Throwable()
+diff --git a/src/main/java/net/minecraft/world/item/ArmorItem.java b/src/main/java/net/minecraft/world/item/ArmorItem.java
+index d05b1e129eee07434d162e1b949fd5633418ef66..5a3d375fe67b9beb374c4600d02959c5b7c20743 100644
+--- a/src/main/java/net/minecraft/world/item/ArmorItem.java
++++ b/src/main/java/net/minecraft/world/item/ArmorItem.java
+@@ -68,7 +68,7 @@ public class ArmorItem extends Item implements Equipable {
+             CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+             BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityliving.getBukkitEntity());
+-            if (!DispenserBlock.eventFired) {
++            if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                 world.getCraftServer().getPluginManager().callEvent(event);
+             }
+ 
+diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
+index 9d7089d9db5bf86c0cb917e0e192f551bad5c3f1..e70e16e76657dfc92fbe2ead70c93024ab02315c 100644
+--- a/src/main/java/net/minecraft/world/item/ItemStack.java
++++ b/src/main/java/net/minecraft/world/item/ItemStack.java
+@@ -511,7 +511,7 @@ public final class ItemStack implements DataComponentHolder {
+                     //     ((ServerPlayer) entityhuman).connection.send(new ClientboundBlockUpdatePacket(world, placedPos.relative(dir)));
+                     // }
+                     // Paper end - Don't resync blocks
+-                    SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
++                    SignItem.openSignThreadLocal.remove(); // SPIGOT-6758 - Reset on early return
+                 } else {
+                     // Change the stack to its new contents if it hasn't been tampered with.
+                     if (this.getCount() == oldCount && Objects.equals(this.components.asPatch(), oldData)) {
+@@ -555,7 +555,7 @@ public final class ItemStack implements DataComponentHolder {
+                     }
+ 
+                     // SPIGOT-4678
+-                    if (this.item instanceof SignItem && SignItem.openSign != null) {
++                    if (this.item instanceof SignItem && SignItem.openSignThreadLocal.get() != null) {
+                         try {
+                             if (world.getBlockEntity(SignItem.openSign) instanceof SignBlockEntity tileentitysign) {
+                                 if (world.getBlockState(SignItem.openSign).getBlock() instanceof SignBlock blocksign) {
+@@ -563,7 +563,7 @@ public final class ItemStack implements DataComponentHolder {
+                                 }
+                             }
+                         } finally {
+-                            SignItem.openSign = null;
++                            SignItem.openSignThreadLocal.remove();
+                         }
+                     }
+ 
+diff --git a/src/main/java/net/minecraft/world/item/MinecartItem.java b/src/main/java/net/minecraft/world/item/MinecartItem.java
+index 4b8cebb321eddc852b4ec7def7f51d781f67927b..daf536781cf66a7f33a9f751b8beba97ee02e3c3 100644
+--- a/src/main/java/net/minecraft/world/item/MinecartItem.java
++++ b/src/main/java/net/minecraft/world/item/MinecartItem.java
+@@ -71,7 +71,7 @@ public class MinecartItem extends Item {
+             CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+             BlockDispenseEvent event = new BlockDispenseEvent(block2, craftItem.clone(), new org.bukkit.util.Vector(d0, d1 + d3, d2));
+-            if (!DispenserBlock.eventFired) {
++            if (!DispenserBlock.eventFiredThreadLocal.get()) {
+                 worldserver.getCraftServer().getPluginManager().callEvent(event);
+             }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 5fece4d6dd317d3f4ec89124987ecec2f2b47d42..33d16abf46053de51e4d62c9bece24b042075aed 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -168,6 +168,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+     public int wakeupInactiveRemainingVillagers;
+     // Paper end
+     public boolean populating;
++    public final ThreadLocal<Boolean> populatingThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - thread local for populating
+     public final org.spigotmc.SpigotWorldConfig spigotConfig; // Spigot
+     // Paper start - add paper world config
+     private final io.papermc.paper.configuration.WorldConfiguration paperConfig;
+diff --git a/src/main/java/net/minecraft/world/level/NaturalSpawner.java b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
+index acc5f03fb1d8160fd066f6b6f768985a1a407198..8ab37d7a26958931723820edbca0d16b4241e57b 100644
+--- a/src/main/java/net/minecraft/world/level/NaturalSpawner.java
++++ b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
+@@ -163,7 +163,9 @@ public final class NaturalSpawner {
+                 if (inRange != null) {
+                     final net.minecraft.server.level.ServerPlayer[] backingSet = inRange.getRawDataUnchecked();
+                     for (int k = 0, len = inRange.size(); k < len; k++) {
+-                        minDiff = Math.min(limit - world.getChunkSource().chunkMap.getMobCountNear(backingSet[k], enumcreaturetype), minDiff);
++                        final net.minecraft.server.level.ServerPlayer player = backingSet[k]; // Confetti - capture reference to avoid race condition
++                        if (player == null) continue; // Confetti - player may have disconnected
++                        minDiff = Math.min(limit - world.getChunkSource().chunkMap.getMobCountNear(player, enumcreaturetype), minDiff);
+                     }
+                 }
+                 difference = (minDiff == Integer.MAX_VALUE) ? 0 : minDiff;
+diff --git a/src/main/java/net/minecraft/world/level/block/DispenserBlock.java b/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
+index f6edfea463b3725d3a79aca38825e86dbf82175c..2013bd02dd2d0950d10069edc7978b7becf176a9 100644
+--- a/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
+@@ -52,6 +52,7 @@ public class DispenserBlock extends BaseEntityBlock {
+     });
+     private static final int TRIGGER_DURATION = 4;
+     public static boolean eventFired = false; // CraftBukkit
++    public static final ThreadLocal<Boolean> eventFiredThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - use thread local for eventFired
+ 
+     @Override
+     public MapCodec<? extends DispenserBlock> codec() {
+@@ -111,7 +112,7 @@ public class DispenserBlock extends BaseEntityBlock {
+ 
+                 if (idispensebehavior != DispenseItemBehavior.NOOP) {
+                     if (!org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockPreDispenseEvent(world, pos, itemstack, i)) return; // Paper - Add BlockPreDispenseEvent
+-                    DispenserBlock.eventFired = false; // CraftBukkit - reset event status
++                    DispenserBlock.eventFiredThreadLocal.set(false); // CraftBukkit - reset event status // Confetti - use thread local for eventFired
+                     tileentitydispenser.setItem(i, idispensebehavior.dispense(sourceblock, itemstack));
+                 }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/block/FungusBlock.java b/src/main/java/net/minecraft/world/level/block/FungusBlock.java
+index 454f95ba814b375e97189430b498c0e7486fbd94..a79014c50027920640104901d31621a6076608c7 100644
+--- a/src/main/java/net/minecraft/world/level/block/FungusBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/FungusBlock.java
+@@ -76,9 +76,9 @@ public class FungusBlock extends BushBlock implements BonemealableBlock {
+         this.getFeature(world).ifPresent((holder) -> {
+             // CraftBukkit start
+             if (this == Blocks.WARPED_FUNGUS) {
+-                SaplingBlock.treeType = org.bukkit.TreeType.WARPED_FUNGUS;
++                SaplingBlock.treeTypeThreadLocal.set(org.bukkit.TreeType.WARPED_FUNGUS);
+             } else if (this == Blocks.CRIMSON_FUNGUS) {
+-                SaplingBlock.treeType = org.bukkit.TreeType.CRIMSON_FUNGUS;
++                SaplingBlock.treeTypeThreadLocal.set(org.bukkit.TreeType.CRIMSON_FUNGUS);
+             }
+             // CraftBukkit end
+             ((ConfiguredFeature) holder.value()).place(world, world.getChunkSource().getGenerator(), random, pos);
+diff --git a/src/main/java/net/minecraft/world/level/block/MushroomBlock.java b/src/main/java/net/minecraft/world/level/block/MushroomBlock.java
+index 1172d85c5c26ab2142343d91149766e5993cb36a..3c16255d5dba5fab10f2983329497580c3940574 100644
+--- a/src/main/java/net/minecraft/world/level/block/MushroomBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/MushroomBlock.java
+@@ -105,7 +105,7 @@ public class MushroomBlock extends BushBlock implements BonemealableBlock {
+             return false;
+         } else {
+             world.removeBlock(pos, false);
+-            SaplingBlock.treeType = (this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM; // CraftBukkit
++            SaplingBlock.treeTypeThreadLocal.set((this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.RED_MUSHROOM); // CraftBukkit // Confetti - thread local for treeType
+             if (((ConfiguredFeature) ((Holder) optional.get()).value()).place(world, world.getChunkSource().getGenerator(), random, pos)) {
+                 return true;
+             } else {
+diff --git a/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java b/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
+index c131734cad123a35456d18f8a161f77a4ac9ac99..f9773d754a75637f25851cf0e3a6d941b50b76fd 100644
+--- a/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/RedStoneWireBlock.java
+@@ -69,6 +69,7 @@ public class RedStoneWireBlock extends Block {
+     private static final float PARTICLE_DENSITY = 0.2F;
+     private final BlockState crossState;
+     public boolean shouldSignal = true;
++    public final ThreadLocal<Boolean> shouldSignalThreadLocal = ThreadLocal.withInitial(() -> true); // Confetti - use thread local for shouldSignal
+ 
+     @Override
+     public MapCodec<RedStoneWireBlock> codec() {
+@@ -260,7 +261,7 @@ public class RedStoneWireBlock extends Block {
+ 
+     // Paper start - Optimize redstone (Eigencraft)
+     // The bulk of the new functionality is found in RedstoneWireTurbo.java
+-    com.destroystokyo.paper.util.RedstoneWireTurbo turbo = new com.destroystokyo.paper.util.RedstoneWireTurbo(this);
++    final ThreadLocal<com.destroystokyo.paper.util.RedstoneWireTurbo> turboThreadLocal = ThreadLocal.withInitial(() -> new com.destroystokyo.paper.util.RedstoneWireTurbo(this)); // Confetti - thread local for turbo
+ 
+     /*
+      * Modified version of pre-existing updateSurroundingRedstone, which is called from
+@@ -269,7 +270,7 @@ public class RedStoneWireBlock extends Block {
+      */
+     private void updateSurroundingRedstone(Level worldIn, BlockPos pos, BlockState state, BlockPos source) {
+         if (worldIn.paperConfig().misc.redstoneImplementation == io.papermc.paper.configuration.WorldConfiguration.Misc.RedstoneImplementation.EIGENCRAFT) {
+-            turbo.updateSurroundingRedstone(worldIn, pos, state, source);
++            turboThreadLocal.get().updateSurroundingRedstone(worldIn, pos, state, source); // Confetti - thread local for turbo
+             return;
+         }
+         updatePowerStrength(worldIn, pos, state);
+@@ -360,7 +361,7 @@ public class RedStoneWireBlock extends Block {
+                 // [Space Walker] suppress shape updates and emit those manually to
+                 // bypass the new neighbor update stack.
+                 if (worldIn.setBlock(pos1, state, Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_CLIENTS))
+-                    turbo.updateNeighborShapes(worldIn, pos1, state);
++                    turboThreadLocal.get().updateNeighborShapes(worldIn, pos1, state); // Confetti - thread local for turbo
+             }
+         }
+ 
+@@ -409,10 +410,10 @@ public class RedStoneWireBlock extends Block {
+     }
+ 
+     private int calculateTargetStrength(Level world, BlockPos pos) {
+-        this.shouldSignal = false;
++        this.shouldSignalThreadLocal.set(false);
+         int i = world.getBestNeighborSignal(pos);
+ 
+-        this.shouldSignal = true;
++        this.shouldSignalThreadLocal.set(true);
+         int j = 0;
+ 
+         if (i < 15) {
+@@ -551,12 +552,12 @@ public class RedStoneWireBlock extends Block {
+ 
+     @Override
+     protected int getDirectSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
+-        return !this.shouldSignal ? 0 : state.getSignal(world, pos, direction);
++        return !this.shouldSignalThreadLocal.get() ? 0 : state.getSignal(world, pos, direction);
+     }
+ 
+     @Override
+     protected int getSignal(BlockState state, BlockGetter world, BlockPos pos, Direction direction) {
+-        if (this.shouldSignal && direction != Direction.DOWN) {
++        if (this.shouldSignalThreadLocal.get() && direction != Direction.DOWN) {
+             int i = (Integer) state.getValue(RedStoneWireBlock.POWER);
+ 
+             return i == 0 ? 0 : (direction != Direction.UP && !((RedstoneSide) this.getConnectionState(world, state, pos).getValue((Property) RedStoneWireBlock.PROPERTY_BY_DIRECTION.get(direction.getOpposite()))).isConnected() ? 0 : i);
+@@ -583,7 +584,7 @@ public class RedStoneWireBlock extends Block {
+ 
+     @Override
+     protected boolean isSignalSource(BlockState state) {
+-        return this.shouldSignal;
++        return this.shouldSignalThreadLocal.get();
+     }
+ 
+     public static int getColorForPower(int powerLevel) {
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
+index cd0e43f4c53a746dd6183a8406269f9b11ad3571..3b5e68550012f4b6bf6e884946fc3830e9eb0a5c 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
+@@ -38,7 +38,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import co.aikar.timings.Timing; // Paper
+ 
+ public abstract class BlockEntity {
+-    static boolean ignoreTileUpdates; // Paper - Perf: Optimize Hoppers
++    static final ThreadLocal<Boolean> ignoreTileUpdatesThreadLocal = ThreadLocal.withInitial(() -> false); // Paper - Perf: Optimize Hoppers // Confetti - use thread local for ignoreTileUpdates
+ 
+     public Timing tickTimer = MinecraftTimings.getTileEntityTimings(this); // Paper
+     // CraftBukkit start - data containers
+@@ -232,7 +232,7 @@ public abstract class BlockEntity {
+ 
+     public void setChanged() {
+         if (this.level != null) {
+-            if (ignoreTileUpdates) return; // Paper - Perf: Optimize Hoppers
++            if (ignoreTileUpdatesThreadLocal.get()) return; // Paper - Perf: Optimize Hoppers // Confetti - use thread local for ignoreTileUpdates
+             BlockEntity.setChanged(this.level, this.worldPosition, this.blockState);
+         }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+index cab403efd471bb61835224eea4e99570d34dcaaa..d3e8ca69b60a5218bd9199353327dca4feea0ef9 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -237,12 +237,12 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+     }
+ 
+     // Paper start - Perf: Optimize Hoppers
+-    private static boolean skipPullModeEventFire;
+-    private static boolean skipPushModeEventFire;
++    private static final ThreadLocal<Boolean> skipPullModeEventFireThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - use thread local for skipPullModeEventFire
++    private static final ThreadLocal<Boolean> skipPushModeEventFireThreadLocal = ThreadLocal.withInitial(() -> false); // Confetti - use thread local for skipPushModeEventFire
+     public static boolean skipHopperEvents;
+ 
+     private static boolean hopperPush(final Level level, final Container destination, final Direction direction, final HopperBlockEntity hopper) {
+-        skipPushModeEventFire = skipHopperEvents;
++        skipPushModeEventFireThreadLocal.set(skipHopperEvents); // Confetti - use thread local for skipPushModeEventFire
+         boolean foundItem = false;
+         for (int i = 0; i < hopper.getContainerSize(); ++i) {
+             final ItemStack item = hopper.getItem(i);
+@@ -257,7 +257,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+ 
+                 // We only need to fire the event once to give protection plugins a chance to cancel this event
+                 // Because nothing uses getItem, every event call should end up the same result.
+-                if (!skipPushModeEventFire) {
++                if (!skipPushModeEventFireThreadLocal.get()) { // Confetti - use thread local for skipPushModeEventFire
+                     movedItem = callPushMoveEvent(destination, movedItem, hopper);
+                     if (movedItem == null) { // cancelled
+                         origItemStack.setCount(originalItemCount);
+@@ -293,7 +293,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         container.setChanged(); // original logic always marks source inv as changed even if no move happens.
+         movedItem.setCount(movedItemCount);
+ 
+-        if (!skipPullModeEventFire) {
++        if (!skipPullModeEventFireThreadLocal.get()) { // Confetti - use thread local for skipPullModeEventFire
+             movedItem = callPullMoveEvent(hopper, container, movedItem);
+             if (movedItem == null) { // cancelled
+                 origItemStack.setCount(originalItemCount);
+@@ -313,9 +313,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                 origItemStack.setCount(originalItemCount - movedItemCount + remainingItemCount);
+             }
+ 
+-            ignoreTileUpdates = true;
++            ignoreTileUpdatesThreadLocal.set(true);
+             container.setItem(i, origItemStack);
+-            ignoreTileUpdates = false;
++            ignoreTileUpdatesThreadLocal.set(false);
+             container.setChanged();
+             return true;
+         }
+@@ -335,7 +335,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             CraftItemStack.asCraftMirror(itemstack), destinationInventory, true);
+         final boolean result = event.callEvent();
+         if (!event.calledGetItem && !event.calledSetItem) {
+-            skipPushModeEventFire = true;
++            skipPushModeEventFireThreadLocal.set(true);
+         }
+         if (!result) {
+             cooldownHopper(hopper);
+@@ -358,7 +358,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         final io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent event = new io.papermc.paper.event.inventory.PaperInventoryMoveItemEvent(sourceInventory, CraftItemStack.asCraftMirror(itemstack), destination, false);
+         final boolean result = event.callEvent();
+         if (!event.calledGetItem && !event.calledSetItem) {
+-            skipPullModeEventFire = true;
++            skipPullModeEventFireThreadLocal.set(true);
+         }
+         if (!result) {
+             cooldownHopper(hopper);
+@@ -552,7 +552,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+ 
+         if (iinventory != null) {
+             Direction enumdirection = Direction.DOWN;
+-            skipPullModeEventFire = skipHopperEvents; // Paper - Perf: Optimize Hoppers
++            skipPullModeEventFireThreadLocal.set(skipHopperEvents); // Paper - Perf: Optimize Hoppers
+             int[] aint = HopperBlockEntity.getSlots(iinventory, enumdirection);
+             int i = aint.length;
+ 
+@@ -743,9 +743,9 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                     stack = stack.split(to.getMaxStackSize());
+                 }
+                 // Spigot end
+-                ignoreTileUpdates = true; // Paper - Perf: Optimize Hoppers
++                ignoreTileUpdatesThreadLocal.set(true); // Paper - Perf: Optimize Hoppers
+                 to.setItem(slot, stack);
+-                ignoreTileUpdates = false; // Paper - Perf: Optimize Hoppers
++                ignoreTileUpdatesThreadLocal.set(false); // Paper - Perf: Optimize Hoppers
+                 stack = leftover; // Paper - Make hoppers respect inventory max stack size
+                 flag = true;
+             } else if (HopperBlockEntity.canMergeItems(itemstack1, stack)) {
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java
+index a74732902c0494c67e6acf2fc04581ff9c46b832..252d6930c42b64484a522b236b527c4fd07b445c 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/SculkCatalystBlockEntity.java
+@@ -46,9 +46,9 @@ public class SculkCatalystBlockEntity extends BlockEntity implements GameEventLi
+     // Paper end - Fix NPE in SculkBloomEvent world access
+ 
+     public static void serverTick(Level world, BlockPos pos, BlockState state, SculkCatalystBlockEntity blockEntity) {
+-        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverride = blockEntity.getBlockPos(); // CraftBukkit - SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep.
++        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverrideThreadLocal.set(blockEntity.getBlockPos()); // CraftBukkit - SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep. // Confetti - use thread local
+         blockEntity.catalystListener.getSculkSpreader().updateCursors(world, pos, world.getRandom(), true);
+-        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverride = null; // CraftBukkit
++        org.bukkit.craftbukkit.event.CraftEventFactory.sourceBlockOverrideThreadLocal.remove(); // CraftBukkit // Confetti - use thread local
+     }
+ 
+     @Override
+diff --git a/src/main/java/net/minecraft/world/level/block/grower/TreeGrower.java b/src/main/java/net/minecraft/world/level/block/grower/TreeGrower.java
+index 597599138f69c9ee05dc7657c51c25336337875e..0893e4c445d42881d3d9c41a949ff66961a18849 100644
+--- a/src/main/java/net/minecraft/world/level/block/grower/TreeGrower.java
++++ b/src/main/java/net/minecraft/world/level/block/grower/TreeGrower.java
+@@ -175,47 +175,47 @@ public final class TreeGrower {
+     private void setTreeType(Holder<ConfiguredFeature<?, ?>> holder) {
+         ResourceKey<ConfiguredFeature<?, ?>> worldgentreeabstract = holder.unwrapKey().get();
+         if (worldgentreeabstract == TreeFeatures.OAK || worldgentreeabstract == TreeFeatures.OAK_BEES_005) {
+-            SaplingBlock.treeType = TreeType.TREE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TREE);
+         } else if (worldgentreeabstract == TreeFeatures.HUGE_RED_MUSHROOM) {
+-            SaplingBlock.treeType = TreeType.RED_MUSHROOM;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.RED_MUSHROOM);
+         } else if (worldgentreeabstract == TreeFeatures.HUGE_BROWN_MUSHROOM) {
+-            SaplingBlock.treeType = TreeType.BROWN_MUSHROOM;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.BROWN_MUSHROOM);
+         } else if (worldgentreeabstract == TreeFeatures.JUNGLE_TREE) {
+-            SaplingBlock.treeType = TreeType.COCOA_TREE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.COCOA_TREE);
+         } else if (worldgentreeabstract == TreeFeatures.JUNGLE_TREE_NO_VINE) {
+-            SaplingBlock.treeType = TreeType.SMALL_JUNGLE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.SMALL_JUNGLE);
+         } else if (worldgentreeabstract == TreeFeatures.PINE) {
+-            SaplingBlock.treeType = TreeType.TALL_REDWOOD;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_REDWOOD);
+         } else if (worldgentreeabstract == TreeFeatures.SPRUCE) {
+-            SaplingBlock.treeType = TreeType.REDWOOD;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.REDWOOD);
+         } else if (worldgentreeabstract == TreeFeatures.ACACIA) {
+-            SaplingBlock.treeType = TreeType.ACACIA;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.ACACIA);
+         } else if (worldgentreeabstract == TreeFeatures.BIRCH || worldgentreeabstract == TreeFeatures.BIRCH_BEES_005) {
+-            SaplingBlock.treeType = TreeType.BIRCH;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.BIRCH);
+         } else if (worldgentreeabstract == TreeFeatures.SUPER_BIRCH_BEES_0002) {
+-            SaplingBlock.treeType = TreeType.TALL_BIRCH;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_BIRCH);
+         } else if (worldgentreeabstract == TreeFeatures.SWAMP_OAK) {
+-            SaplingBlock.treeType = TreeType.SWAMP;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.SWAMP);
+         } else if (worldgentreeabstract == TreeFeatures.FANCY_OAK || worldgentreeabstract == TreeFeatures.FANCY_OAK_BEES_005) {
+-            SaplingBlock.treeType = TreeType.BIG_TREE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.BIG_TREE);
+         } else if (worldgentreeabstract == TreeFeatures.JUNGLE_BUSH) {
+-            SaplingBlock.treeType = TreeType.JUNGLE_BUSH;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.JUNGLE_BUSH);
+         } else if (worldgentreeabstract == TreeFeatures.DARK_OAK) {
+-            SaplingBlock.treeType = TreeType.DARK_OAK;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.DARK_OAK);
+         } else if (worldgentreeabstract == TreeFeatures.MEGA_SPRUCE) {
+-            SaplingBlock.treeType = TreeType.MEGA_REDWOOD;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.MEGA_REDWOOD);
+         } else if (worldgentreeabstract == TreeFeatures.MEGA_PINE) {
+-            SaplingBlock.treeType = TreeType.MEGA_PINE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.MEGA_PINE);
+         } else if (worldgentreeabstract == TreeFeatures.MEGA_JUNGLE_TREE) {
+-            SaplingBlock.treeType = TreeType.JUNGLE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.JUNGLE);
+         } else if (worldgentreeabstract == TreeFeatures.AZALEA_TREE) {
+-            SaplingBlock.treeType = TreeType.AZALEA;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.AZALEA);
+         } else if (worldgentreeabstract == TreeFeatures.MANGROVE) {
+-            SaplingBlock.treeType = TreeType.MANGROVE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.MANGROVE);
+         } else if (worldgentreeabstract == TreeFeatures.TALL_MANGROVE) {
+-            SaplingBlock.treeType = TreeType.TALL_MANGROVE;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.TALL_MANGROVE);
+         } else if (worldgentreeabstract == TreeFeatures.CHERRY || worldgentreeabstract == TreeFeatures.CHERRY_BEES_005) {
+-            SaplingBlock.treeType = TreeType.CHERRY;
++            SaplingBlock.treeTypeThreadLocal.set(TreeType.CHERRY);
+         } else {
+             throw new IllegalArgumentException("Unknown tree generator " + worldgentreeabstract);
+         }
+diff --git a/src/main/java/net/minecraft/world/level/border/WorldBorder.java b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
+index 04e62c54f224f7949fde9ceded208e700db55aa1..2306ff1159326b481d920d5b86701d97ec5c0bbd 100644
+--- a/src/main/java/net/minecraft/world/level/border/WorldBorder.java
++++ b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
+@@ -47,14 +47,14 @@ public class WorldBorder {
+     }
+ 
+     // Paper start - Bound treasure maps to world border
+-    private final BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
++    private final ThreadLocal<BlockPos.MutableBlockPos> mutPosThreadLocal = ThreadLocal.withInitial(() -> new BlockPos.MutableBlockPos()); // Confetti - thread local for mutPos
+     public boolean isBlockInBounds(int chunkX, int chunkZ) {
+-        this.mutPos.set(chunkX, 64, chunkZ);
+-        return this.isWithinBounds(this.mutPos);
++        this.mutPosThreadLocal.get().set(chunkX, 64, chunkZ); // Confetti - thread local for mutPos
++        return this.isWithinBounds(this.mutPosThreadLocal.get()); // Confetti - thread local for mutPos
+     }
+     public boolean isChunkInBounds(int chunkX, int chunkZ) {
+-        this.mutPos.set(((chunkX << 4) + 15), 64, (chunkZ << 4) + 15);
+-        return this.isWithinBounds(this.mutPos);
++        this.mutPosThreadLocal.get().set(((chunkX << 4) + 15), 64, (chunkZ << 4) + 15); // Confetti - thread local for mutPos
++        return this.isWithinBounds(this.mutPosThreadLocal.get()); // Confetti - thread local for mutPos
+     }
+     // Paper end - Bound treasure maps to world border
+ 
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index ec1e58a93c3b7b2b6b280161ecf84e8682ec8317..855bfde0b1f162f8898dd6a420d21093e974c973 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -685,13 +685,13 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+ 
+                 org.bukkit.World world = this.level.getWorld();
+                 if (world != null) {
+-                    this.level.populating = true;
++                    this.level.populatingThreadLocal.set(true); // Confetti - thread local for populating
+                     try {
+                         for (org.bukkit.generator.BlockPopulator populator : world.getPopulators()) {
+                             populator.populate(world, random, bukkitChunk);
+                         }
+                     } finally {
+-                        this.level.populating = false;
++                        this.level.populatingThreadLocal.set(false); // Confetti - thread local for populating
+                     }
+                 }
+                 server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(bukkitChunk));
+diff --git a/src/main/java/net/minecraft/world/level/entity/EntityTickList.java b/src/main/java/net/minecraft/world/level/entity/EntityTickList.java
+index 80a43def4912a3228cd95117d5c2aac68798b4ec..c398e083234eca067f0327a6ce8f96e709b759e3 100644
+--- a/src/main/java/net/minecraft/world/level/entity/EntityTickList.java
++++ b/src/main/java/net/minecraft/world/level/entity/EntityTickList.java
+@@ -15,21 +15,23 @@ public class EntityTickList {
+         // Paper - rewrite chunk system
+     }
+ 
+-    public void add(Entity entity) {
++    // Confetti start - synchronized for thread safety
++    public synchronized void add(Entity entity) {
+         this.ensureActiveIsNotIterated();
+         this.entities.add(entity); // Paper - rewrite chunk system
+     }
+ 
+-    public void remove(Entity entity) {
++    public synchronized void remove(Entity entity) {
+         this.ensureActiveIsNotIterated();
+         this.entities.remove(entity); // Paper - rewrite chunk system
+     }
+ 
+-    public boolean contains(Entity entity) {
++    public synchronized boolean contains(Entity entity) {
+         return this.entities.contains(entity); // Paper - rewrite chunk system
+     }
+ 
+-    public void forEach(Consumer<Entity> action) {
++    public synchronized void forEach(Consumer<Entity> action) {
++        // Confetti end
+         // Paper start - rewrite chunk system
+         // To ensure nothing weird happens with dimension travelling, do not iterate over new entries...
+         // (by dfl iterator() is configured to not iterate over new entries)
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..99505f0db7bc36d89b55b5193c73e5d98215ce38
+--- /dev/null
++++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
+@@ -0,0 +1,50 @@
++package net.minecraft.world.level.saveddata.maps;
++
++import it.unimi.dsi.fastutil.objects.Object2IntMap;
++import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
++import it.unimi.dsi.fastutil.objects.Object2IntMap.Entry;
++import net.minecraft.core.HolderLookup;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.util.datafix.DataFixTypes;
++import net.minecraft.world.level.saveddata.SavedData;
++
++public class MapIndex extends SavedData {
++    public static final String FILE_NAME = "idcounts";
++    private final Object2IntMap<String> usedAuxIds = new Object2IntOpenHashMap<>();
++
++    public static SavedData.Factory<MapIndex> factory() {
++        return new SavedData.Factory<>(MapIndex::new, MapIndex::load, DataFixTypes.SAVED_DATA_MAP_INDEX);
++    }
++
++    public MapIndex() {
++        this.usedAuxIds.defaultReturnValue(-1);
++    }
++
++    public static MapIndex load(CompoundTag nbt, HolderLookup.Provider registryLookup) {
++        MapIndex mapIndex = new MapIndex();
++
++        for (String string : nbt.getAllKeys()) {
++            if (nbt.contains(string, 99)) {
++                mapIndex.usedAuxIds.put(string, nbt.getInt(string));
++            }
++        }
++
++        return mapIndex;
++    }
++
++    @Override
++    public synchronized CompoundTag save(CompoundTag nbt, HolderLookup.Provider registryLookup) { // Confetti - thread-safe
++        for (Entry<String> entry : this.usedAuxIds.object2IntEntrySet()) {
++            nbt.putInt(entry.getKey(), entry.getIntValue());
++        }
++
++        return nbt;
++    }
++
++    public synchronized MapId getFreeAuxValueForMap() { // Confetti - thread-safe
++        int i = this.usedAuxIds.getInt("map") + 1;
++        this.usedAuxIds.put("map", i);
++        this.setDirty();
++        return new MapId(i);
++    }
++}
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+index 7a53a5b5490e6b00b9f755fb3e18fb38f4bc1252..14fec7f7ea98914c355f885f29f32e3bfb2e5d35 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+@@ -12,6 +12,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+ import java.util.Optional;
++import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.function.Predicate;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+@@ -88,6 +89,7 @@ public class MapItemSavedData extends SavedData {
+     public UUID uniqueId = null;
+     public MapId id;
+     // CraftBukkit end
++    public final AtomicBoolean hasCalledMapInitializeEvent = new AtomicBoolean(false); // Confetti - ensure only called once
+ 
+     public static SavedData.Factory<MapItemSavedData> factory() {
+         return new SavedData.Factory<>(() -> {
+@@ -263,7 +265,7 @@ public class MapItemSavedData extends SavedData {
+         return nbt;
+     }
+ 
+-    public MapItemSavedData locked() {
++    public synchronized MapItemSavedData locked() { // Confetti - thread-safe
+         MapItemSavedData worldmap = new MapItemSavedData(this.centerX, this.centerZ, this.scale, this.trackingPosition, this.unlimitedTracking, true, this.dimension);
+ 
+         worldmap.bannerMarkers.putAll(this.bannerMarkers);
+@@ -286,7 +288,7 @@ public class MapItemSavedData extends SavedData {
+         };
+     }
+ 
+-    public void tickCarriedBy(Player player, ItemStack stack) {
++    public synchronized void tickCarriedBy(Player player, ItemStack stack) { // Confetti - thread-safe
+         if (!this.carriedByPlayers.containsKey(player)) {
+             MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = new MapItemSavedData.HoldingPlayer(player);
+ 
+@@ -439,7 +441,7 @@ public class MapItemSavedData extends SavedData {
+     }
+ 
+     @Nullable
+-    public Packet<?> getUpdatePacket(MapId mapId, Player player) {
++    public synchronized Packet<?> getUpdatePacket(MapId mapId, Player player) { // Confetti - thread-safe
+         MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = (MapItemSavedData.HoldingPlayer) this.carriedByPlayers.get(player);
+ 
+         return worldmap_worldmaphumantracker == null ? null : worldmap_worldmaphumantracker.nextUpdatePacket(mapId);
+@@ -563,7 +565,7 @@ public class MapItemSavedData extends SavedData {
+         return true;
+     }
+ 
+-    public void addClientSideDecorations(List<MapDecoration> decorations) {
++    public synchronized void addClientSideDecorations(List<MapDecoration> decorations) { // Confetti - thread-safe
+         this.decorations.clear();
+         this.trackedDecorationCount = 0;
+ 
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index 6e23e69abd56eeda3b52a22019e1b74ae10682e7..3636b8ceeb28fddd13fe284a8b5882d8d3c29806 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -25,7 +25,7 @@ import org.slf4j.Logger;
+ 
+ public class DimensionDataStorage implements java.io.Closeable { // Paper - Write SavedData IO async
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    public final Map<String, SavedData> cache = Maps.newHashMap();
++    public final Map<String, SavedData> cache = Maps.newConcurrentMap(); // Confetti - thread-safe
+     private final DataFixer fixerUpper;
+     private final HolderLookup.Provider registries;
+     private final File dataFolder;
+@@ -43,25 +43,29 @@ public class DimensionDataStorage implements java.io.Closeable { // Paper - Writ
+     }
+ 
+     public <T extends SavedData> T computeIfAbsent(SavedData.Factory<T> type, String id) {
+-        T savedData = this.get(type, id);
+-        if (savedData != null) {
+-            return savedData;
+-        } else {
+-            T savedData2 = (T)type.constructor().get();
+-            this.set(id, savedData2);
+-            return savedData2;
+-        }
++        // Confetti start - thread-safe
++        return (T) this.cache.compute(id, (key, savedData) -> {
++            if (savedData != null) {
++                return savedData;
++            }
++
++            savedData = this.readSavedData(type.deserializer(), type.type(), key);
++            if (savedData != null) {
++                return  savedData;
++            }
++
++            return type.constructor().get();
++        });
++        // Confetti end - thread-safe
+     }
+ 
+     @Nullable
+     public <T extends SavedData> T get(SavedData.Factory<T> type, String id) {
+-        SavedData savedData = this.cache.get(id);
+-        if (savedData == null && !this.cache.containsKey(id)) {
+-            savedData = this.readSavedData(type.deserializer(), type.type(), id);
+-            this.cache.put(id, savedData);
+-        }
+-
+-        return (T)savedData;
++        // Confetti start - thread-safe
++        return (T) this.cache.computeIfAbsent(id, (key) -> {
++            return this.readSavedData(type.deserializer(), type.type(), key);
++        });
++        // Confetti end - thread-safe
+     }
+ 
+     @Nullable
+diff --git a/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java b/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
+index c42c0d1e4da30aa15f32d4ca524aeabd26fc50cf..4e607ab38088d51615c5d00895d540954d835aa3 100644
+--- a/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
++++ b/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
+@@ -137,18 +137,21 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+         return listTag;
+     }
+ 
++    // Confetti start - thread-safe by capturing reference locally
+     public void unpack(long time) {
+-        if (this.pendingTicks != null) {
++        List<SavedTick<T>> pending = this.pendingTicks;
++        if (pending != null) {
+             this.lastSaved = time; // Paper - rewrite chunk system
+-            int i = -this.pendingTicks.size();
++            int i = -pending.size();
+ 
+-            for (SavedTick<T> savedTick : this.pendingTicks) {
++            for (SavedTick<T> savedTick : pending) {
+                 this.scheduleUnchecked(savedTick.unpack(time, (long)(i++)));
+             }
+         }
+ 
+         this.pendingTicks = null;
+     }
++    // Confetti end
+ 
+     public static <T> LevelChunkTicks<T> load(ListTag tickQueue, Function<String, Optional<T>> nameToTypeFunction, ChunkPos pos) {
+         Builder<SavedTick<T>> builder = ImmutableList.builder();
+diff --git a/src/main/java/net/minecraft/world/ticks/LevelTicks.java b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
+index a6d62abd3102770652f914b9d697c6d3c2533cfc..21644aa1d0f86e5d07f9edc30c67947145d82142 100644
+--- a/src/main/java/net/minecraft/world/ticks/LevelTicks.java
++++ b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
+@@ -32,8 +32,8 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+     private static final Comparator<LevelChunkTicks<?>> CONTAINER_DRAIN_ORDER = (a, b) -> ScheduledTick.INTRA_TICK_DRAIN_ORDER.compare(a.peek(), b.peek());
+     private final LongPredicate tickCheck;
+     private final Supplier<ProfilerFiller> profiler;
+-    private final Long2ObjectMap<LevelChunkTicks<T>> allContainers = new Long2ObjectOpenHashMap<>();
+-    private final Long2LongMap nextTickForContainer = Util.make(new Long2LongOpenHashMap(), map -> map.defaultReturnValue(Long.MAX_VALUE));
++    private final Long2ObjectMap<LevelChunkTicks<T>> allContainers = it.unimi.dsi.fastutil.longs.Long2ObjectMaps.synchronize(new Long2ObjectOpenHashMap<>()); // Confetti - thread-safe
++    private final Long2LongMap nextTickForContainer = it.unimi.dsi.fastutil.longs.Long2LongMaps.synchronize(Util.make(new Long2LongOpenHashMap(), map -> map.defaultReturnValue(Long.MAX_VALUE))); // Confetti - thread-safe
+     private final Queue<LevelChunkTicks<T>> containersToTick = new PriorityQueue<>(CONTAINER_DRAIN_ORDER);
+     private final Queue<ScheduledTick<T>> toRunThisTick = new ArrayDeque<>();
+     private final List<ScheduledTick<T>> alreadyRunThisTick = new ArrayList<>();
+@@ -49,7 +49,7 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+         this.profiler = profilerGetter;
+     }
+ 
+-    public void addContainer(ChunkPos pos, LevelChunkTicks<T> scheduler) {
++    public synchronized void addContainer(ChunkPos pos, LevelChunkTicks<T> scheduler) { // Confetti - synchronized
+         long l = pos.toLong();
+         this.allContainers.put(l, scheduler);
+         ScheduledTick<T> scheduledTick = scheduler.peek();
+@@ -60,7 +60,7 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+         scheduler.setOnTickAdded(this.chunkScheduleUpdater);
+     }
+ 
+-    public void removeContainer(ChunkPos pos) {
++    public synchronized void removeContainer(ChunkPos pos) { // Confetti - synchronized
+         long l = pos.toLong();
+         LevelChunkTicks<T> levelChunkTicks = this.allContainers.remove(l);
+         this.nextTickForContainer.remove(l);
+@@ -70,17 +70,17 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+     }
+ 
+     @Override
+-    public void schedule(ScheduledTick<T> orderedTick) {
++    public synchronized void schedule(ScheduledTick<T> orderedTick) { // Confetti - synchronized
+         long l = ChunkPos.asLong(orderedTick.pos());
+         LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
+         if (levelChunkTicks == null) {
+-            Util.pauseInIde(new IllegalStateException("Trying to schedule tick in not loaded position " + orderedTick.pos()));
++            // Util.pauseInIde(new IllegalStateException("Trying to schedule tick in not loaded position " + orderedTick.pos())); // Confetti - don't pause in multithreaded env
+         } else {
+             levelChunkTicks.schedule(orderedTick);
+         }
+     }
+ 
+-    public void tick(long time, int maxTicks, BiConsumer<BlockPos, T> ticker) {
++    public synchronized void tick(long time, int maxTicks, BiConsumer<BlockPos, T> ticker) { // Confetti - synchronized
+         //ProfilerFiller profilerFiller = this.profiler.get(); // Purpur
+         //profilerFiller.push("collect"); // Purpur
+         this.collectTicks(time, maxTicks, null); // Purpur
+diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+index 198a86fc9b8c4dba8c8de27bccc4de65690b84de..1f578e73f3c33e2e1b2fb789e954c576f840d504 100644
+--- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
++++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+@@ -960,7 +960,7 @@ public class CraftEventFactory {
+         return CraftEventFactory.handleBlockSpreadEvent(world, source, target, block, 2);
+     }
+ 
+-    public static BlockPos sourceBlockOverride = null; // SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep.
++    public static ThreadLocal<BlockPos> sourceBlockOverrideThreadLocal = ThreadLocal.withInitial(() -> null); // SPIGOT-7068: Add source block override, not the most elegant way but better than passing down a BlockPosition up to five methods deep. // Confetti - use thread local
+ 
+     public static boolean handleBlockSpreadEvent(LevelAccessor world, BlockPos source, BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag) {
+         // Suppress during worldgen
+@@ -972,7 +972,7 @@ public class CraftEventFactory {
+         CraftBlockState state = CraftBlockStates.getBlockState(world, target, flag);
+         state.setData(block);
+ 
+-        BlockSpreadEvent event = new BlockSpreadEvent(state.getBlock(), CraftBlock.at(world, CraftEventFactory.sourceBlockOverride != null ? CraftEventFactory.sourceBlockOverride : source), state);
++        BlockSpreadEvent event = new BlockSpreadEvent(state.getBlock(), CraftBlock.at(world, CraftEventFactory.sourceBlockOverrideThreadLocal.get() != null ? CraftEventFactory.sourceBlockOverrideThreadLocal.get() : source), state); // Confetti - use thread local
+         Bukkit.getPluginManager().callEvent(event);
+ 
+         if (!event.isCancelled()) {
+@@ -2219,7 +2219,7 @@ public class CraftEventFactory {
+         CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemStack.copyWithCount(1));
+ 
+         org.bukkit.event.block.BlockDispenseEvent event = new org.bukkit.event.block.BlockDispenseEvent(bukkitBlock, craftItem.clone(), CraftVector.toBukkit(to));
+-        if (!net.minecraft.world.level.block.DispenserBlock.eventFired) {
++        if (!net.minecraft.world.level.block.DispenserBlock.eventFiredThreadLocal.get()) {
+             if (!event.callEvent()) {
+                 return itemStack;
+             }
