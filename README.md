@@ -1,6 +1,6 @@
 # Confetti
 
-[![Discord](https://img.shields.io/discord/937309618743427113.svg?color=738ad6&label=Join%20the%20Discord%20server&logo=discord&logoColor=ffffff)](https://discord.gg/dN3WCZkSRV)
+[![Discord](https://img.shields.io/discord/1439071191192305827.svg?color=738ad6&label=Join%20the%20Discord%20server&logo=discord&logoColor=ffffff)](http://discord.com/invite/jshWA2kRmF)
 
 **Confetti is in public beta.** Most features work for most players most of
 the time, however things can occasionally break.
