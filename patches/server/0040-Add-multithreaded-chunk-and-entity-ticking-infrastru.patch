@@ -1,0 +1,508 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 20:14:15 +0100
+Subject: [PATCH] Add multithreaded chunk and entity ticking infrastructure
+
+- Add entity ticking support to LevelChunkRegion with IteratorSafeOrderedReferenceSet
+- Add task scheduling support to LevelChunkRegion with DelayedTask
+- Add entity tracking methods to LevelChunkRegionMap
+- Create ConfettiChunkTicker for multithreaded chunk ticking
+- Create ConfettiEntityTicker for multithreaded entity ticking
+- Create Confetti utility class with runSync/ensureSync APIs
+- Hook tickingRegions into moonrise ChunkSystem
+- Add tickingRegions field to ServerLevel
+- Add previousTickingChunkPosRegion field to Entity
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/util/ChunkSystem.java b/src/main/java/ca/spottedleaf/moonrise/common/util/ChunkSystem.java
+index 0abba00741b39b69a7f167e5d2670f2565c9a752..5a6347db10e31f2e9c106b2766d193beb52cfd0c 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/util/ChunkSystem.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/util/ChunkSystem.java
+@@ -112,12 +112,14 @@ public final class ChunkSystem {
+         }
+         ((ServerLevel)chunk.getLevel()).startTickingChunk(chunk);
+         ((ServerLevel)chunk.getLevel()).getChunkSource().chunkMap.tickingGenerated.incrementAndGet();
++        ((ServerLevel)chunk.getLevel()).tickingRegions.addTickingChunk(chunk); // Confetti - multithreaded chunk ticking
+     }
+ 
+     public static void onChunkNotTicking(final LevelChunk chunk, final ChunkHolder holder) {
+         ((ChunkSystemServerLevel)((ServerLevel)chunk.getLevel())).moonrise$getTickingChunks().remove(
+                 ((ChunkSystemLevelChunk)chunk).moonrise$getChunkAndHolder()
+         );
++        ((ServerLevel)chunk.getLevel()).tickingRegions.removeTickingChunk(chunk); // Confetti - multithreaded chunk ticking
+     }
+ 
+     public static void onChunkEntityTicking(final LevelChunk chunk, final ChunkHolder holder) {
+diff --git a/src/main/java/com/vulpeslab/confetti/Confetti.java b/src/main/java/com/vulpeslab/confetti/Confetti.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3c7ee277ee939f05f7bc669389b77595e689f78f
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/Confetti.java
+@@ -0,0 +1,78 @@
++package com.vulpeslab.confetti;
++
++import com.vulpeslab.confetti.region.RegionPos;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
++import net.minecraft.core.BlockPos;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkPos;
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.CraftWorld;
++
++public class Confetti {
++
++    public static void runSync(Location location, Runnable runnable) {
++        runSync(((CraftWorld) location.getWorld()).getHandle(), new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ()), runnable);
++    }
++
++    public static void runSync(Entity entity, Runnable runnable) {
++        entity.getBukkitEntity().taskScheduler.schedule(e -> runnable.run(), null, 1);
++    }
++
++    public static void runSync(ServerLevel serverLevel, BlockPos blockPos, Runnable runnable) {
++        runSync(serverLevel, new ChunkPos(blockPos), runnable);
++    }
++
++    public static void runSync(ServerLevel serverLevel, ChunkPos chunkPos, Runnable runnable) {
++        serverLevel.tickingRegions.scheduleTask(RegionPos.forChunk(chunkPos), runnable);
++    }
++
++    public static void runSync(ServerLevel serverLevel1, ChunkPos chunkPos1, ServerLevel serverLevel2, ChunkPos chunkPos2, Runnable runnable) {
++        ConfettiRegionScheduler.scheduleAcrossLevels(serverLevel1, RegionPos.forChunk(chunkPos1), serverLevel2, RegionPos.forChunk(chunkPos2), runnable);
++    }
++
++    public static void ensureSync(Location location, Runnable runnable) {
++        ensureSync(((CraftWorld) location.getWorld()).getHandle(), new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ()), runnable);
++    }
++
++    public static void ensureSync(Entity entity, Runnable runnable) {
++        if (!isSync((ServerLevel) entity.level(), entity.chunkPosition())) {
++            runSync(entity, runnable);
++        } else {
++            runnable.run();
++        }
++    }
++
++    public static void ensureSync(ServerLevel serverLevel, BlockPos blockPos, Runnable runnable) {
++        ensureSync(serverLevel, new ChunkPos(blockPos), runnable);
++    }
++
++    public static void ensureSync(ServerLevel serverLevel, ChunkPos chunkPos, Runnable runnable) {
++        if (!isSync(serverLevel, chunkPos)) {
++            runSync(serverLevel, chunkPos, runnable);
++        } else {
++            runnable.run();
++        }
++    }
++
++    public static void ensureSync(Entity entity1, ServerLevel serverLevel2, ChunkPos chunkPos2, Runnable runnable) {
++        if (!isSync((ServerLevel) entity1.level(), entity1.chunkPosition()) || !isSync(serverLevel2, chunkPos2)) {
++            runSync((ServerLevel) entity1.level(), entity1.chunkPosition(), serverLevel2, chunkPos2, runnable);
++        } else {
++            runnable.run();
++        }
++    }
++
++    public static void ensureSync(ServerLevel serverLevel1, ChunkPos chunkPos1, ServerLevel serverLevel2, ChunkPos chunkPos2, Runnable runnable) {
++        if (!isSync(serverLevel1, chunkPos1) || !isSync(serverLevel2, chunkPos2)) {
++            runSync(serverLevel1, chunkPos1, serverLevel2, chunkPos2, runnable);
++        } else {
++            runnable.run();
++        }
++    }
++
++    public static boolean isSync(ServerLevel serverLevel, ChunkPos chunkPos) {
++        return serverLevel.chunkScheduler.getRegionLocker().hasWriteLock(RegionPos.forChunk(chunkPos));
++    }
++
++}
+diff --git a/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java b/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0e99c74bae8740c74ff9391a7ac705ee2e451c15
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/region/DelayedTask.java
+@@ -0,0 +1,29 @@
++package com.vulpeslab.confetti.region;
++
++import com.mojang.logging.LogUtils;
++import org.slf4j.Logger;
++
++public class DelayedTask implements Runnable {
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private final Runnable task;
++    private long delay;
++
++    public DelayedTask(Runnable task, long delay) {
++        this.task = task;
++        this.delay = delay;
++    }
++
++    public boolean shouldRun() {
++        return --delay <= 0;
++    }
++
++    public void run() {
++        try {
++            task.run();
++        } catch (Throwable t) {
++            LOGGER.error("Error when executing task", t);
++        }
++    }
++
++}
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+index 9d27e54bf0a41e403102896b02f279adee109d49..07f6657736fb59e965cc7da9ef7e866711f6261c 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -1,10 +1,14 @@
+ package com.vulpeslab.confetti.region;
+ 
++import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
++import ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.concurrent.ConcurrentLinkedQueue;
+ import java.util.function.Consumer;
+ 
+ public class LevelChunkRegion {
+@@ -12,6 +16,9 @@ public class LevelChunkRegion {
+     private final ServerLevel level;
+     private final RegionPos regionPos;
+     private final List<LevelChunk> levelChunks = new ArrayList<>(RegionPos.REGION_SIZE * RegionPos.REGION_SIZE);
++    private final IteratorSafeOrderedReferenceSet<Entity> tickingEntities = new IteratorSafeOrderedReferenceSet<>(); // Use IteratorSafeOrderedReferenceSet to maintain entity tick order
++    private final ConcurrentLinkedQueue<DelayedTask> scheduledTasks = new ConcurrentLinkedQueue<>(); // Writable tasks
++    private final PrioritisedThreadedTaskQueue internalTasks = new PrioritisedThreadedTaskQueue(); // Read-only tasks
+ 
+     public LevelChunkRegion(ServerLevel level, RegionPos regionPos) {
+         this.level = level;
+@@ -28,10 +35,41 @@ public class LevelChunkRegion {
+         }
+     }
+ 
++    public synchronized void addTickingEntity(Entity entity) {
++        if (!tickingEntities.add(entity)) {
++            throw new IllegalStateException("Tried to add an entity that was already in the ticking list: " + entity);
++        }
++    }
++
++    public synchronized void removeTickingEntity(Entity entity) {
++        if (!tickingEntities.remove(entity)) {
++            throw new IllegalStateException("Tried to remove an entity that wasn't in the ticking list: " + entity);
++        }
++    }
++
++    public void forEachTickingEntity(Consumer<Entity> action) {
++        IteratorSafeOrderedReferenceSet.Iterator<Entity> iterator = this.tickingEntities.iterator();
++        try {
++            while (iterator.hasNext()) {
++                action.accept(iterator.next());
++            }
++        } finally {
++            iterator.finishedIterating();
++        }
++    }
++
+     public ServerLevel getLevel() {
+         return level;
+     }
+ 
++    public void scheduleTask(Runnable task, long delay) {
++        scheduledTasks.add(new DelayedTask(task, delay));
++    }
++
++    public PrioritisedThreadedTaskQueue getInternalTaskQueue() {
++        return internalTasks;
++    }
++
+     public RegionPos getRegionPos() {
+         return regionPos;
+     }
+@@ -50,8 +88,26 @@ public class LevelChunkRegion {
+         }
+     }
+ 
++    public void tickTasks() {
++        if (scheduledTasks.isEmpty()) return;
++
++        List<DelayedTask> toRun = new ArrayList<>();
++        for (DelayedTask task : scheduledTasks) {
++            // Check if a task should run before executing the tasks, as tasks may add more tasks while they are running
++            if (task.shouldRun()) {
++                toRun.add(task);
++            }
++        }
++
++        scheduledTasks.removeAll(toRun);
++        toRun.forEach(DelayedTask::run);
++    }
++
+     public boolean isEmpty() {
+-        return levelChunks.isEmpty();
++        return levelChunks.isEmpty()
++                && tickingEntities.size() == 0
++                && scheduledTasks.isEmpty()
++                && internalTasks.getTotalTasksExecuted() >= internalTasks.getTotalTasksScheduled();
+     }
+ 
+ }
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+index 23adb09e80fa6faaab61d8de57362ece3c76c57b..ec0ac3243b6e20e64ee1cd537c7e9e59a94d7270 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -2,6 +2,8 @@ package com.vulpeslab.confetti.region;
+ 
+ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import com.vulpeslab.confetti.util.SimpleStampedLock;
+ 
+@@ -43,6 +45,57 @@ public class LevelChunkRegionMap {
+         });
+     }
+ 
++    public void addTickingChunk(LevelChunk levelChunk) {
++        getOrCreate(RegionPos.forChunk(levelChunk.getPos())).add(levelChunk);
++    }
++
++    public void removeTickingChunk(LevelChunk levelChunk) {
++        getOrCreate(RegionPos.forChunk(levelChunk.getPos())).remove(levelChunk);
++    }
++
++    public void addTickingEntity(Entity entity) {
++        if (entity.previousTickingChunkPosRegion != null) {
++            throw new IllegalStateException("Entity has already been added to a ticking list " + entity);
++        }
++
++        entity.previousTickingChunkPosRegion = entity.chunkPosition();
++        getOrCreate(RegionPos.forChunk(entity.chunkPosition())).addTickingEntity(entity);
++    }
++
++    public void removeTickingEntity(Entity entity) {
++        if (entity.previousTickingChunkPosRegion == null) {
++            throw new IllegalStateException("Entity has not been added to a ticking list " + entity);
++        }
++
++        getOrCreate(RegionPos.forChunk(entity.previousTickingChunkPosRegion)).removeTickingEntity(entity);
++        entity.previousTickingChunkPosRegion = null;
++    }
++
++    public void moveTickingEntity(Entity entity) {
++        if (entity.previousTickingChunkPosRegion == null) {
++            // Not ticking, ignore
++            return;
++        }
++
++        ChunkPos newChunkPos = entity.chunkPosition();
++        RegionPos fromRegion = RegionPos.forChunk(entity.previousTickingChunkPosRegion);
++        RegionPos toRegion = RegionPos.forChunk(newChunkPos);
++
++        if (!fromRegion.equals(toRegion)) {
++            entity.previousTickingChunkPosRegion = newChunkPos;
++            getOrCreate(fromRegion).removeTickingEntity(entity);
++            getOrCreate(toRegion).addTickingEntity(entity);
++        }
++    }
++
++    public void scheduleTask(RegionPos regionPos, Runnable task) {
++        getOrCreate(regionPos).scheduleTask(task, 0);
++    }
++
++    public void scheduleTask(RegionPos regionPos, Runnable task, long delay) {
++        getOrCreate(regionPos).scheduleTask(task, delay);
++    }
++
+     public List<LevelChunkRegion> getRegions() {
+         return regionsLock.optimisticRead(() -> new ArrayList<>(regions.values()));
+     }
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3a6858bf94afe8905cda052409cabcc2af470892
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -0,0 +1,107 @@
++package com.vulpeslab.confetti.threading;
++
++import com.mojang.logging.LogUtils;
++import com.vulpeslab.confetti.region.LevelChunkRegion;
++import com.vulpeslab.confetti.region.LevelChunkRegionMap;
++import com.vulpeslab.confetti.region.RegionPos;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerChunkCache;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.GameRules;
++import net.minecraft.world.level.Level;
++import net.minecraft.world.level.NaturalSpawner;
++import net.minecraft.world.level.chunk.LevelChunk;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.concurrent.CompletableFuture;
++
++public class ConfettiChunkTicker {
++
++    private static final ThreadLocal<LevelChunkRegion> currentlyTickingRegion = new ThreadLocal<>();
++
++    private final ServerChunkCache serverChunkCache;
++
++    public ConfettiChunkTicker(ServerChunkCache serverChunkCache) {
++        this.serverChunkCache = serverChunkCache;
++    }
++
++    public CompletableFuture<Void> tickChunks(ServerLevel level, NaturalSpawner.SpawnState spawnState) {
++        LevelChunkRegionMap tickingRegions = level.tickingRegions;
++        List<CompletableFuture<Void>> futures = new ArrayList<>();
++
++        tickingRegions.forEach(
++                region -> futures.add(this.tickRegion(level, region, spawnState))
++        );
++
++        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
++    }
++
++    private CompletableFuture<Void> tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnState) {
++        return level.chunkScheduler.schedule(region.getRegionPos(), () -> this._tickRegion(level, region, spawnState)).exceptionally(e -> {
++            LogUtils.getClassLogger().error("Exception ticking region {}", region.getRegionPos(), e);
++            ((ca.spottedleaf.moonrise.patches.chunk_system.server.ChunkSystemMinecraftServer)level.getServer()).moonrise$setChunkSystemCrash(
++                new RuntimeException("Ticking thread crash while ticking region " + region.getRegionPos(), e));
++            return null;
++        });
++    }
++
++    public static boolean isCurrentlyTickingRegion(Level level, RegionPos regionPos) {
++        LevelChunkRegion region = currentlyTickingRegion.get();
++        return region != null && level.equals(region.getLevel()) && regionPos.equals(region.getRegionPos());
++    }
++
++    public static LevelChunkRegion getCurrentlyTickingRegion() {
++        return currentlyTickingRegion.get();
++    }
++
++    private void _tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnState) {
++        try {
++            currentlyTickingRegion.set(region);
++
++            // Tick scheduled tasks for this region
++            region.tickTasks();
++
++            // Tick chunks in this region
++            if (level.tickRateManager().runsNormally()) {
++                region.forEach(chunk -> this._tickChunk(level, chunk, spawnState));
++            }
++
++            // Tick entities in this region
++            region.forEachTickingEntity(ConfettiEntityTicker::tickEntity);
++
++            // Remove empty regions
++            if (region.isEmpty()) {
++                level.tickingRegions.remove(region.getRegionPos());
++            }
++        } finally {
++            currentlyTickingRegion.remove();
++        }
++    }
++
++    private void _tickChunk(ServerLevel level, LevelChunk chunk1, NaturalSpawner.SpawnState spawnState) {
++        // Start - Import the same variables as the original chunk ticking method to make copying new changes easier
++        long j = 1; // Inhabited time increment in ticks
++        boolean flag = level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING) && !level.players().isEmpty(); // Should run mob spawning code
++        ChunkPos chunkcoordintpair = chunk1.getPos();
++        boolean flag1 = level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && level.getLevelData().getGameTime() % level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L;
++        int l = level.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
++        // End
++
++        // Use moonrise's anyPlayerCloseEnoughForSpawning check
++        if (level.chunkSource.chunkMap.anyPlayerCloseEnoughForSpawning(chunkcoordintpair)) {
++            chunk1.incrementInhabitedTime(j);
++            // Pufferfish Code:
++            if (flag && (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning || level.getChunkSource()._pufferfish_spawnCountsReady.get())
++                    && (level.chunkSource.spawnEnemies || level.chunkSource.spawnFriendlies)
++                    && level.getWorldBorder().isWithinBounds(chunkcoordintpair)) {
++                NaturalSpawner.spawnForChunk(level, chunk1, spawnState, level.chunkSource.spawnFriendlies, level.chunkSource.spawnEnemies, flag1);
++            }
++
++            level.tickChunk(chunk1, l);
++        }
++    }
++
++}
++
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..01941a2610559409ddf052253e455d997001aaf1
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiEntityTicker.java
+@@ -0,0 +1,32 @@
++package com.vulpeslab.confetti.threading;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++
++public class ConfettiEntityTicker {
++
++    public static void tickEntity(Entity entity) {
++        ServerLevel level = (ServerLevel) entity.level();
++
++        entity.activatedPriorityReset = false; // Pufferfish - DAB
++        if (!entity.isRemoved()) {
++            if (!level.tickRateManager().isEntityFrozen(entity)) {
++                entity.checkDespawn();
++                if (true) { // Always true if in the ticking list
++                    Entity entity1 = entity.getVehicle();
++
++                    if (entity1 != null) {
++                        if (!entity1.isRemoved() && entity1.hasPassenger(entity)) {
++                            return;
++                        }
++
++                        entity.stopRiding();
++                    }
++
++                    level.guardEntityTick(level::tickNonPassenger, entity);
++                }
++            }
++        }
++    }
++
++}
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 3eca135ac88221098c29ec5d1e8fadf5441a445e..3e4ded7e6b9cf36dfaac60c6e4ed182a1068a6a9 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -223,6 +223,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+     private boolean forceTime; // Purpur
+     private final RandomSequences randomSequences;
+     public final ConfettiRegionScheduler chunkScheduler = new ConfettiRegionScheduler(); // Confetti
++    public final com.vulpeslab.confetti.region.LevelChunkRegionMap tickingRegions; // Confetti - multithreaded chunk ticking
+ 
+     // CraftBukkit start
+     public final LevelStorageSource.LevelStorageAccess convertable;
+@@ -570,6 +571,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         this.chunkSource = new ServerChunkCache(this, convertable_conversionsession, datafixer, structuretemplatemanager, executor, chunkgenerator, j, k, flag2, worldloadlistener, null, () -> { // Paper - rewrite chunk system
+             return minecraftserver.overworld().getDataStorage();
+         });
++        this.tickingRegions = new com.vulpeslab.confetti.region.LevelChunkRegionMap(this); // Confetti - multithreaded chunk ticking
+         this.chunkSource.getGeneratorState().ensureStructuresGenerated();
+         this.portalForcer = new PortalForcer(this);
+         this.updateSkyBrightness();
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 33b56febc5c0cceb01cabb030b97654d7a4d6bcd..77e2972a5b7275601d5aa9a6a278b6fd8355d450 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -555,6 +555,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         }
+     }
+     // Paper end - optimise entity tracker
++    // Confetti start - entity ticking region tracking
++    public @Nullable net.minecraft.world.level.ChunkPos previousTickingChunkPosRegion;
++    // Confetti end - entity ticking region tracking
+     // Purpur start
+     public boolean canSaveToDisk() {
+         return true;
