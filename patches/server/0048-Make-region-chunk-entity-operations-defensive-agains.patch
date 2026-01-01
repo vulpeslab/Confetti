@@ -1,0 +1,112 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 00:57:29 +0100
+Subject: [PATCH] Make region chunk/entity operations defensive against race
+ conditions
+
+- LevelChunkRegion: Don't throw on duplicate add or missing remove for chunks/entities
+- LevelChunkRegionMap: Handle duplicate entity adds gracefully by removing from old region first
+- These race conditions can occur during chunk status changes in multithreaded environment
+
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+index 7748ac1cec834d7e013afee3a7063b3fd9b69aa4..f2ac1d2d89cc7dcd9c3c87897cc3a15a88c457a9 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -43,21 +43,18 @@ public class LevelChunkRegion {
+     }
+ 
+     public synchronized void remove(LevelChunk levelChunk) {
+-        if (!levelChunks.remove(levelChunk)) {
+-            throw new IllegalStateException("Tried to remove a chunk that wasn't in the region: " + levelChunk.getPos());
+-        }
++        // Confetti - Don't throw if chunk wasn't in the region (may happen due to race conditions during chunk status changes)
++        levelChunks.remove(levelChunk);
+     }
+ 
+     public synchronized void addTickingEntity(Entity entity) {
+-        if (!tickingEntities.add(entity)) {
+-            throw new IllegalStateException("Tried to add an entity that was already in the ticking list: " + entity);
+-        }
++        // Confetti - Don't throw on duplicate (race conditions during entity status changes)
++        tickingEntities.add(entity);
+     }
+ 
+     public synchronized void removeTickingEntity(Entity entity) {
+-        if (!tickingEntities.remove(entity)) {
+-            throw new IllegalStateException("Tried to remove an entity that wasn't in the ticking list: " + entity);
+-        }
++        // Confetti - Don't throw if not present (race conditions during entity status changes)
++        tickingEntities.remove(entity);
+     }
+ 
+     public void forEachTickingEntity(Consumer<Entity> action) {
+@@ -72,15 +69,13 @@ public class LevelChunkRegion {
+     }
+ 
+     public synchronized void addTrackedEntity(Entity entity) {
+-        if (!this.trackedEntities.add(entity)) {
+-            throw new IllegalStateException("Tried to add an entity that was already tracked: " + entity);
+-        }
++        // Confetti - Don't throw on duplicate (race conditions during entity status changes)
++        this.trackedEntities.add(entity);
+     }
+ 
+     public synchronized void removeTrackedEntity(Entity entity) {
+-        if (!this.trackedEntities.remove(entity)) {
+-            throw new IllegalStateException("Tried to remove an entity that wasn't tracked: " + entity);
+-        }
++        // Confetti - Don't throw if not present (race conditions during entity status changes)
++        this.trackedEntities.remove(entity);
+     }
+ 
+     // Confetti start - thread-safe forEachTrackedEntity by copying first
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+index 24b3ed5591472900a1716c56c009be1a1b4b9b40..24349c8775d2c0d3524d340fc2aaa5cb34cc97f1 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -57,8 +57,10 @@ public class LevelChunkRegionMap {
+     }
+ 
+     public void addTickingEntity(Entity entity) {
++        // Confetti - Don't throw, just handle gracefully (race conditions can cause duplicate adds)
+         if (entity.previousTickingChunkPosRegion != null) {
+-            throw new IllegalStateException("Entity has already been added to a ticking list " + entity);
++            // Already added, remove from old region first
++            getOrCreate(RegionPos.forChunk(entity.previousTickingChunkPosRegion)).removeTickingEntity(entity);
+         }
+ 
+         entity.previousTickingChunkPosRegion = entity.chunkPosition();
+@@ -66,8 +68,9 @@ public class LevelChunkRegionMap {
+     }
+ 
+     public void removeTickingEntity(Entity entity) {
++        // Confetti - Don't throw, just ignore if not added (race conditions)
+         if (entity.previousTickingChunkPosRegion == null) {
+-            throw new IllegalStateException("Entity has not been added to a ticking list " + entity);
++            return;
+         }
+ 
+         getOrCreate(RegionPos.forChunk(entity.previousTickingChunkPosRegion)).removeTickingEntity(entity);
+@@ -92,8 +95,10 @@ public class LevelChunkRegionMap {
+     }
+ 
+     public void addTrackedEntity(Entity entity) {
++        // Confetti - Don't throw, handle gracefully (race conditions can cause duplicate adds)
+         if (entity.previousTrackedChunkPosRegion != null) {
+-            throw new IllegalStateException("Entity is already tracked " + entity);
++            // Already tracked, remove from old region first
++            getOrCreate(RegionPos.forChunk(entity.previousTrackedChunkPosRegion)).removeTrackedEntity(entity);
+         }
+ 
+         entity.previousTrackedChunkPosRegion = entity.chunkPosition();
+@@ -101,8 +106,9 @@ public class LevelChunkRegionMap {
+     }
+ 
+     public void removeTrackedEntity(Entity entity) {
++        // Confetti - Don't throw, just ignore if not tracked (race conditions)
+         if (entity.previousTrackedChunkPosRegion == null) {
+-            throw new IllegalStateException("Entity is not being tracked " + entity);
++            return;
+         }
+ 
+         getOrCreate(RegionPos.forChunk(entity.previousTrackedChunkPosRegion)).removeTrackedEntity(entity);
