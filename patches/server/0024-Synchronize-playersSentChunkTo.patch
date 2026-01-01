@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 17:59:18 +0100
+Subject: [PATCH] Synchronize playersSentChunkTo
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index 4db96543e2072e47040bb25a9d97ea6a69c4a43d..4eab861ecef35159466fa035bc11a04959019cbb 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -69,16 +69,20 @@ public class ChunkHolder extends GenerationChunkHolder implements ca.spottedleaf
+ 
+     @Override
+     public final void moonrise$addReceivedChunk(final ServerPlayer player) {
++        synchronized (this.playersSentChunkTo) { // Confetti
+         if (!this.playersSentChunkTo.add(player)) {
+             throw new IllegalStateException("Already sent chunk " + this.pos + " in world '" + ca.spottedleaf.moonrise.common.util.WorldUtil.getWorldName(this.getChunkMap().level) + "' to player " + player);
+         }
++        } // Confetti
+     }
+ 
+     @Override
+     public final void moonrise$removeReceivedChunk(final ServerPlayer player) {
++        synchronized (this.playersSentChunkTo) { // Confetti
+         if (!this.playersSentChunkTo.remove(player)) {
+             throw new IllegalStateException("Already sent chunk " + this.pos + " in world '" + ca.spottedleaf.moonrise.common.util.WorldUtil.getWorldName(this.getChunkMap().level) + "' to player " + player);
+         }
++        } // Confetti
+     }
+ 
+     @Override
+@@ -88,12 +92,15 @@ public class ChunkHolder extends GenerationChunkHolder implements ca.spottedleaf
+ 
+     @Override
+     public final boolean moonrise$hasChunkBeenSent(final ServerPlayer to) {
++        synchronized (this.playersSentChunkTo) { // Confetti
+         return this.playersSentChunkTo.contains(to);
++        } // Confetti
+     }
+ 
+     @Override
+     public final List<ServerPlayer> moonrise$getPlayers(final boolean onlyOnWatchDistanceEdge) {
+         final List<ServerPlayer> ret = new java.util.ArrayList<>();
++        synchronized (this.playersSentChunkTo) { // Confetti
+         final ServerPlayer[] raw = this.playersSentChunkTo.getRawDataUnchecked();
+         for (int i = 0, len = this.playersSentChunkTo.size(); i < len; ++i) {
+             final ServerPlayer player = raw[i];
+@@ -102,6 +109,7 @@ public class ChunkHolder extends GenerationChunkHolder implements ca.spottedleaf
+             }
+             ret.add(player);
+         }
++        } // Confetti
+ 
+         return ret;
+     }

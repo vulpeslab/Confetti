@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 17:59:49 +0100
+Subject: [PATCH] PotentialCalculator
+
+
+diff --git a/src/main/java/net/minecraft/world/level/PotentialCalculator.java b/src/main/java/net/minecraft/world/level/PotentialCalculator.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..45bf8609a055edebffb5d56fca6b46fcc81dfbbc
+--- /dev/null
++++ b/src/main/java/net/minecraft/world/level/PotentialCalculator.java
+@@ -0,0 +1,45 @@
++package net.minecraft.world.level;
++
++import com.google.common.collect.Lists;
++import java.util.List;
++import net.minecraft.core.BlockPos;
++
++public class PotentialCalculator {
++    private final List<PotentialCalculator.PointCharge> charges = Lists.newArrayList();
++
++    public void addCharge(BlockPos pos, double mass) {
++        if (mass != 0.0) {
++            this.charges.add(new PotentialCalculator.PointCharge(pos, mass)); // Confetti - doesn't need a lock, if a value isn't added it's not a big deal
++        }
++    }
++
++    public double getPotentialEnergyChange(BlockPos pos, double mass) {
++        if (mass == 0.0) {
++            return 0.0;
++        } else {
++            double d = 0.0;
++
++            for (int i = 0; i < this.charges.size(); i++) { // Confetti - prevent CME - list is only ever added to
++                PotentialCalculator.PointCharge pointCharge = this.charges.get(i); // Confetti - prevent CME - list is only ever added to
++                d += pointCharge.getPotentialChange(pos);
++            }
++
++            return d * mass;
++        }
++    }
++
++    static class PointCharge {
++        private final BlockPos pos;
++        private final double charge;
++
++        public PointCharge(BlockPos pos, double mass) {
++            this.pos = pos;
++            this.charge = mass;
++        }
++
++        public double getPotentialChange(BlockPos pos) {
++            double d = this.pos.distSqr(pos);
++            return d == 0.0 ? Double.POSITIVE_INFINITY : this.charge / Math.sqrt(d);
++        }
++    }
++}

@@ -6,7 +6,7 @@ Subject: [PATCH] BroadcastPacketEvent
 
 diff --git a/src/main/java/com/vulpeslab/confetti/event/BroadcastPacketEvent.java b/src/main/java/com/vulpeslab/confetti/event/BroadcastPacketEvent.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..33b427802ec5bdcbf6c8fed236fe718d6fee60e2
+index 0000000000000000000000000000000000000000..62f7adcfb0823c19d2af727fa7da82299efb06ad
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/event/BroadcastPacketEvent.java
 @@ -0,0 +1,67 @@
@@ -78,10 +78,10 @@ index 0000000000000000000000000000000000000000..33b427802ec5bdcbf6c8fed236fe718d
 +    }
 +}
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 456b8450c0c55f1213701ed53c5aa9f8fbc56518..3026b340d162e5ad75488e35e25eb10f9d6d8d79 100644
+index b233f8a4ddd20415e81d92c3d21945ab9d12c305..850a5647eb94d9a164a106333ac4fb4c733b6aa6 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -1505,6 +1505,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1318,6 +1318,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
  
              } finally { seenByLock.unlock(); } // ShreededPaper - seenBy thread safety
@@ -91,10 +91,10 @@ index 456b8450c0c55f1213701ed53c5aa9f8fbc56518..3026b340d162e5ad75488e35e25eb10f
  
          public void broadcastAndSend(Packet<?> packet) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b1b1c5322 100644
+index 8dae6929a9194d3916f3b949907131d56b7d5e96..b2211668ce08e168e9696a61ce51bda8e61f15df 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -1845,7 +1845,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1667,7 +1667,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
  
      @Override
      public void destroyBlockProgress(int entityId, BlockPos pos, int progress) {
@@ -103,7 +103,7 @@ index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b
  
          // CraftBukkit start
          Player entityhuman = null;
-@@ -1864,6 +1864,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1686,6 +1686,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
          }
          // Paper end - Add BlockBreakProgressUpdateEvent
  
@@ -112,7 +112,7 @@ index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b
          while (iterator.hasNext()) {
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
  
-@@ -1879,7 +1881,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1701,7 +1703,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
                  // CraftBukkit end
  
                  if (d0 * d0 + d1 * d1 + d2 * d2 < 1024.0D) {
@@ -122,10 +122,10 @@ index 5f99874eb7d8e33686c2fb662e1220d05883fd0a..0ecc3fa3d70a1180709a5f3b5b6f9a5b
              }
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index ab96dcb873758f9d92eecb62b473b84dc9e295a2..dc99d088d6d915de789a1215df810a4a86212e42 100644
+index 1b1008ffd544dcddc31238e10c06df0d7aa68793..c3b70c66f42073d9680a3197b47b5c4dd08f3a6e 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -76,6 +76,7 @@ import net.minecraft.server.MinecraftServer;
+@@ -72,6 +72,7 @@ import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.PlayerAdvancements;
  import net.minecraft.server.RegistryLayer;
  import net.minecraft.server.ServerScoreboard;
@@ -133,7 +133,7 @@ index ab96dcb873758f9d92eecb62b473b84dc9e295a2..dc99d088d6d915de789a1215df810a4a
  import net.minecraft.server.level.ClientInformation;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
-@@ -1333,6 +1334,7 @@ public abstract class PlayerList {
+@@ -1199,6 +1200,7 @@ public abstract class PlayerList {
      }
  
      public void broadcast(@Nullable net.minecraft.world.entity.player.Player player, double x, double y, double z, double distance, ResourceKey<Level> worldKey, Packet<?> packet) {

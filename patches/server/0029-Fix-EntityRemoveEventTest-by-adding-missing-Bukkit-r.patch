@@ -6,10 +6,10 @@ Subject: [PATCH] Fix EntityRemoveEventTest by adding missing Bukkit remove
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/projectile/Projectile.java b/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
-index a69cd350b6c1e66fc0e81917e23bccc1bc0ab75d..2b2c6cb02342b18d61596d194e024f10e8d1f54b 100644
+index 2d4e363c08250bcaed0057857f9bffc9a34f10c8..7a77757da57c470c53a9bffd914ea3333f7c7abc 100644
 --- a/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
 +++ b/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
-@@ -65,7 +65,7 @@ public abstract class Projectile extends Entity implements TraceableEntity {
+@@ -71,7 +71,7 @@ public abstract class Projectile extends Entity implements TraceableEntity {
              if (!isLoaded) {
                  if (Projectile.loadedThisTick > gg.pufferfish.pufferfish.PufferfishConfig.maxProjectileLoadsPerTick) {
                      if (++this.loadedLifetime > gg.pufferfish.pufferfish.PufferfishConfig.maxProjectileLoadsPerProjectile) {

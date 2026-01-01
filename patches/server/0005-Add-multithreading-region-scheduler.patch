@@ -6,7 +6,7 @@ Subject: [PATCH] Add multithreading region scheduler
 
 diff --git a/src/main/java/com/vulpeslab/confetti/region/RegionPos.java b/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c8caf9240e1aa5e434a47cbdf4b7bf68e4025586
+index 0000000000000000000000000000000000000000..64231d4c3fcee32f8243cc0d7c75795c89b55a78
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
 @@ -0,0 +1,138 @@
@@ -150,7 +150,7 @@ index 0000000000000000000000000000000000000000..c8caf9240e1aa5e434a47cbdf4b7bf68
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e69f12a01e
+index 0000000000000000000000000000000000000000..5a7ecda3ac5ab2c1ea36eb7dc90ec9076008dce1
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
 @@ -0,0 +1,320 @@
@@ -476,7 +476,7 @@ index 0000000000000000000000000000000000000000..f651a277fabf7f863c648c6c2658e2e6
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac11b9dbce
+index 0000000000000000000000000000000000000000..bcaa52a2316d046f380ecfbd78c229f9213b0faa
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
 @@ -0,0 +1,185 @@
@@ -667,7 +667,7 @@ index 0000000000000000000000000000000000000000..ab4774d7eaf13efeb41eae3fb0b646ac
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4083ed79587332391cedf8108f8adeeeffe4a8ad
+index 0000000000000000000000000000000000000000..51719858bdf39447e37b9950473f3a45a3a90aa9
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
 @@ -0,0 +1,62 @@
@@ -735,7 +735,7 @@ index 0000000000000000000000000000000000000000..4083ed79587332391cedf8108f8adeee
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/util/ObjectHolder.java b/src/main/java/com/vulpeslab/confetti/util/ObjectHolder.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f98327c487394dd1e1a97987518102786114fcad
+index 0000000000000000000000000000000000000000..086dc310ee02f172e1bb76257986b5e4901e92e8
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/util/ObjectHolder.java
 @@ -0,0 +1,22 @@
@@ -762,7 +762,7 @@ index 0000000000000000000000000000000000000000..f98327c487394dd1e1a9798751810278
 +    }
 +}
 diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
-index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..2c82a48867ab347f21822576baa0368273242f82 100644
+index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..42df50c96e78100ab49afcf35b4c8d142223ad41 100644
 --- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 +++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
 @@ -4,6 +4,8 @@ import co.aikar.timings.TimedEventExecutor;
@@ -783,243 +783,62 @@ index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..2c82a48867ab347f21822576baa03682
              throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
          } else if (!event.isAsynchronous() && !this.server.isPrimaryThread() && !this.server.isStopping()) {
              throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
-diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
-index bdaf062f9b66ceab303a0807eca301342886a8ea..313f30948c9ebd09094c1623bfe2c3594f30077c 100644
---- a/src/main/java/io/papermc/paper/util/TickThread.java
-+++ b/src/main/java/io/papermc/paper/util/TickThread.java
-@@ -1,5 +1,6 @@
- package io.papermc.paper.util;
- 
-+import com.vulpeslab.confetti.threading.ConfettiTickThread;
- import net.minecraft.core.BlockPos;
- import net.minecraft.server.MinecraftServer;
- import net.minecraft.server.level.ServerLevel;
-@@ -12,6 +13,11 @@ import net.minecraft.world.level.Level;
- import net.minecraft.world.phys.AABB;
- import net.minecraft.world.phys.Vec3;
- import org.bukkit.Bukkit;
-+import com.vulpeslab.confetti.region.RegionPos;
-+
-+import java.util.ArrayList;
-+import java.util.List;
-+import java.util.Set;
- import java.util.concurrent.atomic.AtomicInteger;
- 
- public class TickThread extends Thread {
-@@ -35,56 +41,77 @@ public class TickThread extends Thread {
-         ensureTickThread(reason);
-     }
- 
-+    // Confetti start
-+    public static void failedTickThreadCheck(final String reason, final String extraData) {
-+        if (!isTickThread()) {
-+            MinecraftServer.LOGGER.error(Thread.currentThread().getName() + " tried to run a task async: " + reason);
-+        } else {
-+            MinecraftServer.LOGGER.error(Thread.currentThread().getName() + " tried to run a task from the wrong thread: " + reason);
-+        }
-+        MinecraftServer.LOGGER.error("Extra data: " + extraData);
-+        MinecraftServer.LOGGER.error("Server Version: " + Bukkit.getVersion());
-+        MinecraftServer.LOGGER.error("Region locks currently held (regionSize=" + RegionPos.REGION_SIZE + " chunks): " + getCurrentLocksHeld());
-+        MinecraftServer.LOGGER.error("Stack trace:", new Throwable());
-+        throw new IllegalStateException(reason);
-+    }
-+
-+    private static List<String> getCurrentLocksHeld() {
-+        List<String> strings = new ArrayList<>();
-+
-+        for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
-+            Set<RegionPos> regions = level.chunkScheduler.getRegionLocker().getLockedRegions();
-+            if (!regions.isEmpty()) {
-+                strings.add(level.convertable.getLevelId() + "=" + regions.stream().map(region -> "[" + region.x + "," + region.z + "]").toList());
-+            }
-+        }
-+
-+        return strings;
-+    }
-+    // Confetti end
-+
-     /**
-      * @deprecated
-      */
-     @Deprecated
-     public static void ensureTickThread(final String reason) {
-         if (!isTickThread()) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, null);
-         }
-     }
- 
-     public static void ensureTickThread(final ServerLevel world, final BlockPos pos, final String reason) {
-         if (!isTickThreadFor(world, pos)) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, "world=" + world.convertable.getLevelId() + ", pos=" + pos);
-         }
-     }
- 
-     public static void ensureTickThread(final ServerLevel world, final ChunkPos pos, final String reason) {
-         if (!isTickThreadFor(world, pos)) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, "world=" + world.convertable.getLevelId() + ", chunkpos=" + pos);
-         }
-     }
- 
-     public static void ensureTickThread(final ServerLevel world, final int chunkX, final int chunkZ, final String reason) {
-         if (!isTickThreadFor(world, chunkX, chunkZ)) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, "world=" + world.convertable.getLevelId() + ", chunkpos=[" + chunkX + "," + chunkZ + "]");
-         }
-     }
- 
-     public static void ensureTickThread(final Entity entity, final String reason) {
-         if (!isTickThreadFor(entity)) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, "entity=" + entity);
-         }
-     }
- 
-     public static void ensureTickThread(final ServerLevel world, final AABB aabb, final String reason) {
-         if (!isTickThreadFor(world, aabb)) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, "world=" + world.convertable.getLevelId() + ", aabb=" + aabb);
-         }
-     }
- 
-     public static void ensureTickThread(final ServerLevel world, final double blockX, final double blockZ, final String reason) {
-         if (!isTickThreadFor(world, blockX, blockZ)) {
--            MinecraftServer.LOGGER.error("Thread " + Thread.currentThread().getName() + " failed main thread check: " + reason, new Throwable());
--            throw new IllegalStateException(reason);
-+            failedTickThreadCheck(reason, "world=" + world.convertable.getLevelId() + ", x=" + (int) blockX + " y=? z=" + (int) blockZ);
-         }
-     }
- 
-@@ -110,50 +137,84 @@ public class TickThread extends Thread {
-     }
- 
-     public static boolean isTickThread() {
--        return Thread.currentThread() instanceof TickThread;
-+        return MinecraftServer.getServer().forceTicks || isShutdownThread() || Thread.currentThread() instanceof TickThread || ConfettiTickThread.isConfettiTickThread(); // Confetti
-     }
- 
-     public static boolean isShutdownThread() {
--        return false;
-+        return Thread.currentThread() == MinecraftServer.getServer().shutdownThread; // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final BlockPos pos) {
--        return isTickThread();
-+        return isTickThreadFor(world, new ChunkPos(pos)); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final ChunkPos pos) {
--        return isTickThread();
-+        return world.getServer().forceTicks || isShutdownThread() || world.chunkScheduler.getRegionLocker().hasLock(RegionPos.forChunk(pos)); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final Vec3 pos) {
--        return isTickThread();
-+        return isTickThreadFor(world, pos.x, pos.z); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ) {
--        return isTickThread();
-+        return isTickThreadFor(world, new ChunkPos(chunkX, chunkZ)); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final AABB aabb) {
--        return isTickThread();
-+        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(aabb.minX), CoordinateUtils.getChunkCoordinate(aabb.minZ), CoordinateUtils.getChunkCoordinate(aabb.maxX), CoordinateUtils.getChunkCoordinate(aabb.maxZ)); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final double blockX, final double blockZ) {
--        return isTickThread();
-+        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(blockX), CoordinateUtils.getChunkCoordinate(blockZ)); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final Vec3 position, final Vec3 deltaMovement, final int buffer) {
--        return isTickThread();
-+        // Confetti start
-+        int fromChunkX = CoordinateUtils.getChunkCoordinate(position.x);
-+        int fromChunkZ = CoordinateUtils.getChunkCoordinate(position.z);
-+        int toChunkX = CoordinateUtils.getChunkCoordinate(position.x + deltaMovement.x);
-+        int toChunkZ = CoordinateUtils.getChunkCoordinate(position.z + deltaMovement.z);
-+
-+        int minChunkX = Math.min(fromChunkX, toChunkX) - buffer;
-+        int minChunkZ = Math.min(fromChunkZ, toChunkZ) - buffer;
-+        int maxChunkX = Math.max(fromChunkX, toChunkX) + buffer;
-+        int maxChunkZ = Math.max(fromChunkZ, toChunkZ) + buffer;
-+
-+        return isTickThreadFor(world, minChunkX, minChunkZ, maxChunkX, maxChunkZ);
-+        // Confetti end
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final int fromChunkX, final int fromChunkZ, final int toChunkX, final int toChunkZ) {
--        return isTickThread();
-+        // Confetti start
-+        if (world.getServer().forceTicks || isShutdownThread()) return true;
-+
-+        int fromRegionX = fromChunkX >> RegionPos.REGION_SHIFT;
-+        int fromRegionZ = fromChunkZ >> RegionPos.REGION_SHIFT;
-+        int toRegionX = toChunkX >> RegionPos.REGION_SHIFT;
-+        int toRegionZ = toChunkZ >> RegionPos.REGION_SHIFT;
-+
-+        int minRegionX = Math.min(fromRegionX, toRegionX);
-+        int maxRegionX = Math.max(fromRegionX, toRegionX);
-+        int minRegionZ = Math.min(fromRegionZ, toRegionZ);
-+        int maxRegionZ = Math.max(fromRegionZ, toRegionZ);
-+
-+        for (int x = minRegionX; x <= maxRegionX; x++) {
-+            for (int z = minRegionZ; z <= maxRegionZ; z++) {
-+                if (!world.chunkScheduler.getRegionLocker().hasLock(new RegionPos(x, z))) {
-+                    return false;
-+                }
-+            }
-+        }
-+
-+        return true;
-+        // Confetti end
-     }
- 
-     public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ, final int radius) {
--        return isTickThread();
-+        return isTickThreadFor(world, chunkX - radius, chunkZ - radius, chunkX + radius, chunkZ + radius); // Confetti
-     }
- 
-     public static boolean isTickThreadFor(final Entity entity) {
--        return isTickThread();
-+        return isTickThreadFor((ServerLevel) entity.level(), entity.chunkPosition()); // Confetti
-     }
- }
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 76edb0f99033d4819b82118a8ea21063674dcdd8..c617f12b7e44859a4edafc0deff844cd2148268d 100644
+index 1d35eb164d03dbe16b244fb2f26c6b13a61b9360..33808b1b21c656672c5e5a57ef40668cf44ebf04 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -191,6 +191,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+@@ -197,6 +197,7 @@ import org.bukkit.event.server.ServerLoadEvent;
  // CraftBukkit end
  
  import co.aikar.timings.MinecraftTimings; // Paper
-+import com.vulpeslab.confetti.threading.ConfettiTickThread;
++import com.vulpeslab.confetti.threading.ConfettiTickThread; // Confetti
  
- public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements ServerInfo, CommandSource, AutoCloseable {
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements ServerInfo, ChunkIOErrorReporter, CommandSource, AutoCloseable, ca.spottedleaf.moonrise.patches.chunk_system.server.ChunkSystemMinecraftServer { // Paper - rewrite chunk system
  
-@@ -977,6 +978,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1045,6 +1046,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          MinecraftServer.LOGGER.info("Stopping server");
          Commands.COMMAND_SENDING_POOL.shutdownNow(); // Paper - Perf: Async command map building; Shutdown and don't bother finishing
          MinecraftTimings.stopServer(); // Paper
 +        ConfettiTickThread.stopServer(); // Confetti
+         this.server.spark.disable(); // Paper - spark
          // Purpur start
          if (upnp) {
-             if (dev.omega24.upnp4j.UPnP4J.close(this.getPort(), dev.omega24.upnp4j.util.Protocol.TCP)) {
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java.rej b/src/main/java/net/minecraft/server/MinecraftServer.java.rej
+index ff3c9c601ab6c5e8053621137084f27938cd2922..f2b5e6ea78373827239b8dd7472a1f45fc7820ce 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java.rej
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java.rej
+@@ -1,10 +1,17 @@
+ diff a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java	(rejected hunks)
+-@@ -960,7 +960,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+-         shutdownThread = Thread.currentThread();
+-         org.spigotmc.WatchdogThread.doStop(); // Paper
+-         if (!isSameThread()) {
+--            MinecraftServer.LOGGER.info("Stopping main thread (Ignore any thread death message you see! - DO NOT REPORT THREAD DEATH TO PURPUR)"); // Purpur
+-+            MinecraftServer.LOGGER.info("Stopping main thread (Ignore any thread death message you see! - DO NOT REPORT THREAD DEATH TO CONFETTI)"); // Purpur // Confetti
+-             while (this.getRunningThread().isAlive()) {
+-                 this.getRunningThread().stop();
+-                 try {
++@@ -191,6 +191,7 @@ import org.bukkit.event.server.ServerLoadEvent;
++ // CraftBukkit end
++ 
++ import co.aikar.timings.MinecraftTimings; // Paper
+++import com.vulpeslab.confetti.threading.ConfettiTickThread;
++ 
++ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements ServerInfo, CommandSource, AutoCloseable {
++ 
++@@ -977,6 +978,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
++         MinecraftServer.LOGGER.info("Stopping server");
++         Commands.COMMAND_SENDING_POOL.shutdownNow(); // Paper - Perf: Async command map building; Shutdown and don't bother finishing
++         MinecraftTimings.stopServer(); // Paper
+++        ConfettiTickThread.stopServer(); // Confetti
++         // Purpur start
++         if (upnp) {
++             if (dev.omega24.upnp4j.UPnP4J.close(this.getPort(), dev.omega24.upnp4j.util.Protocol.TCP)) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 4c5017026e8a07508a43b1baa9617e8c8b6e659f..e9eb7f3a28474bc6d3c9f787e8d09b4a80e7fffe 100644
+index e6715ac13d573a01eb0307ec2417a430547222a6..a616991e06049c0c25ec2ee8cfd3e8181d73aaba 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -50,7 +50,6 @@ import net.minecraft.core.particles.ParticleOptions;
+@@ -51,7 +51,6 @@ import net.minecraft.core.particles.ParticleOptions;
  import net.minecraft.core.registries.BuiltInRegistries;
  import net.minecraft.core.registries.Registries;
  import net.minecraft.network.chat.Component;
@@ -1027,7 +846,7 @@ index 4c5017026e8a07508a43b1baa9617e8c8b6e659f..e9eb7f3a28474bc6d3c9f787e8d09b4a
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
  import net.minecraft.network.protocol.game.ClientboundBlockEventPacket;
-@@ -78,8 +77,6 @@ import net.minecraft.util.Mth;
+@@ -79,8 +78,6 @@ import net.minecraft.util.Mth;
  import net.minecraft.util.ProgressListener;
  import net.minecraft.util.RandomSource;
  import net.minecraft.util.Unit;
@@ -1036,7 +855,7 @@ index 4c5017026e8a07508a43b1baa9617e8c8b6e659f..e9eb7f3a28474bc6d3c9f787e8d09b4a
  import net.minecraft.util.valueproviders.IntProvider;
  import net.minecraft.util.valueproviders.UniformInt;
  import net.minecraft.world.DifficultyInstance;
-@@ -134,16 +131,13 @@ import net.minecraft.world.level.chunk.LevelChunk;
+@@ -135,16 +132,13 @@ import net.minecraft.world.level.chunk.LevelChunk;
  import net.minecraft.world.level.chunk.LevelChunkSection;
  import net.minecraft.world.level.chunk.storage.EntityStorage;
  import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
@@ -1053,24 +872,47 @@ index 4c5017026e8a07508a43b1baa9617e8c8b6e659f..e9eb7f3a28474bc6d3c9f787e8d09b4a
  import net.minecraft.world.level.gameevent.DynamicGameEventListener;
  import net.minecraft.world.level.gameevent.GameEvent;
  import net.minecraft.world.level.gameevent.GameEventDispatcher;
-@@ -180,6 +174,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
+@@ -181,6 +175,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
  import org.bukkit.event.server.MapInitializeEvent;
  import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
-+import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler; // Confetti
  // CraftBukkit end
  
- public class ServerLevel extends Level implements WorldGenLevel {
-@@ -223,6 +218,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel, ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevelReader { // Paper - rewrite chunk system
+@@ -224,6 +219,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
      private double preciseTime; // Purpur
      private boolean forceTime; // Purpur
      private final RandomSequences randomSequences;
 +    public final ConfettiRegionScheduler chunkScheduler = new ConfettiRegionScheduler(); // Confetti
-     public long lastMidTickExecuteFailure; // Paper - execute chunk tasks mid tick
  
      // CraftBukkit start
+     public final LevelStorageSource.LevelStorageAccess convertable;
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java.rej b/src/main/java/net/minecraft/server/level/ServerLevel.java.rej
+new file mode 100644
+index 0000000000000000000000000000000000000000..53ffefd925878b67cd78486faed07ecc257e1101
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java.rej
+@@ -0,0 +1,17 @@
++diff a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java	(rejected hunks)
++@@ -180,6 +174,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
++ import org.bukkit.event.server.MapInitializeEvent;
++ import org.bukkit.event.weather.LightningStrikeEvent;
++ import org.bukkit.event.world.TimeSkipEvent;
+++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
++ // CraftBukkit end
++ 
++ public class ServerLevel extends Level implements WorldGenLevel {
++@@ -223,6 +218,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
++     private double preciseTime; // Purpur
++     private boolean forceTime; // Purpur
++     private final RandomSequences randomSequences;
+++    public final ConfettiRegionScheduler chunkScheduler = new ConfettiRegionScheduler(); // Confetti
++     public long lastMidTickExecuteFailure; // Paper - execute chunk tasks mid tick
++ 
++     // CraftBukkit start
 diff --git a/src/main/java/net/minecraft/world/level/ChunkPos.java b/src/main/java/net/minecraft/world/level/ChunkPos.java
-index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..cf28077748878476d7059828a04ea78921a94c71 100644
+index fa58eeec2b652f0fa251eedf11cfabde5fd3198b..8aa27795db261da86447879e0b4a0d70e6b09ffe 100644
 --- a/src/main/java/net/minecraft/world/level/ChunkPos.java
 +++ b/src/main/java/net/minecraft/world/level/ChunkPos.java
 @@ -7,6 +7,7 @@ import java.util.stream.StreamSupport;

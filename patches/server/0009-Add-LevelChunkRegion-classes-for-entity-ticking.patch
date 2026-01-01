@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 17:28:21 +0100
+Subject: [PATCH] Add LevelChunkRegion classes for entity ticking
+
+
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9d27e54bf0a41e403102896b02f279adee109d49
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -0,0 +1,57 @@
++package com.vulpeslab.confetti.region;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.chunk.LevelChunk;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Consumer;
++
++public class LevelChunkRegion {
++
++    private final ServerLevel level;
++    private final RegionPos regionPos;
++    private final List<LevelChunk> levelChunks = new ArrayList<>(RegionPos.REGION_SIZE * RegionPos.REGION_SIZE);
++
++    public LevelChunkRegion(ServerLevel level, RegionPos regionPos) {
++        this.level = level;
++        this.regionPos = regionPos;
++    }
++
++    public synchronized void add(LevelChunk levelChunk) {
++        levelChunks.add(levelChunk);
++    }
++
++    public synchronized void remove(LevelChunk levelChunk) {
++        if (!levelChunks.remove(levelChunk)) {
++            throw new IllegalStateException("Tried to remove a chunk that wasn't in the region: " + levelChunk.getPos());
++        }
++    }
++
++    public ServerLevel getLevel() {
++        return level;
++    }
++
++    public RegionPos getRegionPos() {
++        return regionPos;
++    }
++
++    public void forEach(Consumer<LevelChunk> consumer) {
++        // This method has the chance of skipping a chunk if a chunk is removed via another thread during this iteration
++        for (int i = 0; i < levelChunks.size(); i++) {
++            try {
++                LevelChunk levelChunk = levelChunks.get(i);
++                if (levelChunk != null) {
++                    consumer.accept(levelChunk);
++                }
++            } catch (IndexOutOfBoundsException e) {
++                // Ignore - multithreaded modification
++            }
++        }
++    }
++
++    public boolean isEmpty() {
++        return levelChunks.isEmpty();
++    }
++
++}
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..23adb09e80fa6faaab61d8de57362ece3c76c57b
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -0,0 +1,56 @@
++package com.vulpeslab.confetti.region;
++
++import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.chunk.LevelChunk;
++import com.vulpeslab.confetti.util.SimpleStampedLock;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Consumer;
++
++public class LevelChunkRegionMap {
++
++    private final ServerLevel level;
++    private final SimpleStampedLock regionsLock = new SimpleStampedLock();
++    private final Long2ObjectOpenHashMap<LevelChunkRegion> regions = new Long2ObjectOpenHashMap<>(2048, 0.5f);
++
++    public LevelChunkRegionMap(ServerLevel level) {
++        this.level = level;
++    }
++
++    public LevelChunkRegion getOrCreate(RegionPos regionPos) {
++        LevelChunkRegion levelChunkRegion = get(regionPos);
++
++        if (levelChunkRegion != null) {
++            return levelChunkRegion;
++        }
++
++        return regionsLock.write(() -> regions.computeIfAbsent(regionPos.longKey, k -> new LevelChunkRegion(level, regionPos)));
++    }
++
++    public LevelChunkRegion get(RegionPos regionPos) {
++        return regionsLock.optimisticRead(() -> regions.get(regionPos.longKey));
++    }
++
++    public void remove(RegionPos regionPos) {
++        regionsLock.write(() -> {
++            LevelChunkRegion region = regions.remove(regionPos.longKey);
++            if (region != null && !region.isEmpty()) {
++                // Guess this region has been modified by another thread, re-add it
++                regions.put(regionPos.longKey, region);
++            }
++        });
++    }
++
++    public List<LevelChunkRegion> getRegions() {
++        return regionsLock.optimisticRead(() -> new ArrayList<>(regions.values()));
++    }
++
++    public void forEach(Consumer<LevelChunkRegion> consumer) {
++        for (LevelChunkRegion region : getRegions()) {
++            consumer.accept(region);
++        }
++    }
++
++}

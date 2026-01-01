@@ -5,7 +5,7 @@ Subject: [PATCH] Thread-safe scoreboards
 
 
 diff --git a/src/main/java/net/minecraft/server/ServerScoreboard.java b/src/main/java/net/minecraft/server/ServerScoreboard.java
-index f180001493146ef0d54079a8b2b47ad7decc24ca..775666dbf839d184bd50b0cb91a79658b298522d 100644
+index f180001493146ef0d54079a8b2b47ad7decc24ca..94855d7864121b3c166e1283488bf38be93f728b 100644
 --- a/src/main/java/net/minecraft/server/ServerScoreboard.java
 +++ b/src/main/java/net/minecraft/server/ServerScoreboard.java
 @@ -7,6 +7,8 @@ import java.util.List;
@@ -29,7 +29,7 @@ index f180001493146ef0d54079a8b2b47ad7decc24ca..775666dbf839d184bd50b0cb91a79658
      public ServerScoreboard(MinecraftServer server) {
          this.server = server;
 diff --git a/src/main/java/net/minecraft/world/scores/PlayerTeam.java b/src/main/java/net/minecraft/world/scores/PlayerTeam.java
-index 9464054912e19fc78dd965b71fce20a18564b351..0304ebb48563f4e337855eb091b2c1a8f6cbd590 100644
+index 9464054912e19fc78dd965b71fce20a18564b351..79e101e54ef2c6583542484d370dce8de7992fa7 100644
 --- a/src/main/java/net/minecraft/world/scores/PlayerTeam.java
 +++ b/src/main/java/net/minecraft/world/scores/PlayerTeam.java
 @@ -3,6 +3,7 @@ package net.minecraft.world.scores;
@@ -50,7 +50,7 @@ index 9464054912e19fc78dd965b71fce20a18564b351..0304ebb48563f4e337855eb091b2c1a8
      private Component playerPrefix = CommonComponents.EMPTY;
      private Component playerSuffix = CommonComponents.EMPTY;
 diff --git a/src/main/java/net/minecraft/world/scores/Scoreboard.java b/src/main/java/net/minecraft/world/scores/Scoreboard.java
-index 121b57ec018bffc05904e7596e0963e2bb545dc1..2af1dcad557607800e3742fd2866885481f4835c 100644
+index 121b57ec018bffc05904e7596e0963e2bb545dc1..530a75a562613fb3a652d8938faccf86dbe57477 100644
 --- a/src/main/java/net/minecraft/world/scores/Scoreboard.java
 +++ b/src/main/java/net/minecraft/world/scores/Scoreboard.java
 @@ -15,6 +15,7 @@ import java.util.EnumMap;

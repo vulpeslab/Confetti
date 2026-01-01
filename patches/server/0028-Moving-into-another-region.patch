@@ -5,7 +5,7 @@ Subject: [PATCH] Moving into another region
 
 
 diff --git a/src/main/java/com/vulpeslab/confetti/region/RegionPos.java b/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
-index c8caf9240e1aa5e434a47cbdf4b7bf68e4025586..c5fc229de6f086a0fe66d05380b612d2468d6079 100644
+index 64231d4c3fcee32f8243cc0d7c75795c89b55a78..a6b574df85a04147136d81ee3537b8676f4c5e9e 100644
 --- a/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
 +++ b/src/main/java/com/vulpeslab/confetti/region/RegionPos.java
 @@ -16,6 +16,7 @@ public class RegionPos {
@@ -26,21 +26,21 @@ index c8caf9240e1aa5e434a47cbdf4b7bf68e4025586..c5fc229de6f086a0fe66d05380b612d2
  
      public final int x;
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 6b2c2e2f782630a3b7e25532260cc61e02c8049f..cbed509e5ea85396279b5c410413a7fa70c9089d 100644
+index 4defb73aff9907f884320af039a509084e3eb0a3..689c9832b3ef911ecc1f08e2ba266e7b791a570e 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -1176,7 +1176,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -1141,7 +1141,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
      public void move(MoverType movementType, Vec3 movement) {
          final Vec3 originalMovement = movement; // Paper - Expose pre-collision velocity
          // Paper start - detailed watchdog information
--        io.papermc.paper.util.TickThread.ensureTickThread("Cannot move an entity off-main");
-+        io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot move an entity off-main"); // Confetti - check source region
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread("Cannot move an entity off-main");
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot move an entity off-main"); // Confetti - check source region
 +        BlockPos newPos = new BlockPos((int) (this.getX() + movement.x), (int) (this.getY() + movement.y), (int) (this.getZ() + movement.z)); // Confetti - check destination
-+        io.papermc.paper.util.TickThread.ensureTickThread((ServerLevel) this.level, newPos, "Cannot move an entity into off-main"); // Confetti - check destination region
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread((ServerLevel) this.level, newPos, "Cannot move an entity into off-main"); // Confetti - check destination region
          synchronized (this.posLock) {
              this.moveStartX = this.getX();
              this.moveStartY = this.getY();
-@@ -2271,7 +2273,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -2255,7 +2257,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
              }
              delta = event.getKnockback();
          }
@@ -55,7 +55,7 @@ index 6b2c2e2f782630a3b7e25532260cc61e02c8049f..cbed509e5ea85396279b5c410413a7fa
          // Paper end - Add EntityKnockbackByEntityEvent and EntityPushedByEntityAttackEvent
          this.hasImpulse = true;
      }
-@@ -4780,6 +4788,11 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -4681,6 +4689,11 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
      }
  
      public void setDeltaMovement(Vec3 velocity) {
@@ -68,7 +68,7 @@ index 6b2c2e2f782630a3b7e25532260cc61e02c8049f..cbed509e5ea85396279b5c410413a7fa
          this.deltaMovement = velocity;
          } // Paper
 diff --git a/src/main/java/net/minecraft/world/entity/projectile/EyeOfEnder.java b/src/main/java/net/minecraft/world/entity/projectile/EyeOfEnder.java
-index fca3786d0a3f99a3e61e7a4b2251361276eff9d7..74f0577397c8665c9bea3f79775dc26c15543e62 100644
+index fca3786d0a3f99a3e61e7a4b2251361276eff9d7..8862791ac91935015cc3927156ed5ad7dccd089b 100644
 --- a/src/main/java/net/minecraft/world/entity/projectile/EyeOfEnder.java
 +++ b/src/main/java/net/minecraft/world/entity/projectile/EyeOfEnder.java
 @@ -1,5 +1,6 @@

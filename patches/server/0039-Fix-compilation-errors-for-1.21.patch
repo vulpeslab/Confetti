@@ -1,0 +1,641 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 18:25:24 +0100
+Subject: [PATCH] Fix compilation errors for 1.21
+
+
+diff --git a/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java b/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
+index eb3415e98063d67987bbf4656aa7a2749cbb7dcb..8175057e79a88418643e2ccdb03b2f05d33c5b96 100644
+--- a/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
++++ b/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
+@@ -1,13 +1,13 @@
+ package com.vulpeslab.confetti.commands;
+ 
+-import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
++import ca.spottedleaf.moonrise.patches.chunk_system.scheduling.NewChunkHolder;
++import ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel;
+ import net.kyori.adventure.text.format.NamedTextColor;
+ import net.minecraft.server.level.FullChunkStatus;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.level.ChunkPos;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.entity.Player;
+-import com.vulpeslab.confetti.Confetti;
+ 
+ public class MPMapCommand extends MapCommandBase {
+ 
+@@ -18,7 +18,8 @@ public class MPMapCommand extends MapCommandBase {
+ 
+     @Override
+     protected ChunkStatus getStatus(Player player, ChunkPos chunkPos) {
+-        NewChunkHolder newChunkHolder = ((ServerLevel) ((CraftPlayer) player).getHandle().level()).chunkTaskScheduler.chunkHolderManager.getChunkHolder(chunkPos.x, chunkPos.z);
++        ServerLevel level = (ServerLevel) ((CraftPlayer) player).getHandle().level();
++        NewChunkHolder newChunkHolder = ((ChunkSystemServerLevel)level).moonrise$getChunkTaskScheduler().chunkHolderManager.getChunkHolder(chunkPos.x, chunkPos.z);
+ 
+         NamedTextColor color;
+         String name;
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiDimensionChanger.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiDimensionChanger.java
+deleted file mode 100644
+index 4e73af3a8bac379d7e01203eddc7c85f4284160c..0000000000000000000000000000000000000000
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiDimensionChanger.java
++++ /dev/null
+@@ -1,344 +0,0 @@
+-package com.vulpeslab.confetti.threading;
+-
+-import com.mojang.logging.LogUtils;
+-import com.vulpeslab.confetti.region.RegionPos;
+-import io.papermc.paper.util.TickThread;
+-import net.minecraft.BlockUtil;
+-import net.minecraft.core.BlockPos;
+-import net.minecraft.core.Direction;
+-import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
+-import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
+-import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+-import net.minecraft.network.protocol.game.ClientboundPlayerAbilitiesPacket;
+-import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+-import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket;
+-import net.minecraft.server.level.ServerLevel;
+-import net.minecraft.server.level.ServerPlayer;
+-import net.minecraft.server.level.TicketType;
+-import net.minecraft.server.players.PlayerList;
+-import net.minecraft.world.effect.MobEffectInstance;
+-import net.minecraft.world.entity.Entity;
+-import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.level.ChunkPos;
+-import net.minecraft.world.level.block.state.BlockState;
+-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+-import net.minecraft.world.level.border.WorldBorder;
+-import net.minecraft.world.level.dimension.DimensionType;
+-import net.minecraft.world.level.dimension.LevelStem;
+-import net.minecraft.world.level.levelgen.Heightmap;
+-import net.minecraft.world.level.levelgen.feature.EndPlatformFeature;
+-import net.minecraft.world.level.portal.PortalInfo;
+-import net.minecraft.world.level.portal.PortalShape;
+-import net.minecraft.world.phys.Vec3;
+-import org.bukkit.Bukkit;
+-import org.bukkit.Location;
+-import org.bukkit.craftbukkit.CraftWorld;
+-import org.bukkit.craftbukkit.entity.CraftEntity;
+-import org.bukkit.craftbukkit.event.CraftPortalEvent;
+-import org.bukkit.craftbukkit.util.CraftLocation;
+-import org.bukkit.event.player.PlayerChangedWorldEvent;
+-import org.bukkit.event.player.PlayerTeleportEvent;
+-import org.slf4j.Logger;
+-
+-import java.util.concurrent.CompletableFuture;
+-
+-public class ConfettiDimensionChanger {
+-
+-    private static final Logger LOGGER = LogUtils.getClassLogger();
+-
+-    private final Entity entity;
+-    private ServerLevel destinationWorld;
+-    private final PlayerTeleportEvent.TeleportCause cause;
+-
+-    public ConfettiDimensionChanger(Entity entity, ServerLevel destinationWorld, PlayerTeleportEvent.TeleportCause cause) {
+-        this.entity = entity;
+-        this.destinationWorld = destinationWorld;
+-        this.cause = cause;
+-
+-        this.stage1();
+-    }
+-
+-    private void ensureSyncWith(ServerLevel level, ChunkPos pos, Runnable runnable) {
+-        if (!TickThread.isTickThreadFor(this.entity) || !TickThread.isTickThreadFor(level, pos)) {
+-            ConfettiRegionScheduler.scheduleAcrossLevels((ServerLevel) this.entity.level(), RegionPos.forChunk(this.entity.chunkPosition()), level, RegionPos.forChunk(pos), runnable);
+-        } else {
+-            runnable.run();
+-        }
+-    }
+-
+-    private void stage1() {
+-        if (this.destinationWorld == null) {
+-            return;
+-        }
+-
+-        if (this.entity instanceof ServerPlayer serverPlayer && serverPlayer.isSleeping()) {
+-            return;
+-        }
+-
+-        if (isPlayerExitingEnd()) {
+-            return;
+-        }
+-
+-        CompletableFuture<PortalInfo> future = new CompletableFuture<>();
+-        this.findDimensionEntryPoint(future);
+-
+-        future.thenAccept(portalInfo -> {
+-            if (portalInfo == null) {
+-                this.stage2(portalInfo);
+-            } else {
+-                this.ensureSyncWith(this.destinationWorld, new ChunkPos(BlockPos.containing(portalInfo.pos)), () -> {
+-                    try {
+-                        this.stage2(portalInfo);
+-                    } catch (Exception e) {
+-                        LOGGER.error("Failed to teleport entity through portal", e);
+-                    }
+-                });
+-            }
+-        })
+-        .exceptionally(e -> {
+-            LOGGER.error("Failed to find dimension entry point", e);
+-            return null;
+-        });
+-    }
+-
+-    private boolean isPlayerExitingEnd() {
+-        if (this.entity instanceof ServerPlayer serverPlayer && this.entity.level().getTypeKey() == LevelStem.END && this.destinationWorld.getTypeKey() == LevelStem.OVERWORLD) {
+-            serverPlayer.isChangingDimension = true; // CraftBukkit - Moved down from above
+-            serverPlayer.unRide();
+-            serverPlayer.serverLevel().removePlayerImmediately(serverPlayer, Entity.RemovalReason.CHANGED_DIMENSION);
+-            if (!serverPlayer.wonGame) {
+-                if (serverPlayer.level().paperConfig().misc.disableEndCredits)
+-                    serverPlayer.seenCredits = true; // Paper - Option to disable end credits
+-                serverPlayer.wonGame = true;
+-                serverPlayer.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.WIN_GAME, serverPlayer.seenCredits ? 0.0F : 1.0F));
+-                serverPlayer.seenCredits = true;
+-            }
+-            return true;
+-        }
+-
+-        return false;
+-    }
+-
+-    private void findDimensionEntryPoint(CompletableFuture<PortalInfo> future) {
+-        try {
+-            boolean fromEndToOverworld = this.entity.level().getTypeKey() == LevelStem.END && this.destinationWorld.getTypeKey() == LevelStem.OVERWORLD;
+-            boolean destinationIsEnd = this.destinationWorld.getTypeKey() == LevelStem.END;
+-            boolean destinationIsNether = this.destinationWorld.getTypeKey() == LevelStem.NETHER;
+-
+-            if (!fromEndToOverworld && !destinationIsEnd) {
+-
+-                if (this.entity.level().getTypeKey() != LevelStem.NETHER && !destinationIsNether) { // CraftBukkit
+-                    future.complete(null);
+-                }
+-
+-                WorldBorder worldborder = this.destinationWorld.getWorldBorder();
+-                double d0 = DimensionType.getTeleportationScale(this.entity.level().dimensionType(), this.destinationWorld.dimensionType());
+-                BlockPos blockposition = worldborder.clampToBounds(this.entity.getX() * d0, this.entity.getY(), this.entity.getZ() * d0);
+-
+-                int portalSearchRadius = this.destinationWorld.paperConfig().environment.portalSearchRadius;
+-                if (this.entity.level().paperConfig().environment.portalSearchVanillaDimensionScaling && destinationIsNether) { // == THE_NETHER
+-                    portalSearchRadius = (int) (portalSearchRadius / this.destinationWorld.dimensionType().coordinateScale());
+-                }
+-
+-                callPortalEvent(blockposition, portalSearchRadius).thenAccept(event -> {
+-                    if (event == null) {
+-                        future.complete(null);
+-                        return;
+-                    }
+-
+-                    this.destinationWorld = ((CraftWorld) event.getTo().getWorld()).getHandle();
+-
+-                    ensureSyncWith(this.destinationWorld, new ChunkPos(CraftLocation.toBlockPosition(event.getTo())), () -> {
+-                        try {
+-                            future.complete(this.getExitPortal(event));
+-                        } catch (Exception e) {
+-                            future.completeExceptionally(e);
+-                        }
+-                    });
+-                });
+-            } else {
+-                BlockPos blockposition1 = destinationIsEnd ? ServerLevel.END_SPAWN_POINT : this.destinationWorld.getSharedSpawnPos();
+-
+-                this.destinationWorld.getChunkSource().addRegionTicket(TicketType.PORTAL, new ChunkPos(blockposition1), 3, blockposition1);
+-
+-                getSpawnYValue(blockposition1, destinationIsEnd).thenAccept(i -> {
+-                    callPortalEvent(blockposition1, 16).thenAccept(event -> {
+-                        if (event == null) {
+-                            future.complete(null);
+-                            return;
+-                        }
+-
+-                        this.destinationWorld = ((CraftWorld) event.getTo().getWorld()).getHandle();
+-
+-                        future.complete(new PortalInfo(new Vec3(event.getTo().getX(), i, event.getTo().getZ()), this.entity.getDeltaMovement(), this.entity.getYRot(), this.entity.getXRot(), this.destinationWorld, event));
+-                    });
+-                });
+-            }
+-        } catch (Exception e) {
+-            future.completeExceptionally(e);
+-        }
+-    }
+-
+-    private CompletableFuture<Integer> getSpawnYValue(BlockPos blockposition1, boolean destinationIsEnd) {
+-        if (destinationIsEnd) {
+-            return CompletableFuture.completedFuture(blockposition1.getY());
+-        } else {
+-            return this.destinationWorld.getWorld().getChunkAtAsyncUrgently(CraftLocation.toBukkit(blockposition1, this.destinationWorld))
+-                    .thenApply(chunk -> this.destinationWorld.getChunkAt(blockposition1).getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockposition1.getX(), blockposition1.getZ()) + 1);
+-        }
+-    }
+-
+-    private PortalInfo getExitPortal(CraftPortalEvent event) {
+-        WorldBorder worldborder = this.destinationWorld.getWorldBorder();
+-        BlockPos blockposition = worldborder.clampToBounds(event.getTo().getX(), event.getTo().getY(), event.getTo().getZ());
+-        boolean destinationIsNether = this.destinationWorld.getTypeKey() == LevelStem.NETHER;
+-
+-        return this.entity.getExitPortal(this.destinationWorld, blockposition, destinationIsNether, worldborder, event.getSearchRadius(), event.getCanCreatePortal(), event.getCreationRadius()).map((blockutil_rectangle) -> {
+-            // CraftBukkit end
+-            BlockState iblockdata = this.entity.level().getBlockState(this.entity.portalPos); // Confetti - use portalPos (Purpur renamed portalEntrancePos)
+-            Direction.Axis enumdirection_enumaxis;
+-            Vec3 vec3d;
+-
+-            if (iblockdata.hasProperty(BlockStateProperties.HORIZONTAL_AXIS)) {
+-                enumdirection_enumaxis = iblockdata.getValue(BlockStateProperties.HORIZONTAL_AXIS);
+-                BlockUtil.FoundRectangle blockutil_rectangle1 = BlockUtil.getLargestRectangleAround(this.entity.portalPos, enumdirection_enumaxis, 21, Direction.Axis.Y, 21, (blockposition1) -> { // Confetti - use portalPos
+-                    return this.entity.level().getBlockState(blockposition1) == iblockdata;
+-                });
+-
+-                vec3d = this.entity.getRelativePortalPosition(enumdirection_enumaxis, blockutil_rectangle1);
+-            } else {
+-                enumdirection_enumaxis = Direction.Axis.X;
+-                vec3d = new Vec3(0.5D, 0.0D, 0.0D);
+-            }
+-
+-            return PortalShape.createPortalInfo(this.destinationWorld, blockutil_rectangle, enumdirection_enumaxis, vec3d, this.entity, this.entity.getDeltaMovement(), this.entity.getYRot(), this.entity.getXRot(), event); // CraftBukkit
+-        }).orElse(null); // CraftBukkit - decompile error
+-    }
+-
+-    private CompletableFuture<CraftPortalEvent> callPortalEvent(BlockPos blockposition, int portalSearchRadius) {
+-        return CompletableFuture.supplyAsync(() -> {
+-            return this.entity.callPortalEvent(this.entity, this.destinationWorld, new Vec3(blockposition.getX(), blockposition.getY(), blockposition.getZ()), this.cause, portalSearchRadius, this.destinationWorld.paperConfig().environment.portalCreateRadius);
+-        }, r -> this.ensureSyncWith(this.destinationWorld, new ChunkPos(blockposition), r));
+-    }
+-
+-    private void stage2(PortalInfo portalInfo) {
+-        if (portalInfo == null) {
+-            return;
+-        }
+-
+-        if (this.entity instanceof ServerPlayer serverPlayer) {
+-            if (this.entity.level().getTypeKey() == LevelStem.OVERWORLD && this.destinationWorld.getTypeKey() == LevelStem.NETHER) {
+-                serverPlayer.enteredNetherPosition = this.entity.position();
+-            } else if (this.destinationWorld.getTypeKey() == LevelStem.END && portalInfo.portalEventInfo != null && portalInfo.portalEventInfo.getCanCreatePortal()) { // CraftBukkit
+-                EndPlatformFeature.createEndPlatform(this.destinationWorld, BlockPos.containing(portalInfo.pos), true, serverPlayer); // Confetti - use EndPlatformFeature instead of ServerPlayer.createEndPlatform
+-            }
+-        }
+-
+-        Location exit = CraftLocation.toBukkit(portalInfo.pos, this.destinationWorld.getWorld(), portalInfo.yRot, portalInfo.xRot);
+-        Vec3 speed;
+-        if (this.entity instanceof ServerPlayer serverPlayer) {
+-            Location enter = serverPlayer.getBukkitEntity().getLocation();
+-            PlayerTeleportEvent tpEvent = new PlayerTeleportEvent(serverPlayer.getBukkitEntity(), enter, exit, cause);
+-            Bukkit.getServer().getPluginManager().callEvent(tpEvent);
+-            if (tpEvent.isCancelled() || tpEvent.getTo() == null) {
+-                return;
+-            }
+-            exit = tpEvent.getTo();
+-            speed = null;
+-        } else {
+-            CraftEntity bukkitEntity = this.entity.getBukkitEntity();
+-            org.bukkit.event.entity.EntityPortalExitEvent event = new org.bukkit.event.entity.EntityPortalExitEvent(bukkitEntity,
+-                    bukkitEntity.getLocation(), exit,
+-                    bukkitEntity.getVelocity(), org.bukkit.craftbukkit.util.CraftVector.toBukkit(portalInfo.speed));
+-            event.callEvent();
+-            if (this.entity.isRemoved() || event.isCancelled() || event.getTo() == null) {
+-                return; // Confetti
+-            }
+-            exit = event.getTo();
+-            speed = org.bukkit.craftbukkit.util.CraftVector.toNMS(event.getAfter());
+-        }
+-
+-        this.destinationWorld = ((CraftWorld) exit.getWorld()).getHandle();
+-
+-        Location finalExit = exit;
+-        this.ensureSyncWith(this.destinationWorld, new ChunkPos(CraftLocation.toBlockPosition(finalExit)), () -> stage3(finalExit, speed));
+-    }
+-
+-    private void stage3(Location exit, Vec3 speed) {
+-        if (this.entity instanceof ServerPlayer serverPlayer) {
+-            serverPlayer.isChangingDimension = true; // CraftBukkit - Set teleport invulnerability only if player changing worlds
+-
+-            serverPlayer.connection.send(new ClientboundRespawnPacket(serverPlayer.createCommonSpawnInfo(this.destinationWorld), (byte) 3));
+-            serverPlayer.connection.send(new ClientboundChangeDifficultyPacket(this.destinationWorld.getDifficulty(), this.entity.level().getLevelData().isDifficultyLocked())); // Paper - per level difficulty
+-            PlayerList playerlist = serverPlayer.server.getPlayerList();
+-
+-            playerlist.sendPlayerPermissionLevel(serverPlayer);
+-            serverPlayer.serverLevel().removePlayerImmediately(serverPlayer, Entity.RemovalReason.CHANGED_DIMENSION);
+-            serverPlayer.unsetRemoved();
+-            serverPlayer.portalPos = io.papermc.paper.util.MCUtil.toBlockPosition(exit); // Purpur
+-
+-            // CraftBukkit end
+-            serverPlayer.setServerLevel(this.destinationWorld);
+-            serverPlayer.connection.teleport(exit); // CraftBukkit - use internal teleport without event
+-            serverPlayer.connection.resetPosition();
+-            this.destinationWorld.addDuringPortalTeleport(serverPlayer);
+-            //worldserver1.getProfiler().pop(); // Purpur
+-            serverPlayer.triggerDimensionChangeTriggers(this.destinationWorld);
+-            serverPlayer.connection.send(new ClientboundPlayerAbilitiesPacket(serverPlayer.getAbilities()));
+-            playerlist.sendLevelInfo(serverPlayer, this.destinationWorld);
+-            playerlist.sendAllPlayerInfo(serverPlayer);
+-
+-            for (MobEffectInstance mobeffect : serverPlayer.getActiveEffects()) {
+-                serverPlayer.connection.send(new ClientboundUpdateMobEffectPacket(serverPlayer.getId(), mobeffect, false));
+-            }
+-
+-            serverPlayer.connection.send(new ClientboundLevelEventPacket(1032, BlockPos.ZERO, 0, false));
+-            serverPlayer.lastSentExp = -1;
+-            serverPlayer.lastSentHealth = -1.0F;
+-            serverPlayer.lastSentFood = -1;
+-
+-            // CraftBukkit start
+-            PlayerChangedWorldEvent changeEvent = new PlayerChangedWorldEvent(serverPlayer.getBukkitEntity(), this.destinationWorld.getWorld());
+-            serverPlayer.level().getCraftServer().getPluginManager().callEvent(changeEvent);
+-            // CraftBukkit end
+-        } else {
+-            if (this.destinationWorld == this.entity.level()) {
+-                // SPIGOT-6782: Just move the entity if a plugin changed the world to the one the entity is already in
+-                this.entity.moveTo(exit.getX(), exit.getY(), exit.getZ(), exit.getYaw(), exit.getPitch());
+-                this.entity.setDeltaMovement(speed);
+-                return;
+-            }
+-
+-            this.entity.unRide();
+-
+-            if (this.entity instanceof Mob mob) {
+-                mob.dropLeash(true, true); // Paper drop lead
+-            }
+-
+-            Entity entity = this.entity.getType().create(this.destinationWorld);
+-
+-            if (entity != null) {
+-                entity.restoreFrom(this.entity);
+-                entity.moveTo(exit.getX(), exit.getY(), exit.getZ(), exit.getYaw(), exit.getPitch()); // Paper - EntityPortalExitEvent
+-                entity.setDeltaMovement(speed); // Paper - EntityPortalExitEvent
+-                // CraftBukkit start - Don't spawn the new entity if the current entity isn't spawned
+-                if (this.entity.inWorld) {
+-                    this.destinationWorld.addDuringTeleport(entity);
+-                    if (this.destinationWorld.getTypeKey() == LevelStem.END) { // CraftBukkit
+-                        ServerLevel.makeObsidianPlatform(this.destinationWorld, this.entity); // CraftBukkit
+-                    }
+-                }
+-                // CraftBukkit end
+-                // // CraftBukkit start - Forward the CraftEntity to the new entity // Paper - Forward CraftEntity in teleport command; moved to Entity#restoreFrom
+-                // this.getBukkitEntity().setHandle(entity);
+-                // entity.bukkitEntity = this.getBukkitEntity();
+-                // // CraftBukkit end
+-            }
+-
+-            this.entity.removeAfterChangingDimensions();
+-            ((ServerLevel) this.entity.level()).resetEmptyTime();
+-            this.destinationWorld.resetEmptyTime();
+-        }
+-    }
+-
+-}
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
+index 51719858bdf39447e37b9950473f3a45a3a90aa9..4772d171d2ded4cc22c6d4d14a9a1544a2e70c61 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiTickThread.java
+@@ -1,12 +1,13 @@
+ package com.vulpeslab.confetti.threading;
+ 
+ import com.mojang.logging.LogUtils;
+-import io.papermc.paper.util.TickThread;
++import ca.spottedleaf.moonrise.common.util.TickThread;
+ import org.slf4j.Logger;
+ import com.vulpeslab.confetti.config.ConfettiConfiguration;
+ 
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
++import java.util.concurrent.ThreadFactory;
+ import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicInteger;
+ 
+@@ -29,7 +30,8 @@ public class ConfettiTickThread extends TickThread {
+ 
+         THREAD_COUNT = threadCount;
+ 
+-        executor = Executors.newFixedThreadPool(THREAD_COUNT, r -> new ConfettiTickThread(r, "ConfettiTickThread-%d"));
++        ThreadFactory factory = r -> new ConfettiTickThread(r, "ConfettiTickThread-%d");
++        executor = Executors.newFixedThreadPool(THREAD_COUNT, factory);
+ 
+         LOGGER.info("Using {} threads", THREAD_COUNT);
+     }
+diff --git a/src/main/java/gg/pufferfish/pufferfish/PufferfishVersionFetcher.java b/src/main/java/gg/pufferfish/pufferfish/PufferfishVersionFetcher.java
+index e8a9c72b79cb6adf9888352de1870f2d559e6abd..155ac5a5a8ccd7201067ee8d07f9266b024f56f9 100644
+--- a/src/main/java/gg/pufferfish/pufferfish/PufferfishVersionFetcher.java
++++ b/src/main/java/gg/pufferfish/pufferfish/PufferfishVersionFetcher.java
+@@ -46,7 +46,7 @@ public class PufferfishVersionFetcher implements VersionFetcher {
+ 	}
+ 
+ 	@Override
+-	public Component getVersionMessage() {
++	public Component getVersionMessage(@NotNull String serverVersion) {
+ 		@NotNull Component component;
+ 
+ 		if (ServerBuildInfo.buildInfo().buildNumber().isPresent()) {
+diff --git a/src/main/java/gg/pufferfish/pufferfish/flare/collectors/TPSCollector.java b/src/main/java/gg/pufferfish/pufferfish/flare/collectors/TPSCollector.java
+index 92dacc13f2127f3aa50ab5557166b27e9f510355..69ffb60641cec1b384a2eff93f5f99c6f5b1d1a1 100644
+--- a/src/main/java/gg/pufferfish/pufferfish/flare/collectors/TPSCollector.java
++++ b/src/main/java/gg/pufferfish/pufferfish/flare/collectors/TPSCollector.java
+@@ -1,6 +1,5 @@
+ package gg.pufferfish.pufferfish.flare.collectors;
+ 
+-import ca.spottedleaf.moonrise.common.time.TickData;
+ import co.technove.flare.live.CollectorData;
+ import co.technove.flare.live.LiveCollector;
+ import co.technove.flare.live.formatter.SuffixFormatter;
+@@ -9,7 +8,6 @@ import net.minecraft.server.MinecraftServer;
+ import org.bukkit.Bukkit;
+ 
+ import java.time.Duration;
+-import java.util.Arrays;
+ 
+ public class TPSCollector extends LiveCollector {
+     private static final CollectorData TPS = new CollectorData("airplane:tps", "TPS", "Ticks per second, or how fast the server updates. For a smooth server this should be a constant 20TPS.", SuffixFormatter.of("TPS"), CustomCategories.MC_PERF);
+@@ -23,11 +21,7 @@ public class TPSCollector extends LiveCollector {
+ 
+     @Override
+     public void run() {
+-        TickData.MSPTData data = MinecraftServer.getServer().tickTimes5s.getMSPTData(null, 50);
+-        double mspt = 0;
+-        if (data != null) {
+-            mspt = data.avg();
+-        }
++        double mspt = MinecraftServer.getServer().tickTimes5s.getAverage(); // Confetti - use new API
+ 
+         this.report(TPS, Math.min(20D, Math.round(Bukkit.getServer().getTPS()[0] * 100d) / 100d));
+         this.report(MSPT, (double) Math.round(mspt * 100d) / 100d);
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+index 42df50c96e78100ab49afcf35b4c8d142223ad41..7858d7927ad55a5f8d915291cd1c1a6c2453a85a 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+@@ -5,7 +5,7 @@ import com.destroystokyo.paper.event.server.ServerExceptionEvent;
+ import com.destroystokyo.paper.exception.ServerEventException;
+ import com.google.common.collect.Sets;
+ import com.vulpeslab.confetti.threading.ConfettiTickThread;
+-import io.papermc.paper.util.TickThread;
++import ca.spottedleaf.moonrise.common.util.TickThread;
+ import org.bukkit.Server;
+ import org.bukkit.Warning;
+ import org.bukkit.event.Event;
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index bd070fa65b46c4f58bdd014497c20e39e60e8f94..1f87a1e4621a9dc3614111821b9439326b2a302a 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -885,8 +885,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     // CraftBukkit start
+     public void prepareLevels(ChunkProgressListener worldloadlistener, ServerLevel worldserver) {
+         // WorldServer worldserver = this.overworld();
+-        if (!TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // Confetti
+-        if (ConfettiTickThread.isConfettiTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // Confetti
++        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // Confetti
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // Confetti
+         this.forceTicks = true;
+         // CraftBukkit end
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index b2211668ce08e168e9696a61ce51bda8e61f15df..3eca135ac88221098c29ec5d1e8fadf5441a445e 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -132,6 +132,9 @@ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+ import net.minecraft.world.level.chunk.storage.EntityStorage;
+ import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
++import net.minecraft.world.level.chunk.storage.SimpleRegionStorage;
++import net.minecraft.util.datafix.DataFixTypes;
++import net.minecraft.world.level.entity.EntityPersistentStorage;
+ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+ import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.dimension.end.EndDragonFight;
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 689c9832b3ef911ecc1f08e2ba266e7b791a570e..33b56febc5c0cceb01cabb030b97654d7a4d6bcd 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -58,6 +58,7 @@ import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket;
+ import net.minecraft.network.protocol.game.VecDeltaCodec;
++import com.vulpeslab.confetti.region.RegionPos;
+ import net.minecraft.network.syncher.EntityDataAccessor;
+ import net.minecraft.network.syncher.EntityDataSerializers;
+ import net.minecraft.network.syncher.SyncedDataHolder;
+@@ -3938,7 +3939,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     // Confetti start - add getExitPortal method
+     public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) {
+-        return worldserver.getPortalForcer().findPortalAround(blockposition, worldborder, searchRadius);
++        return worldserver.getPortalForcer().findClosestPortalPosition(blockposition, worldborder, searchRadius).map(pos -> new BlockUtil.FoundRectangle(pos, 2, 3)); // Confetti - updated API for 1.21
+     }
+     // Confetti end
+     // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/world/entity/projectile/FireworkRocketEntity.java b/src/main/java/net/minecraft/world/entity/projectile/FireworkRocketEntity.java
+index 18c6a1b2f016c9b62e208d848dccf1451f7d2dcd..bdaffc5950a8e34c6097fa95d8dbb7a2d13d50c2 100644
+--- a/src/main/java/net/minecraft/world/entity/projectile/FireworkRocketEntity.java
++++ b/src/main/java/net/minecraft/world/entity/projectile/FireworkRocketEntity.java
+@@ -6,7 +6,7 @@ import java.util.List;
+ import java.util.OptionalInt;
+ import javax.annotation.Nullable;
+ 
+-import io.papermc.paper.util.TickThread;
++import ca.spottedleaf.moonrise.common.util.TickThread;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.component.DataComponents;
+ import net.minecraft.core.particles.ParticleTypes;
+diff --git a/src/main/java/net/minecraft/world/item/SignItem.java b/src/main/java/net/minecraft/world/item/SignItem.java
+index 21c25026da4117b2cb2c85576d2def945a97dbe2..b45331fa9a6ec3cb1f1b3648c7d84a9c6b62699f 100644
+--- a/src/main/java/net/minecraft/world/item/SignItem.java
++++ b/src/main/java/net/minecraft/world/item/SignItem.java
+@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.state.BlockState;
+ public class SignItem extends StandingAndWallBlockItem {
+ 
+     public static BlockPos openSign; // CraftBukkit
++    public static final ThreadLocal<BlockPos> openSignThreadLocal = new ThreadLocal<>(); // Confetti - thread local for openSign
+ 
+     public SignItem(Item.Properties settings, Block standingBlock, Block wallBlock) {
+         super(standingBlock, wallBlock, settings, Direction.DOWN);
+@@ -40,6 +41,7 @@ public class SignItem extends StandingAndWallBlockItem {
+                     // CraftBukkit start - SPIGOT-4678
+                     // blocksign.openTextEdit(entityhuman, tileentitysign, true);
+                     SignItem.openSign = pos;
++                    SignItem.openSignThreadLocal.set(pos); // Confetti - thread local for openSign
+                     // CraftBukkit end
+                 }
+             }
+diff --git a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java b/src/main/java/net/minecraft/world/level/block/SaplingBlock.java
+index e34b0ce776dfbee83aa3fefe66efd8fcfeb9ed35..147ec2c2df4339ba1d160a1244d83e25c3c09486 100644
+--- a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/SaplingBlock.java
+@@ -36,6 +36,7 @@ public class SaplingBlock extends BushBlock implements BonemealableBlock {
+     protected static final VoxelShape SHAPE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 12.0D, 14.0D);
+     protected final TreeGrower treeGrower;
+     public static TreeType treeType; // CraftBukkit
++    public static final ThreadLocal<TreeType> treeTypeThreadLocal = new ThreadLocal<>(); // Confetti - thread local for treeType
+ 
+     @Override
+     public MapCodec<? extends SaplingBlock> codec() {
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+index 022e9675d2297cc379e636214d941ef72376d324..ccd4e54dd856153e60f30ee210b1576d03f77276 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+@@ -2,6 +2,7 @@ package net.minecraft.world.level.block.entity;
+ 
+ import com.mojang.logging.LogUtils;
+ import java.util.Iterator;
++import java.util.concurrent.CompletableFuture;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+@@ -167,9 +168,8 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+         return blockposition1.above();
+     }
+ 
+-    private static CompletableFuture<BlockPos> findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) { // Confetti
++    private static BlockPos findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) { // Confetti - reverted to sync
+         Vec3 vec3d = TheEndGatewayBlockEntity.findExitPortalXZPosTentative(world, pos);
+-        return world.getWorld().getChunkAtAsyncUrgently((int) vec3d.x >> 4, (int) vec3d.z >> 4).thenApply(bukkitChunk -> { // Confetti - run on region's thread for write access
+         LevelChunk chunk = TheEndGatewayBlockEntity.getChunk(world, vec3d);
+         BlockPos blockposition1 = TheEndGatewayBlockEntity.findValidSpawnInChunk(chunk);
+ 
+@@ -188,7 +188,6 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+         }
+ 
+         return TheEndGatewayBlockEntity.findTallestBlock(world, blockposition1, 16, true);
+-        }); // Confetti
+     }
+ 
+     private static Vec3 findExitPortalXZPosTentative(ServerLevel world, BlockPos pos) {
+diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
+index 94e8408904116e2c0aa7eece864f2f416e7ad0b1..27748abc1b790dd5ae4b207ea6cec5ee9a9c8342 100644
+--- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
+@@ -14,7 +14,7 @@ import java.util.Optional;
+ import java.util.concurrent.Executor;
+ 
+ import com.vulpeslab.confetti.config.ConfettiConfiguration;
+-import io.papermc.paper.util.TickThread;
++import ca.spottedleaf.moonrise.common.util.TickThread;
+ import net.minecraft.Util;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.NbtAccounter;
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 8149cb89f7b715364fa67211ec6465f1f49a1fed..50d233364a015ae12097044fec8fb4b806876bfe 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -1289,8 +1289,8 @@ public final class CraftServer implements Server {
+         Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
+         //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
+         Preconditions.checkArgument(creator != null, "WorldCreator cannot be null");
+-        if (!TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // Confetti
+-        if (ConfettiTickThread.isConfettiTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // Confetti
++        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) throw new IllegalStateException("Cannot load worlds async!!"); // Confetti
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) throw new IllegalStateException("Must load worlds from the global scheduler!"); // Confetti
+ 
+         String name = creator.name();
+         ChunkGenerator generator = creator.generator();
+@@ -2586,6 +2586,13 @@ public final class CraftServer implements Server {
+         return ca.spottedleaf.moonrise.common.util.TickThread.isTickThread(); // Paper - rewrite chunk system
+     }
+ 
++    // Confetti start - region threading API
++    @Override
++    public boolean isGlobalTickThread() {
++        return ca.spottedleaf.moonrise.common.util.TickThread.isTickThread() && !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
++    }
++    // Confetti end - region threading API
++
+     // Paper start - Adventure
+     @Override
+     public net.kyori.adventure.text.Component motd() {

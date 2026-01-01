@@ -5,10 +5,10 @@ Subject: [PATCH] Fix: Concurrent modification when removing player
 
 
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 973110b208a4026fd296663f58cd60960d9c6a1c..66cb6ad79c1910dd86f61a68adaf1ea00e95ce49 100644
+index c3b70c66f42073d9680a3197b47b5c4dd08f3a6e..5d50eef79406c7bc547bef74cdefae27eef4cbb6 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -702,8 +702,7 @@ public abstract class PlayerList {
+@@ -671,8 +671,7 @@ public abstract class PlayerList {
          // CraftBukkit start
          // this.broadcastAll(new ClientboundPlayerInfoRemovePacket(List.of(entityplayer.getUUID())));
          ClientboundPlayerInfoRemovePacket packet = new ClientboundPlayerInfoRemovePacket(List.of(entityplayer.getUUID()));

@@ -5,10 +5,10 @@ Subject: [PATCH] Send ping packet later
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 7103b2bd575202c8d943f89eec82e7d8fffdc333..2b81e2673ac438df938979bb7076c687296f09d9 100644
+index 9c871774fc65789bc41ea9d03545912a19d05f3b..bd070fa65b46c4f58bdd014497c20e39e60e8f94 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1901,6 +1901,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1888,6 +1888,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
  
              entityplayer.connection.chunkSender.sendNextChunks(entityplayer);
@@ -17,11 +17,11 @@ index 7103b2bd575202c8d943f89eec82e7d8fffdc333..2b81e2673ac438df938979bb7076c687
          }
  
 diff --git a/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
-index efd4456c59c51862ffaf0c17d5b49514a93a7b57..d9527c7627a1b10ba65b8be283a4ce6445307918 100644
+index fac2fb82c381d245f77b7288c34920660ac2c3af..34ff229fa1707e3523098f26cd584d7aac604788 100644
 --- a/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerCommonPacketListenerImpl.java
-@@ -268,7 +268,7 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
-         this.disconnect(ServerCommonPacketListenerImpl.DISCONNECT_UNEXPECTED_QUERY, org.bukkit.event.player.PlayerKickEvent.Cause.INVALID_COOKIE); // Paper - kick event cause
+@@ -265,7 +265,7 @@ public abstract class ServerCommonPacketListenerImpl implements ServerCommonPack
+         this.disconnect(ServerCommonPacketListenerImpl.DISCONNECT_UNEXPECTED_QUERY, PlayerKickEvent.Cause.INVALID_COOKIE); // Paper - kick event cause
      }
  
 -    protected void keepConnectionAlive() {
@@ -30,10 +30,10 @@ index efd4456c59c51862ffaf0c17d5b49514a93a7b57..d9527c7627a1b10ba65b8be283a4ce64
          // Paper start - give clients a longer time to respond to pings as per pre 1.12.2 timings
          // This should effectively place the keepalive handling back to "as it was" before 1.12.2
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 96b58f95866c12e03d96f10e4f5b31311e663a23..28b85349908829ddbe90718e4c5729a36952847f 100644
+index 0802b8becf0b3ac4b471a4a9b9c6790ee629e556..926ba5c3a0f5279fa41a6e24acfd92d43b06a684 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -398,7 +398,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -396,7 +396,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
              this.aboveGroundVehicleTickCount = 0;
          }
  

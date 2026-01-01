@@ -5,10 +5,10 @@ Subject: [PATCH] Ensure worlds are loaded on the global scheduler
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 8179f9a24fb9926f67bc9b181082d2cae10b500b..7103b2bd575202c8d943f89eec82e7d8fffdc333 100644
+index 33808b1b21c656672c5e5a57ef40668cf44ebf04..9c871774fc65789bc41ea9d03545912a19d05f3b 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -808,6 +808,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -885,6 +885,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      // CraftBukkit start
      public void prepareLevels(ChunkProgressListener worldloadlistener, ServerLevel worldserver) {
          // WorldServer worldserver = this.overworld();
@@ -18,10 +18,10 @@ index 8179f9a24fb9926f67bc9b181082d2cae10b500b..7103b2bd575202c8d943f89eec82e7d8
          // CraftBukkit end
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index ea13875caf0d5df2750d6ab6758053a7372d966e..c1f331c0150fa0c2dabb0d7ea24c7614bc1cc8c6 100644
+index c72f928c8fa5533800505488bae8284f7abc794f..8149cb89f7b715364fa67211ec6465f1f49a1fed 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -1283,6 +1283,8 @@ public final class CraftServer implements Server {
+@@ -1289,6 +1289,8 @@ public final class CraftServer implements Server {
          Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
          //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
          Preconditions.checkArgument(creator != null, "WorldCreator cannot be null");

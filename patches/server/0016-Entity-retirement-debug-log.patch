@@ -5,17 +5,17 @@ Subject: [PATCH] Entity retirement debug log
 
 
 diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-index 62484ebf4550b05182f693a3180bbac5d5fd906d..9fb58f07997e0c4c336b246e518d7e97eb766ba5 100644
+index c03608fec96b51e1867f43d8f42e5aefb1520e46..520861e350c66836f4fc7edb616acb4d5dfb802a 100644
 --- a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
 +++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
-@@ -1,6 +1,7 @@
- package io.papermc.paper.threadedregions;
+@@ -2,6 +2,7 @@ package io.papermc.paper.threadedregions;
  
  import ca.spottedleaf.concurrentutil.util.Validate;
+ import ca.spottedleaf.moonrise.common.util.TickThread;
 +import com.mojang.logging.LogUtils;
- import io.papermc.paper.util.TickThread;
  import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
  import net.minecraft.world.entity.Entity;
+ import org.bukkit.craftbukkit.entity.CraftEntity;
 @@ -40,6 +41,7 @@ public final class EntityScheduler {
      private static final record ScheduledTask(Consumer<? extends Entity> run, Consumer<? extends Entity> retired) {}
  

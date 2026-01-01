@@ -1,0 +1,426 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 17:57:59 +0100
+Subject: [PATCH] Import PlayerTeam and Scoreboard from mc-dev
+
+
+diff --git a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java.rej b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java.rej
+deleted file mode 100644
+index 2a63952a7f66b7ef3d938038f795e684fdf4ab27..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java.rej
++++ /dev/null
+@@ -1,19 +0,0 @@
+-diff a/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java b/src/main/java/net/minecraft/core/dispenser/DispenseItemBehavior.java	(rejected hunks)
+-@@ -643,13 +643,13 @@ public interface DispenseItemBehavior {
+-                     worldserver.levelEvent(1505, blockposition, 15);
+-                 }
+-                 // CraftBukkit start
+--                worldserver.captureTreeGeneration = false;
+--                if (worldserver.capturedBlockStates.size() > 0) {
+-+                worldserver.captureTreeGeneration.set(false); // Confetti - thread local
+-+                if (worldserver.capturedBlockStates.get().size() > 0) { // Confetti - thread local
+-                     TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
+-                     SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
+-                     Location location = CraftLocation.toBukkit(blockposition, worldserver.getWorld());
+--                    List<org.bukkit.block.BlockState> blocks = new java.util.ArrayList<>(worldserver.capturedBlockStates.values());
+--                    worldserver.capturedBlockStates.clear();
+-+                    List<org.bukkit.block.BlockState> blocks = new java.util.ArrayList<>(worldserver.capturedBlockStates.get().values()); // Confetti - thread local
+-+                    worldserver.capturedBlockStates.get().clear(); // Confetti - thread local
+-                     StructureGrowEvent structureEvent = null;
+-                     if (treeType != null) {
+-                         structureEvent = new StructureGrowEvent(location, treeType, false, null, blocks);
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java.rej b/src/main/java/net/minecraft/server/level/ServerPlayer.java.rej
+deleted file mode 100644
+index 7b235de2b362d48f620b95f69cb9785d24279d16..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java.rej
++++ /dev/null
+@@ -1,37 +0,0 @@
+-diff a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java	(rejected hunks)
+-@@ -20,6 +20,8 @@ import java.util.concurrent.CompletableFuture;
+- import java.util.stream.Collectors;
+- import javax.annotation.Nullable;
+- 
+-+import com.vulpeslab.confetti.region.RegionPos;
+-+import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
+- import io.papermc.paper.util.TickThread;
+- import net.minecraft.BlockUtil;
+- import net.minecraft.ChatFormatting;
+-@@ -1426,7 +1428,7 @@ public class ServerPlayer extends Player {
+- 
+-     // CraftBukkit start
+-     @Override
+--    protected CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, TeleportCause cause, int searchRadius, int creationRadius) {
+-+    public CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, TeleportCause cause, int searchRadius, int creationRadius) { // Confetti - make public
+-         Location enter = this.getBukkitEntity().getLocation();
+-         Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld(), this.getYRot(), this.getXRot());
+-         PlayerPortalEvent event = new PlayerPortalEvent(this.getBukkitEntity(), enter, exit, cause, searchRadius, true, creationRadius);
+-@@ -1438,7 +1440,7 @@ public class ServerPlayer extends Player {
+-     }
+-     // CraftBukkit end
+- 
+--    private void createEndPlatform(ServerLevel world, BlockPos centerPos) {
+-+    public void createEndPlatform(ServerLevel world, BlockPos centerPos) { // Confetti - make public
+-         BlockPos.MutableBlockPos blockposition_mutableblockposition = centerPos.mutable();
+-         org.bukkit.craftbukkit.util.BlockStateListPopulator blockList = new org.bukkit.craftbukkit.util.BlockStateListPopulator(world); // CraftBukkit
+- 
+-@@ -1462,7 +1464,7 @@ public class ServerPlayer extends Player {
+-     }
+- 
+-     @Override
+--    protected Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // CraftBukkit
+-+    public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // CraftBukkit // Confetti - make public
+-         Optional<BlockUtil.FoundRectangle> optional = super.getExitPortal(worldserver, blockposition, flag, worldborder, searchRadius, canCreatePortal, createRadius); // CraftBukkit
+- 
+-         if (optional.isPresent() || !canCreatePortal) { // CraftBukkit
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java.rej b/src/main/java/net/minecraft/world/entity/Entity.java.rej
+deleted file mode 100644
+index 5fc1d284b1535db4d1da2ee7a27bc592b8085e25..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/entity/Entity.java.rej
++++ /dev/null
+@@ -1,88 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java	(rejected hunks)
+-@@ -6,6 +6,9 @@ import com.google.common.collect.Lists;
+- import com.google.common.collect.Sets;
+- import com.google.common.collect.UnmodifiableIterator;
+- import com.mojang.logging.LogUtils;
+-+import com.vulpeslab.confetti.region.RegionPos;
+-+import com.vulpeslab.confetti.threading.ConfettiDimensionChanger;
+-+import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
+- import io.papermc.paper.util.TickThread;
+- import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
+- import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
+-@@ -376,7 +379,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+-     public int portalCooldown;
+-     public boolean isInsidePortal;
+-     protected int portalTime;
+--    protected BlockPos portalEntrancePos;
+-+    public BlockPos portalEntrancePos; // Confetti - make public
+-     private boolean invulnerable;
+-     protected UUID uuid;
+-     protected String stringUUID;
+-@@ -472,6 +475,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+-         org.bukkit.event.entity.EntityPortalEnterEvent event = new org.bukkit.event.entity.EntityPortalEnterEvent(this.getBukkitEntity(), new org.bukkit.Location(world.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
+-         event.callEvent();
+- 
+-+        // Confetti start - async dimension changing
+-+        if (true) {
+-+            new ConfettiDimensionChanger(this, worldserver, PlayerTeleportEvent.TeleportCause.END_PORTAL);
+-+            return;
+-+        }
+-+        // Confetti end - async dimension changing
+-+
+-         if (this instanceof ServerPlayer) {
+-             ((ServerPlayer) this).changeDimension(worldserver, PlayerTeleportEvent.TeleportCause.END_PORTAL);
+-             return;
+-@@ -3298,11 +3308,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+-                         worldserver1 = event.getTargetWorld() == null ? null : ((CraftWorld) event.getTargetWorld()).getHandle();
+-                     // Paper end - Add EntityPortalReadyEvent
+-                     this.setPortalCooldown();
+-+
+-+                    // Confetti start - async dimension changing
+-+                    if (true) {
+-+                        new ConfettiDimensionChanger(this, worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
+-+                    }
+-+                    // Confetti end - async dimension changing
+-+
+-                     // CraftBukkit start
+-                     if (this instanceof ServerPlayer) {
+--                        ((ServerPlayer) this).changeDimension(worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL);
+-+                        // ((ServerPlayer) this).changeDimension(worldserver1, PlayerTeleportEvent.TeleportCause.NETHER_PORTAL); // Confetti - handled above
+-                     } else {
+--                        this.changeDimension(worldserver1);
+-+                        // this.changeDimension(worldserver1); // Confetti - handled above
+-                     }
+-                     } // Paper - Add EntityPortalReadyEvent
+-                     // CraftBukkit end
+-@@ -3851,7 +3868,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+-         }
+-     }
+- 
+--    protected void removeAfterChangingDimensions() {
+-+    public void removeAfterChangingDimensions() { // Confetti - make public
+-         this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
+-     }
+- 
+-@@ -3932,12 +3949,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+-         }
+-     }
+- 
+--    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
+-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
+-         return PortalShape.getRelativePosition(portalRect, portalAxis, this.position(), this.getDimensions(this.getPose()));
+-     }
+- 
+-     // CraftBukkit start
+--    protected CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) {
+-+    public CraftPortalEvent callPortalEvent(Entity entity, ServerLevel exitWorldServer, Vec3 exitPosition, PlayerTeleportEvent.TeleportCause cause, int searchRadius, int creationRadius) { // Confetti - make public
+-         org.bukkit.entity.Entity bukkitEntity = entity.getBukkitEntity();
+-         Location enter = bukkitEntity.getLocation();
+-         Location exit = CraftLocation.toBukkit(exitPosition, exitWorldServer.getWorld());
+-@@ -3957,7 +3974,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+-         return new CraftPortalEvent(event);
+-     }
+- 
+--    protected Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) {
+-+    public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) { // Confetti - make public
+-         return worldserver.getPortalForcer().findPortalAround(blockposition, worldborder, searchRadius);
+-         // CraftBukkit end
+-     }
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java.rej b/src/main/java/net/minecraft/world/entity/LivingEntity.java.rej
+deleted file mode 100644
+index 67aae855cf3fd3ce9d5983e52b89fbffd068fcf3..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java.rej
++++ /dev/null
+@@ -1,10 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java	(rejected hunks)
+-@@ -3921,7 +3921,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+-     }
+- 
+-     @Override
+--    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
+-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
+-         return LivingEntity.resetForwardDirectionOfRelativePortalPosition(super.getRelativePortalPosition(portalAxis, portalRect));
+-     }
+- 
+diff --git a/src/main/java/net/minecraft/world/entity/Mob.java.rej b/src/main/java/net/minecraft/world/entity/Mob.java.rej
+deleted file mode 100644
+index 3b7fef69ea22ee8ac25d8690c329129ea7e17f8f..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/entity/Mob.java.rej
++++ /dev/null
+@@ -1,10 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java	(rejected hunks)
+-@@ -1912,7 +1912,7 @@ public abstract class Mob extends LivingEntity implements EquipmentUser, Targeti
+-     }
+- 
+-     @Override
+--    protected void removeAfterChangingDimensions() {
+-+    public void removeAfterChangingDimensions() { // Confetti - make public
+-         super.removeAfterChangingDimensions();
+-         // Paper start - Expand EntityUnleashEvent
+-         EntityUnleashEvent event = new EntityUnleashEvent(this.getBukkitEntity(), EntityUnleashEvent.UnleashReason.UNKNOWN, false);
+diff --git a/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java.rej b/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java.rej
+deleted file mode 100644
+index e84ebf247a6577f80fb1864b3fddd456fead4286..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java.rej
++++ /dev/null
+@@ -1,10 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java b/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java	(rejected hunks)
+-@@ -184,7 +184,7 @@ public abstract class AbstractMinecart extends VehicleEntity {
+-     }
+- 
+-     @Override
+--    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
+-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
+-         return LivingEntity.resetForwardDirectionOfRelativePortalPosition(super.getRelativePortalPosition(portalAxis, portalRect));
+-     }
+- 
+diff --git a/src/main/java/net/minecraft/world/entity/vehicle/Boat.java.rej b/src/main/java/net/minecraft/world/entity/vehicle/Boat.java.rej
+deleted file mode 100644
+index d6fe1bcbf128b5fce576b91b9bec5cd845cd035c..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/entity/vehicle/Boat.java.rej
++++ /dev/null
+@@ -1,10 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/entity/vehicle/Boat.java b/src/main/java/net/minecraft/world/entity/vehicle/Boat.java	(rejected hunks)
+-@@ -155,7 +155,7 @@ public class Boat extends VehicleEntity implements VariantHolder<Boat.Type> {
+-     }
+- 
+-     @Override
+--    protected Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) {
+-+    public Vec3 getRelativePortalPosition(Direction.Axis portalAxis, BlockUtil.FoundRectangle portalRect) { // Confetti - make public
+-         return LivingEntity.resetForwardDirectionOfRelativePortalPosition(super.getRelativePortalPosition(portalAxis, portalRect));
+-     }
+- 
+diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java.rej b/src/main/java/net/minecraft/world/item/ItemStack.java.rej
+deleted file mode 100644
+index 191b18949bcf2fd5c304e6400a052f80f3bc180a..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/item/ItemStack.java.rej
++++ /dev/null
+@@ -1,57 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java	(rejected hunks)
+-@@ -400,29 +400,31 @@ public final class ItemStack implements DataComponentHolder {
+-             ServerLevel world = (ServerLevel) context.getLevel();
+- 
+-             if (!(item instanceof BucketItem/* || item instanceof SolidBucketItem*/)) { // if not bucket // Paper - Fix cancelled powdered snow bucket placement
+--                world.captureBlockStates = true;
+-+                world.captureBlockStates.set(true); // Confetti - thread local
+-                 // special case bonemeal
+-                 if (item == Items.BONE_MEAL) {
+--                    world.captureTreeGeneration = true;
+-+                    world.captureTreeGeneration.set(true); // Confetti - thread local
+-                 }
+-             }
+-             InteractionResult enuminteractionresult;
+-             try {
+-+                world.capturedTileEntities.get().clear(); // Confetti - clear beforehand
+-+                world.capturedBlockStates.get().clear(); // Confetti - clear beforehand
+-                 enuminteractionresult = item.useOn(context);
+-             } finally {
+--                world.captureBlockStates = false;
+-+                world.captureBlockStates.set(false); // Confetti - thread local
+-             }
+-             DataComponentPatch newData = this.components.asPatch();
+-             int newCount = this.getCount();
+-             this.setCount(oldCount);
+-             this.restorePatch(oldData);
+--            if (enuminteractionresult.consumesAction() && world.captureTreeGeneration && world.capturedBlockStates.size() > 0) {
+--                world.captureTreeGeneration = false;
+-+            if (enuminteractionresult.consumesAction() && world.captureTreeGeneration.get() && world.capturedBlockStates.get().size() > 0) { // Confetti - thread local
+-+                world.captureTreeGeneration.set(false); // Confetti - thread local
+-                 Location location = CraftLocation.toBukkit(blockposition, world.getWorld());
+-                 TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
+-                 SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
+--                List<CraftBlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
+--                world.capturedBlockStates.clear();
+-+                List<CraftBlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.get().values()); // Confetti - thread local
+-+                world.capturedBlockStates.get().clear(); // Confetti - thread local
+-                 StructureGrowEvent structureEvent = null;
+-                 if (treeType != null) {
+-                     boolean isBonemeal = this.getItem() == Items.BONE_MEAL;
+-@@ -451,13 +453,13 @@ public final class ItemStack implements DataComponentHolder {
+-                 SignItem.openSignThreadLocal.remove(); // SPIGOT-6758 - Reset on early return // Confetti - thread local for openSign
+-                 return enuminteractionresult;
+-             }
+--            world.captureTreeGeneration = false;
+-+            world.captureTreeGeneration.set(false); // Confetti - thread local;
+- 
+-             if (entityhuman != null && enuminteractionresult.indicateItemUse()) {
+-                 InteractionHand enumhand = context.getHand();
+-                 org.bukkit.event.block.BlockPlaceEvent placeEvent = null;
+--                List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
+--                world.capturedBlockStates.clear();
+-+                List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.get().values()); // Confetti - thread local
+-+                world.capturedBlockStates.get().clear(); // Confetti - thread local
+-                 if (blocks.size() > 1) {
+-                     placeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockMultiPlaceEvent(world, entityhuman, enumhand, blocks, blockposition.getX(), blockposition.getY(), blockposition.getZ());
+-                 } else if (blocks.size() == 1 && item != Items.POWDER_SNOW_BUCKET) { // Paper - Fix cancelled powdered snow bucket placement
+diff --git a/src/main/java/net/minecraft/world/level/Level.java.rej b/src/main/java/net/minecraft/world/level/Level.java.rej
+deleted file mode 100644
+index 5fb8398a2ba256d27f91805412b8711345db9551..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/level/Level.java.rej
++++ /dev/null
+@@ -1,9 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java	(rejected hunks)
+-@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
+- import com.mojang.serialization.Codec;
+- import java.io.IOException;
+- import java.util.Iterator;
+-+import java.util.LinkedHashMap;
+- import java.util.List;
+- import java.util.Objects;
+- import java.util.Set;
+diff --git a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java.rej b/src/main/java/net/minecraft/world/level/block/SaplingBlock.java.rej
+deleted file mode 100644
+index 0e944908e00855d9e3f0798f75649e987c365550..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java.rej
++++ /dev/null
+@@ -1,26 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/level/block/SaplingBlock.java b/src/main/java/net/minecraft/world/level/block/SaplingBlock.java	(rejected hunks)
+-@@ -66,18 +66,18 @@ public class SaplingBlock extends BushBlock implements BonemealableBlock {
+-             world.setBlock(pos, (net.minecraft.world.level.block.state.BlockState) state.cycle(SaplingBlock.STAGE), 4);
+-         } else {
+-             // CraftBukkit start
+--            if (world.captureTreeGeneration) {
+-+            if (world.captureTreeGeneration.get()) { // Confetti - thread local
+-                 this.treeGrower.growTree(world, world.getChunkSource().getGenerator(), pos, state, random);
+-             } else {
+--                world.captureTreeGeneration = true;
+-+                world.captureTreeGeneration.set(true); // Confetti - thread local
+-                 this.treeGrower.growTree(world, world.getChunkSource().getGenerator(), pos, state, random);
+--                world.captureTreeGeneration = false;
+--                if (world.capturedBlockStates.size() > 0) {
+-+                world.captureTreeGeneration.set(false); // Confetti - thread local
+-+                if (world.capturedBlockStates.get().size() > 0) { // Confetti - thread local
+-                     TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
+-                     SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
+-                     Location location = CraftLocation.toBukkit(pos, world.getWorld());
+--                    java.util.List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
+--                    world.capturedBlockStates.clear();
+-+                    java.util.List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.get().values()); // Confetti - thread local
+-+                    world.capturedBlockStates.get().clear(); // Confetti - thread local
+-                     StructureGrowEvent event = null;
+-                     if (treeType != null) {
+-                         event = new StructureGrowEvent(location, treeType, false, null, blocks);
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java.rej b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java.rej
+deleted file mode 100644
+index b85cba0734135520c2e4c510bb72a56241d69679..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java.rej
++++ /dev/null
+@@ -1,50 +0,0 @@
+-diff a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java	(rejected hunks)
+-@@ -3,7 +3,11 @@ package net.minecraft.world.level.block.entity;
+- import com.mojang.logging.LogUtils;
+- import java.util.Iterator;
+- import java.util.List;
+-+import java.util.concurrent.CompletableFuture;
+- import javax.annotation.Nullable;
+-+
+-+import com.vulpeslab.confetti.region.RegionPos;
+-+import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
+- import net.minecraft.advancements.CriteriaTriggers;
+- import net.minecraft.core.BlockPos;
+- import net.minecraft.core.Direction;
+-@@ -177,17 +181,22 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+-             }
+-             // Purpur end
+-             blockEntity.teleportCooldown = 100;
+--            BlockPos blockposition1;
+-+            CompletableFuture<BlockPos> blockpositionfuture = CompletableFuture.completedFuture(blockEntity.exitPortal); // Confetti
+- 
+-             if (blockEntity.exitPortal == null && world.getTypeKey() == LevelStem.END) { // CraftBukkit - work in alternate worlds
+--                blockposition1 = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos);
+--                blockposition1 = blockposition1.above(10);
+-+                blockpositionfuture = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos); // Confetti
+-+                blockpositionfuture = blockpositionfuture.thenApply(blockposition1 -> blockposition1.above(10)); // Confetti
+-+                blockpositionfuture.thenAccept(blockposition1 -> { // Confetti
+-                 TheEndGatewayBlockEntity.LOGGER.debug("Creating portal at {}", blockposition1);
+-                 TheEndGatewayBlockEntity.spawnGatewayPortal(worldserver, blockposition1, EndGatewayConfiguration.knownExit(pos, false));
+-                 blockEntity.exitPortal = blockposition1;
+-+                }); // Confetti
+-             }
+- 
+--            if (blockEntity.exitPortal != null) {
+-+            blockpositionfuture.thenRun(() -> { // Confetti
+-+                if (blockEntity.exitPortal == null) return; // Confetti
+-+                ConfettiRegionScheduler.scheduleAcrossLevels(worldserver, RegionPos.forChunk(entity.chunkPosition()), worldserver, RegionPos.forBlockPos(blockEntity.exitPortal), () -> { // Confetti
+-+                BlockPos blockposition1; // Confetti
+-                 blockposition1 = blockEntity.exactTeleport ? blockEntity.exitPortal : TheEndGatewayBlockEntity.findExitPosition(world, blockEntity.exitPortal);
+-                 Entity entity1;
+- 
+-@@ -243,7 +252,8 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+-                 entity1.setPortalCooldown();
+-                 entity1.teleportToWithTicket(teleEvent.getTo().getX(), teleEvent.getTo().getY(), teleEvent.getTo().getZ());
+-                 // CraftBukkit end
+--            }
+-+                }); // Confetti
+-+            }); // Confetti
+- 
+-             TheEndGatewayBlockEntity.triggerCooldown(world, pos, state, blockEntity);
+-         }
+diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java.rej b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java.rej
+deleted file mode 100644
+index 51b697e35699e4b7dc22605595f50b405f1960e4..0000000000000000000000000000000000000000
+--- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java.rej
++++ /dev/null
+@@ -1,22 +0,0 @@
+-diff a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java	(rejected hunks)
+-@@ -549,15 +549,15 @@ public class CraftBlock implements Block {
+-         UseOnContext context = new UseOnContext(world, null, InteractionHand.MAIN_HAND, Items.BONE_MEAL.getDefaultInstance(), new BlockHitResult(Vec3.ZERO, direction, this.getPosition(), false));
+- 
+-         // SPIGOT-6895: Call StructureGrowEvent and BlockFertilizeEvent
+--        world.captureTreeGeneration = true;
+-+        world.captureTreeGeneration.set(true); // Confetti - thread local
+-         InteractionResult result = BoneMealItem.applyBonemeal(context);
+--        world.captureTreeGeneration = false;
+-+        world.captureTreeGeneration.set(false); // Confetti - thread local
+- 
+--        if (world.capturedBlockStates.size() > 0) {
+-+        if (world.capturedBlockStates.get().size() > 0) { // Confetti - thread local
+-             TreeType treeType = SaplingBlock.treeTypeThreadLocal.get(); // Confetti - thread local for treeType
+-             SaplingBlock.treeTypeThreadLocal.remove(); // Confetti - thread local for treeType
+--            List<BlockState> blocks = new ArrayList<>(world.capturedBlockStates.values());
+--            world.capturedBlockStates.clear();
+-+            List<BlockState> blocks = new ArrayList<>(world.capturedBlockStates.get().values()); // Confetti - thread local
+-+            world.capturedBlockStates.get().clear(); // Confetti - thread local
+-             StructureGrowEvent structureEvent = null;
+- 
+-             if (treeType != null) {

@@ -4,9 +4,41 @@ Date: Tue, 21 May 2024 23:54:30 +0900
 Subject: [PATCH] mpmap debug command
 
 
+diff --git a/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java b/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..90f77c2d59bfe87ea4b23ab231a7c949ed4e392d
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java
+@@ -0,0 +1,26 @@
++package com.vulpeslab.confetti.commands;
++
++import net.minecraft.server.MinecraftServer;
++import org.bukkit.command.Command;
++
++import java.util.HashMap;
++import java.util.Map;
++
++public class ConfettiCommands {
++
++    private static final Map<String, Command> COMMANDS = new HashMap<>();
++    static {
++        for (Command command : new Command[] {
++                new MPMapCommand("mpmap")
++        }) {
++            COMMANDS.put(command.getName(), command);
++        }
++    }
++
++    public static void registerCommands(final MinecraftServer server) {
++        COMMANDS.forEach((s, command) -> {
++            server.server.getCommandMap().register(s, "confetti", command);
++        });
++    }
++
++}
 diff --git a/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java b/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6fad03268943c9e4d4a6be3afac14f43da5e83d2
+index 0000000000000000000000000000000000000000..eb3415e98063d67987bbf4656aa7a2749cbb7dcb
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/commands/MPMapCommand.java
 @@ -0,0 +1,48 @@
@@ -60,7 +92,7 @@ index 0000000000000000000000000000000000000000..6fad03268943c9e4d4a6be3afac14f43
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/commands/MapCommandBase.java b/src/main/java/com/vulpeslab/confetti/commands/MapCommandBase.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..da00cc8e1cc540b5d042996837b4f546b2b361cb
+index 0000000000000000000000000000000000000000..a51b93baff01147de517c84e74916ab8e57f4af9
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/commands/MapCommandBase.java
 @@ -0,0 +1,93 @@
@@ -157,40 +189,8 @@ index 0000000000000000000000000000000000000000..da00cc8e1cc540b5d042996837b4f546
 +
 +    protected record ChunkStatus(NamedTextColor color, @Nullable String description) {};
 +}
-diff --git a/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java b/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..4dd39bce7ed93bf96cc893cc5e3cf539f44763fe
---- /dev/null
-+++ b/src/main/java/com/vulpeslab/confetti/commands/ConfettiCommands.java
-@@ -0,0 +1,26 @@
-+package com.vulpeslab.confetti.commands;
-+
-+import net.minecraft.server.MinecraftServer;
-+import org.bukkit.command.Command;
-+
-+import java.util.HashMap;
-+import java.util.Map;
-+
-+public class ConfettiCommands {
-+
-+    private static final Map<String, Command> COMMANDS = new HashMap<>();
-+    static {
-+        for (Command command : new Command[] {
-+                new MPMapCommand("mpmap")
-+        }) {
-+            COMMANDS.put(command.getName(), command);
-+        }
-+    }
-+
-+    public static void registerCommands(final MinecraftServer server) {
-+        COMMANDS.forEach((s, command) -> {
-+            server.server.getCommandMap().register(s, "confetti", command);
-+        });
-+    }
-+
-+}
 diff --git a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
-index 53dcfbdf38f007fc86064ac1a495288d5f25f598..89436f82a49d69f3bd21195bf44dfc4fa9bd4df7 100644
+index 7ab9920729daf2cc82909d539c573028503b23ea..89a51764220ff931963d06bac58700cf8b94279b 100644
 --- a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 +++ b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 @@ -1,6 +1,7 @@
@@ -210,10 +210,10 @@ index 53dcfbdf38f007fc86064ac1a495288d5f25f598..89436f82a49d69f3bd21195bf44dfc4f
          commands.recalculatePermissibles();
      }
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index 60444929e3e0fb6e53f6df2b41cbc52222d26600..d281fe5f75f6f99f869fa3cc8da4f1ff9f96a7bf 100644
+index 583246cc99cd9d90f9a4205f45c2a2d5b33e096c..2bb5326e52049d02171e01ab4cf6f7fa118fd6c6 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-@@ -69,6 +69,7 @@ import org.bukkit.craftbukkit.util.TerminalConsoleWriterThread;
+@@ -71,6 +71,7 @@ import org.bukkit.craftbukkit.util.TerminalConsoleWriterThread;
  import org.bukkit.event.server.ServerCommandEvent;
  import org.bukkit.craftbukkit.util.Waitable; // Paper
  import org.bukkit.event.server.RemoteServerCommandEvent;
@@ -221,7 +221,7 @@ index 60444929e3e0fb6e53f6df2b41cbc52222d26600..d281fe5f75f6f99f869fa3cc8da4f1ff
  // CraftBukkit end
  
  public class DedicatedServer extends MinecraftServer implements ServerInterface {
-@@ -242,6 +243,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -248,6 +249,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
          }
          org.purpurmc.purpur.PurpurConfig.registerCommands();
          // Purpur end

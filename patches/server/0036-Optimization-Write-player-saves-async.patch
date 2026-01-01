@@ -5,7 +5,7 @@ Subject: [PATCH] Optimization: Write player saves async
 
 
 diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-index 8ab7ca373a885fbe658013c9c6a2e38d32d77bb2..f6d88899f97d46584aabdb2b4719b714bd2d9662 100644
+index 8ab7ca373a885fbe658013c9c6a2e38d32d77bb2..94e8408904116e2c0aa7eece864f2f416e7ad0b1 100644
 --- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 @@ -3,6 +3,7 @@ package net.minecraft.world.level.storage;

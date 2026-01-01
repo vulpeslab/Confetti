@@ -6,7 +6,7 @@ Subject: [PATCH] Thread-safe NeigbhorUpdater
 
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/PerThreadNeighborUpdater.java b/src/main/java/com/vulpeslab/confetti/threading/PerThreadNeighborUpdater.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e01ca0d4a18a5cea678d0fd4809291f6b7bdc731
+index 0000000000000000000000000000000000000000..2161635f3eacad16d4402359da4bdf0e079157c2
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/threading/PerThreadNeighborUpdater.java
 @@ -0,0 +1,44 @@
@@ -55,18 +55,18 @@ index 0000000000000000000000000000000000000000..e01ca0d4a18a5cea678d0fd4809291f6
 +    }
 +}
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 5e04a2cc65eca2d0cc20b1580b3d7518010f1e78..adf6379f1ebd7ead6368d7b58f60bf793ab43be6 100644
+index ed313b0424b2e1e1335ee3e3bd4d9cfd15f24b39..15768105efeebff01c0b5de18fcb1b02a1ea7aa6 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -99,6 +99,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
+@@ -101,6 +101,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
  import org.bukkit.craftbukkit.util.CraftSpawnCategory;
  import org.bukkit.entity.SpawnCategory;
  import org.bukkit.event.block.BlockPhysicsEvent;
 +import com.vulpeslab.confetti.threading.PerThreadNeighborUpdater;
  // CraftBukkit end
  
- public abstract class Level implements LevelAccessor, AutoCloseable {
-@@ -291,7 +292,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemLevel, ca.spottedleaf.moonrise.patches.chunk_system.world.ChunkSystemEntityGetter, ca.spottedleaf.moonrise.patches.collisions.world.CollisionLevel { // Paper - rewrite chunk system // Paper - optimise collisions
+@@ -770,7 +771,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
          this.thread = Thread.currentThread();
          this.biomeManager = new BiomeManager(this, i);
          this.isDebug = flag1;

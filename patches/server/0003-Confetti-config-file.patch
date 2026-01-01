@@ -4,23 +4,9 @@ Date: Fri, 4 Mar 2022 20:33:33 +1000
 Subject: [PATCH] Confetti config file
 
 
-diff --git a/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java b/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..df97bb240655934b62cfb1647f2dc32707b48a09
---- /dev/null
-+++ b/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java
-@@ -0,0 +1,8 @@
-+package com.vulpeslab.confetti.config;
-+
-+@FunctionalInterface
-+public interface ExceptionableConsumer<T> {
-+
-+    void accept(T t) throws Exception;
-+
-+}
 diff --git a/src/main/java/com/vulpeslab/confetti/config/ConfettiConfiguration.java b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfiguration.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d0dd169d5cac210373da184f19bfd2b0042a4ffd
+index 0000000000000000000000000000000000000000..d0f12ab39527194bd9b47a7f04f2d3746a656ac5
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfiguration.java
 @@ -0,0 +1,64 @@
@@ -90,7 +76,7 @@ index 0000000000000000000000000000000000000000..d0dd169d5cac210373da184f19bfd2b0
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/config/ConfettiConfigurationLoader.java b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfigurationLoader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a45ea7da9f
+index 0000000000000000000000000000000000000000..c51d25ddc99fa9d9d380105f063c47cd0438ef6a
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/config/ConfettiConfigurationLoader.java
 @@ -0,0 +1,128 @@
@@ -222,9 +208,23 @@ index 0000000000000000000000000000000000000000..9407d6afa9c13a55be65d4e680f3f1a4
 +    }
 +
 +}
+diff --git a/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java b/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4ba4ef9ddfc07f083f30db6712dcf798518a42d6
+--- /dev/null
++++ b/src/main/java/com/vulpeslab/confetti/config/ExceptionableConsumer.java
+@@ -0,0 +1,8 @@
++package com.vulpeslab.confetti.config;
++
++@FunctionalInterface
++public interface ExceptionableConsumer<T> {
++
++    void accept(T t) throws Exception;
++
++}
 diff --git a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..53dcfbdf38f007fc86064ac1a495288d5f25f598
+index 0000000000000000000000000000000000000000..7ab9920729daf2cc82909d539c573028503b23ea
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiCommandPermissions.java
 @@ -0,0 +1,17 @@
@@ -247,7 +247,7 @@ index 0000000000000000000000000000000000000000..53dcfbdf38f007fc86064ac1a495288d
 +}
 diff --git a/src/main/java/com/vulpeslab/confetti/permissions/ConfettiPermissions.java b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiPermissions.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a72566749fce7c3e0a89e16afc31caf01117034a
+index 0000000000000000000000000000000000000000..e2101157924ebf14edd77927b8563e273be37ce0
 --- /dev/null
 +++ b/src/main/java/com/vulpeslab/confetti/permissions/ConfettiPermissions.java
 @@ -0,0 +1,19 @@
@@ -271,7 +271,7 @@ index 0000000000000000000000000000000000000000..a72566749fce7c3e0a89e16afc31caf0
 +    }
 +}
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 0f7d6da8685716604f0749d4f5b60730a44cde73..a7ffbbfd2a9fdeae0953ec8753ce48e93ccce086 100644
+index aad2cdf4c2237caf2c99695d0cbb01f56c0074e2..bbe72c8b2ebe5ba2458b4f75a1f0fd2a8ed5d4c9 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
 @@ -23,7 +23,6 @@ import joptsimple.util.PathConverter;
@@ -292,7 +292,7 @@ index 0f7d6da8685716604f0749d4f5b60730a44cde73..a7ffbbfd2a9fdeae0953ec8753ce48e9
  public class Main {
  
      private static final Logger LOGGER = LogUtils.getLogger();
-@@ -119,6 +121,8 @@ public class Main {
+@@ -120,6 +122,8 @@ public class Main {
                  JvmProfiler.INSTANCE.start(Environment.SERVER);
              }
  
@@ -302,10 +302,10 @@ index 0f7d6da8685716604f0749d4f5b60730a44cde73..a7ffbbfd2a9fdeae0953ec8753ce48e9
              org.bukkit.configuration.file.YamlConfiguration purpurConfiguration = io.papermc.paper.configuration.PaperConfigurations.loadLegacyConfigFile((File) optionset.valueOf("purpur-settings"));
              org.purpurmc.purpur.PurpurConfig.clampEnchantLevels = purpurConfiguration.getBoolean("settings.enchantment.clamp-levels");
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 07a04dcbd48430102268f8f44e9bce437214a00f..01472ee224ac91ec4fbffdf82a0d92e0d1ab69c1 100644
+index d87ecd6e7552ab537c9d9e8a10a471814e61632d..c72f928c8fa5533800505488bae8284f7abc794f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -260,6 +260,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+@@ -261,6 +261,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
@@ -313,7 +313,7 @@ index 07a04dcbd48430102268f8f44e9bce437214a00f..01472ee224ac91ec4fbffdf82a0d92e0
  
  import javax.annotation.Nullable; // Paper
  import javax.annotation.Nonnull; // Paper
-@@ -599,6 +600,7 @@ public final class CraftServer implements Server {
+@@ -613,6 +614,7 @@ public final class CraftServer implements Server {
              this.commandMap.registerServerAliases();
              DefaultPermissions.registerCorePermissions();
              CraftDefaultPermissions.registerCorePermissions();
@@ -322,7 +322,7 @@ index 07a04dcbd48430102268f8f44e9bce437214a00f..01472ee224ac91ec4fbffdf82a0d92e0
              this.helpMap.initializeCommands();
              this.syncCommands();
 diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
-index e2b79f8eacd34d2d20f8be34b402820723e37ae3..43310bffeeeebafb0ef7437cbfcd9e063dc137b0 100644
+index 316c5e1460ccf3386c4c8623eabb7f087df8c4b9..a560632bd17388d64101ef753f831cffe078832e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/Main.java
 +++ b/src/main/java/org/bukkit/craftbukkit/Main.java
 @@ -184,6 +184,14 @@ public class Main {

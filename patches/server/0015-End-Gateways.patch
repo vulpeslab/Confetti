@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 5 Jun 2024 00:49:15 +0900
+Subject: [PATCH] End Gateways
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+index 89df488afeffd0c060d2d0e7fae16daf978bd192..022e9675d2297cc379e636214d941ef72376d324 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+@@ -167,8 +167,9 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+         return blockposition1.above();
+     }
+ 
+-    private static BlockPos findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) {
++    private static CompletableFuture<BlockPos> findOrCreateValidTeleportPos(ServerLevel world, BlockPos pos) { // Confetti
+         Vec3 vec3d = TheEndGatewayBlockEntity.findExitPortalXZPosTentative(world, pos);
++        return world.getWorld().getChunkAtAsyncUrgently((int) vec3d.x >> 4, (int) vec3d.z >> 4).thenApply(bukkitChunk -> { // Confetti - run on region's thread for write access
+         LevelChunk chunk = TheEndGatewayBlockEntity.getChunk(world, vec3d);
+         BlockPos blockposition1 = TheEndGatewayBlockEntity.findValidSpawnInChunk(chunk);
+ 
+@@ -187,6 +188,7 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
+         }
+ 
+         return TheEndGatewayBlockEntity.findTallestBlock(world, blockposition1, 16, true);
++        }); // Confetti
+     }
+ 
+     private static Vec3 findExitPortalXZPosTentative(ServerLevel world, BlockPos pos) {
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java.rej b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java.rej
+new file mode 100644
+index 0000000000000000000000000000000000000000..b85cba0734135520c2e4c510bb72a56241d69679
+--- /dev/null
++++ b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java.rej
+@@ -0,0 +1,50 @@
++diff a/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java	(rejected hunks)
++@@ -3,7 +3,11 @@ package net.minecraft.world.level.block.entity;
++ import com.mojang.logging.LogUtils;
++ import java.util.Iterator;
++ import java.util.List;
+++import java.util.concurrent.CompletableFuture;
++ import javax.annotation.Nullable;
+++
+++import com.vulpeslab.confetti.region.RegionPos;
+++import com.vulpeslab.confetti.threading.ConfettiRegionScheduler;
++ import net.minecraft.advancements.CriteriaTriggers;
++ import net.minecraft.core.BlockPos;
++ import net.minecraft.core.Direction;
++@@ -177,17 +181,22 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
++             }
++             // Purpur end
++             blockEntity.teleportCooldown = 100;
++-            BlockPos blockposition1;
+++            CompletableFuture<BlockPos> blockpositionfuture = CompletableFuture.completedFuture(blockEntity.exitPortal); // Confetti
++ 
++             if (blockEntity.exitPortal == null && world.getTypeKey() == LevelStem.END) { // CraftBukkit - work in alternate worlds
++-                blockposition1 = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos);
++-                blockposition1 = blockposition1.above(10);
+++                blockpositionfuture = TheEndGatewayBlockEntity.findOrCreateValidTeleportPos(worldserver, pos); // Confetti
+++                blockpositionfuture = blockpositionfuture.thenApply(blockposition1 -> blockposition1.above(10)); // Confetti
+++                blockpositionfuture.thenAccept(blockposition1 -> { // Confetti
++                 TheEndGatewayBlockEntity.LOGGER.debug("Creating portal at {}", blockposition1);
++                 TheEndGatewayBlockEntity.spawnGatewayPortal(worldserver, blockposition1, EndGatewayConfiguration.knownExit(pos, false));
++                 blockEntity.exitPortal = blockposition1;
+++                }); // Confetti
++             }
++ 
++-            if (blockEntity.exitPortal != null) {
+++            blockpositionfuture.thenRun(() -> { // Confetti
+++                if (blockEntity.exitPortal == null) return; // Confetti
+++                ConfettiRegionScheduler.scheduleAcrossLevels(worldserver, RegionPos.forChunk(entity.chunkPosition()), worldserver, RegionPos.forBlockPos(blockEntity.exitPortal), () -> { // Confetti
+++                BlockPos blockposition1; // Confetti
++                 blockposition1 = blockEntity.exactTeleport ? blockEntity.exitPortal : TheEndGatewayBlockEntity.findExitPosition(world, blockEntity.exitPortal);
++                 Entity entity1;
++ 
++@@ -243,7 +252,8 @@ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
++                 entity1.setPortalCooldown();
++                 entity1.teleportToWithTicket(teleEvent.getTo().getX(), teleEvent.getTo().getY(), teleEvent.getTo().getZ());
++                 // CraftBukkit end
++-            }
+++                }); // Confetti
+++            }); // Confetti
++ 
++             TheEndGatewayBlockEntity.triggerCooldown(world, pos, state, blockEntity);
++         }

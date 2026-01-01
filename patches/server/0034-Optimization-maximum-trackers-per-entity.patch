@@ -5,19 +5,18 @@ Subject: [PATCH] Optimization: maximum trackers per entity
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8fbc56518 100644
+index ff4759cab05e9af6d877d8976c7795cf3bfce3dc..b233f8a4ddd20415e81d92c3d21945ab9d12c305 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -13,6 +13,8 @@ import com.mojang.datafixers.DataFixer;
+@@ -10,6 +10,7 @@ import com.google.common.collect.Queues;
+ import com.google.common.collect.Sets;
+ import com.mojang.datafixers.DataFixer;
  import com.mojang.logging.LogUtils;
- import com.mojang.serialization.DataResult;
- import com.mojang.serialization.JsonOps;
 +import com.vulpeslab.confetti.config.ConfettiConfiguration;
-+import com.vulpeslab.confetti.threading.ConfettiTickThread;
- import com.vulpeslab.confetti.util.Int2ObjectMapWrapper;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
  import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-@@ -25,12 +27,15 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
+ import it.unimi.dsi.fastutil.longs.Long2ByteMap;
+@@ -21,12 +22,15 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
  import it.unimi.dsi.fastutil.longs.LongIterator;
  import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
  import it.unimi.dsi.fastutil.longs.LongSet;
@@ -33,7 +32,7 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
  import java.util.HashMap;
  import java.util.Iterator;
  import java.util.List;
-@@ -40,6 +45,7 @@ import java.util.Objects;
+@@ -36,6 +40,7 @@ import java.util.Objects;
  import java.util.Optional;
  import java.util.Queue;
  import java.util.Set;
@@ -41,7 +40,7 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
  import java.util.concurrent.CancellationException;
  import java.util.concurrent.CompletableFuture;
  import java.util.concurrent.CompletionException;
-@@ -53,6 +59,8 @@ import java.util.function.IntFunction;
+@@ -48,6 +53,8 @@ import java.util.function.IntFunction;
  import java.util.function.IntSupplier;
  import java.util.function.Supplier;
  import javax.annotation.Nullable;
@@ -50,7 +49,7 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
  import net.minecraft.CrashReport;
  import net.minecraft.CrashReportCategory;
  import net.minecraft.ReportedException;
-@@ -107,6 +115,7 @@ import net.minecraft.world.level.storage.DimensionDataStorage;
+@@ -103,6 +110,7 @@ import net.minecraft.world.level.storage.DimensionDataStorage;
  import net.minecraft.world.level.storage.LevelStorageSource;
  import net.minecraft.world.phys.Vec3;
  import org.apache.commons.lang3.mutable.MutableBoolean;
@@ -58,42 +57,35 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
  import org.slf4j.Logger;
  
  // CraftBukkit start
-@@ -1126,6 +1135,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-                         ServerPlayer entityplayer = (ServerPlayer) entity;
+@@ -1128,13 +1136,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             this.lastChunkUpdate = currChunkUpdate;
+             this.lastTrackedChunk = chunk;
  
-                         this.updatePlayerStatus(entityplayer, true);
-+                        if (true) return; // Confetti - handled elsewhere
-                         Iterator objectiterator = this.entityConcurrentMap.values().iterator(); // Confetti - use entityConcurrentMap
- 
-                         while (objectiterator.hasNext()) {
-@@ -1351,6 +1361,10 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-             com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> oldTrackerCandidates = this.lastTrackerCandidates;
-             this.lastTrackerCandidates = newTrackerCandidates;
- 
-+            boolean fullTrackerUpdate = (level.getGameTime() ^ (long) this.entity.getId()) % ConfettiConfiguration.get().optimizations.trackerFullUpdateFrequency == 0L; // Confetti - trackerFullUpdateFrequency
-+            if (fullTrackerUpdate && this.entity instanceof ServerPlayer player) player.hasMaximumTrackerBypassPermission = player.getBukkitEntity().hasPermission("confetti.maximumtrackerbypass"); // Confetti
-+            if (this.lastTrackerCandidates != null && this.lastTrackerCandidates.size() > ConfettiConfiguration.get().optimizations.maximumTrackersPerEntity) { updatePlayersLimitedAndOrdered(oldTrackerCandidates != newTrackerCandidates && (oldTrackerCandidates == null || newTrackerCandidates == null || oldTrackerCandidates.size() != newTrackerCandidates.size()), fullTrackerUpdate); return; } // Confetti - maximum trackers per entity
++            // Confetti start - trackerFullUpdateFrequency and maximum trackers per entity
++            boolean fullTrackerUpdate = (level.getGameTime() ^ (long) this.entity.getId()) % ConfettiConfiguration.get().optimizations.trackerFullUpdateFrequency == 0L;
++            if (fullTrackerUpdate && this.entity instanceof ServerPlayer player) player.hasMaximumTrackerBypassPermission = player.getBukkitEntity().hasPermission("confetti.maximumtrackerbypass");
++            if (players.size() > ConfettiConfiguration.get().optimizations.maximumTrackersPerEntity) {
++                updatePlayersLimitedAndOrdered(players, lastChunkUpdate != currChunkUpdate || lastTrackedChunk != chunk, fullTrackerUpdate);
++                return;
++            }
++            // Confetti end - trackerFullUpdateFrequency and maximum trackers per entity
 +
-             if (newTrackerCandidates != null) {
-                 Object[] rawData = newTrackerCandidates.getBackingSet();
-                 for (int i = 0, len = rawData.length; i < len; ++i) {
-@@ -1359,10 +1373,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-                         continue;
-                     }
-                     ServerPlayer player = (ServerPlayer)raw;
--                    this.updatePlayer(player);
-+                    if (fullTrackerUpdate || !this.seenBy.contains(player.connection)) this.updatePlayer(player); // Confetti - trackerFullUpdateFrequency
-                 }
+             final ServerPlayer[] playersRaw = players.getRawDataUnchecked();
+ 
+             for (int i = 0, len = players.size(); i < len; ++i) {
+                 final ServerPlayer player = playersRaw[i];
+-                this.updatePlayer(player);
++                if (fullTrackerUpdate || !this.seenBy.contains(player.connection)) this.updatePlayer(player); // Confetti - trackerFullUpdateFrequency
              }
  
 +            if (!fullTrackerUpdate) return; // Confetti - trackerFullUpdateFrequency
 +
-             if (oldTrackerCandidates == newTrackerCandidates) {
-                 // this is likely the case.
-                 // means there has been no range changes, so we can just use the above for tracking.
-@@ -1382,6 +1398,94 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             if (lastChunkUpdate != currChunkUpdate || lastTrackedChunk != chunk) {
+                 // need to purge any players possible not in the chunk list
+                 seenByLock.lock(); try { // Confetti - seenBy thread safety
+@@ -1195,6 +1214,91 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             this.lastSectionPos = SectionPos.of((EntityAccess) entity);
          }
-         // Paper end - use distance map to optimise tracker
  
 +        // Confetti start - maximum trackers per entity
 +        private record DistancedServerPlayer(ServerPlayer serverPlayer, double distanceSqr, boolean hasBypassPerm) implements Comparable<DistancedServerPlayer> {
@@ -114,17 +106,14 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
 +            }
 +        }
 +
-+        public void updatePlayersLimitedAndOrdered(boolean hasTrackerCandidatesChanged, boolean fullTrackerUpdate) {
++        public void updatePlayersLimitedAndOrdered(ca.spottedleaf.moonrise.common.list.ReferenceList<ServerPlayer> players, boolean hasTrackerCandidatesChanged, boolean fullTrackerUpdate) {
 +            if (!hasTrackerCandidatesChanged && !fullTrackerUpdate) return;
 +
 +            TreeSet<DistancedServerPlayer> playerSet = new TreeSet<>();
-+            Object[] rawData = this.lastTrackerCandidates.getBackingSet();
++            final ServerPlayer[] playersRaw = players.getRawDataUnchecked();
 +
-+            for (int index = 0, len = rawData.length; index < len; ++index) {
-+                Object raw = rawData[index];
-+                if (!(raw instanceof ServerPlayer player)) {
-+                    continue;
-+                }
++            for (int index = 0, len = players.size(); index < len; ++index) {
++                ServerPlayer player = playersRaw[index];
 +                if (player == this.entity) continue;
 +                DistancedServerPlayer distancedPlayer = new DistancedServerPlayer(player, this.entity);
 +                int i = ChunkMap.this.getPlayerViewDistance(player);
@@ -187,10 +176,10 @@ index 192f0fcfe9415b4ccdf2d48cfe7ac73cc524de54..456b8450c0c55f1213701ed53c5aa9f8
              return object instanceof ChunkMap.TrackedEntity ? ((ChunkMap.TrackedEntity) object).entity.getId() == this.entity.getId() : false;
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index de42949f9754b73ca03873c7a97ccdaba0455a5a..26af494184eb07f71852e8e3fa6f7fcef1ce1c5a 100644
+index b73a8ff02e547cb20aee12b38ed590a9131526b0..94b0c8dc2b3488c6086759bf115743c74d5fe02a 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -257,6 +257,7 @@ public class ServerPlayer extends Player {
+@@ -254,6 +254,7 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
      private BlockPos respawnPosition;
      private boolean respawnForced;
      private float respawnAngle;
