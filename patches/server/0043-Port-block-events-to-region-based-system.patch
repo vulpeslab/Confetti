@@ -1,0 +1,208 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 21:02:41 +0100
+Subject: [PATCH] Port block events to region-based system
+
+- Add block events (ObjectLinkedOpenHashSet) to LevelChunkRegion
+- Add addBlockEvent and forEachRegionInBoundingBox to LevelChunkRegionMap
+- Update ServerLevel to use region-based block events
+- Hook runBlockEvents into ConfettiChunkTicker._tickRegion()
+- Use ThreadLocal for blockEventsToReschedule
+
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+index 45e6240e990c1b0dfba293f6e22220e339bc8b6e..1e8f5c87a46257397745731ec4e89ee74de8bfca 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -3,18 +3,22 @@ package com.vulpeslab.confetti.region;
+ import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedThreadedTaskQueue;
+ import ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet;
+ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
++import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
+ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.Mob;
++import net.minecraft.world.level.BlockEventData;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ 
+ import java.util.ArrayList;
++import java.util.Collection;
+ import java.util.List;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentLinkedQueue;
+ import java.util.function.Consumer;
++import java.util.function.Predicate;
+ 
+ public class LevelChunkRegion {
+ 
+@@ -25,6 +29,7 @@ public class LevelChunkRegion {
+     private final Set<Entity> trackedEntities = new ObjectOpenHashSet<>(); // Entities being tracked by players
+     private final ObjectOpenHashSet<Mob> navigatingMobs = new ObjectOpenHashSet<>(); // Mobs with active navigation
+     private final ObjectOpenHashSet<ServerPlayer> players = new ObjectOpenHashSet<>(); // Players in this region
++    private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents = new ObjectLinkedOpenHashSet<>(); // Block events to process
+     private final ConcurrentLinkedQueue<DelayedTask> scheduledTasks = new ConcurrentLinkedQueue<>(); // Writable tasks
+     private final PrioritisedThreadedTaskQueue internalTasks = new PrioritisedThreadedTaskQueue(); // Read-only tasks
+ 
+@@ -155,12 +160,34 @@ public class LevelChunkRegion {
+         toRun.forEach(DelayedTask::run);
+     }
+ 
++    // Block event methods
++    public synchronized void addBlockEvent(BlockEventData blockEvent) {
++        this.blockEvents.add(blockEvent);
++    }
++
++    public synchronized void addAllBlockEvents(Collection<BlockEventData> blockEvents) {
++        this.blockEvents.addAll(blockEvents);
++    }
++
++    public boolean hasBlockEvents() {
++        return !this.blockEvents.isEmpty();
++    }
++
++    public synchronized BlockEventData removeFirstBlockEvent() {
++        return this.blockEvents.removeFirst();
++    }
++
++    public synchronized void removeBlockEventsIf(Predicate<BlockEventData> predicate) {
++        this.blockEvents.removeIf(predicate);
++    }
++
+     public boolean isEmpty() {
+         return levelChunks.isEmpty()
+                 && tickingEntities.size() == 0
+                 && trackedEntities.isEmpty()
+                 && navigatingMobs.isEmpty()
+                 && players.isEmpty()
++                && blockEvents.isEmpty()
+                 && scheduledTasks.isEmpty()
+                 && internalTasks.getTotalTasksExecuted() >= internalTasks.getTotalTasksScheduled();
+     }
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+index cd337b4cd2e43c31ee977b864bf75002eb6fbc90..24b3ed5591472900a1716c56c009be1a1b4b9b40 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -208,4 +208,23 @@ public class LevelChunkRegionMap {
+         }
+     }
+ 
++    // Block event methods
++    public void addBlockEvent(net.minecraft.world.level.BlockEventData blockEvent) {
++        getOrCreate(RegionPos.forBlockPos(blockEvent.pos())).addBlockEvent(blockEvent);
++    }
++
++    public void forEachRegionInBoundingBox(net.minecraft.world.level.levelgen.structure.BoundingBox box, Consumer<LevelChunkRegion> consumer) {
++        RegionPos minPos = RegionPos.forBlockPos(box.minX(), box.minY(), box.minZ());
++        RegionPos maxPos = RegionPos.forBlockPos(box.maxX(), box.maxY(), box.maxZ());
++
++        for (int x = minPos.x; x <= maxPos.x; x++) {
++            for (int z = minPos.z; z <= maxPos.z; z++) {
++                LevelChunkRegion region = get(new RegionPos(x, z));
++                if (region != null) {
++                    consumer.accept(region);
++                }
++            }
++        }
++    }
++
+ }
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+index b17fd41bdc55a10801b2d8ec92e85d79fcbbe9f7..3df7d18e738668560bc2997e24a37b32324fd0fe 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -66,6 +66,9 @@ public class ConfettiChunkTicker {
+             // Tick chunks in this region
+             if (level.tickRateManager().runsNormally()) {
+                 region.forEach(chunk -> this._tickChunk(level, chunk, spawnState));
++
++                // Run block events for this region
++                level.runBlockEvents(region);
+             }
+ 
+             // Tick entities in this region
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index bd83c8f7499937c7e62bd7f4396c93e20e0b771c..d3c271b638ae7b8f044000c551daba7dd05d8fb2 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -210,8 +210,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+     final Set<Mob> navigatingMobs;
+     final ThreadLocal<Boolean> isUpdatingNavigations = ThreadLocal.withInitial(() -> false); // Confetti - make thread local
+     protected final Raids raids;
+-    private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents;
+-    private final List<BlockEventData> blockEventsToReschedule;
++    // private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents; // Confetti - moved into each region
++    private final ThreadLocal<List<BlockEventData>> blockEventsToRescheduleThreadLocal; // Confetti
+     private boolean handlingTick;
+     private final List<CustomSpawner> customSpawners;
+     @Nullable
+@@ -519,8 +519,8 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         this.fluidTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
+         this.pathTypesByPosCache = new PathTypeCache();
+         this.navigatingMobs = new ObjectOpenHashSet();
+-        this.blockEvents = new ObjectLinkedOpenHashSet();
+-        this.blockEventsToReschedule = new ArrayList(64);
++        // this.blockEvents = new ObjectLinkedOpenHashSet(); // Confetti - moved into each region
++        this.blockEventsToRescheduleThreadLocal = ThreadLocal.withInitial(() -> new ArrayList(64)); // Confetti
+         this.dragonParts = new Int2ObjectOpenHashMap();
+         this.tickTime = flag1;
+         this.server = minecraftserver;
+@@ -718,7 +718,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         //gameprofilerfiller.popPush("blockEvents"); // Purpur
+         if (tickratemanager.runsNormally()) { // Confetti - use tickratemanager instead of flag (flag not captured)
+             // this.timings.doSounds.startTiming(); // Spigot // Purpur
+-            this.runBlockEvents();
++            // this.runBlockEvents(); // Confetti - handled locally in the region
+             // this.timings.doSounds.stopTiming(); // Spigot // Purpur
+         }
+ 
+@@ -1879,25 +1879,26 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+ 
+     @Override
+     public void blockEvent(BlockPos pos, Block block, int type, int data) {
+-        this.blockEvents.add(new BlockEventData(pos, block, type, data));
++        this.tickingRegions.addBlockEvent(new BlockEventData(pos, block, type, data)); // Confetti - moved into regions
+     }
+ 
+-    private void runBlockEvents() {
+-        this.blockEventsToReschedule.clear();
++    public void runBlockEvents(com.vulpeslab.confetti.region.LevelChunkRegion region) { // Confetti - run per region
++        List<BlockEventData> blockEventsToReschedule = blockEventsToRescheduleThreadLocal.get(); // Confetti
++        blockEventsToReschedule.clear(); // Confetti
+ 
+-        while (!this.blockEvents.isEmpty()) {
+-            BlockEventData blockactiondata = (BlockEventData) this.blockEvents.removeFirst();
++        while (region.hasBlockEvents()) { // Confetti
++            BlockEventData blockactiondata = (BlockEventData) region.removeFirstBlockEvent(); // Confetti
+ 
+             if (this.shouldTickBlocksAt(blockactiondata.pos())) {
+                 if (this.doBlockEvent(blockactiondata)) {
+                     this.server.getPlayerList().broadcast((Player) null, (double) blockactiondata.pos().getX(), (double) blockactiondata.pos().getY(), (double) blockactiondata.pos().getZ(), 64.0D, this.dimension(), new ClientboundBlockEventPacket(blockactiondata.pos(), blockactiondata.block(), blockactiondata.paramA(), blockactiondata.paramB()));
+                 }
+             } else {
+-                this.blockEventsToReschedule.add(blockactiondata);
++                blockEventsToReschedule.add(blockactiondata); // Confetti
+             }
+         }
+ 
+-        this.blockEvents.addAll(this.blockEventsToReschedule);
++        region.addAllBlockEvents(blockEventsToReschedule); // Confetti
+     }
+ 
+     private boolean doBlockEvent(BlockEventData event) {
+@@ -2378,9 +2379,13 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+ 
+     @VisibleForTesting
+     public void clearBlockEvents(BoundingBox box) {
+-        this.blockEvents.removeIf((blockactiondata) -> {
+-            return box.isInside(blockactiondata.pos());
++        // Confetti start - moved blockEvents into regions
++        this.tickingRegions.forEachRegionInBoundingBox(box, region -> {
++            region.removeBlockEventsIf((blockactiondata) -> {
++                return box.isInside(blockactiondata.pos());
++            });
+         });
++        // Confetti end - moved blockEvents into regions
+     }
+ 
+     @Override
