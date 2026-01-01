@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Thu, 1 Jan 2026 20:59:32 +0100
+Subject: [PATCH] Use CopyOnWriteArrayList for thread-safe players list
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 5485eed98617a92fcbb03fd21ebb3b11c751789f..bd83c8f7499937c7e62bd7f4396c93e20e0b771c 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -513,7 +513,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         this.convertable = convertable_conversionsession;
+         this.uuid = WorldUUID.getUUID(convertable_conversionsession.levelDirectory.path().toFile());
+         // CraftBukkit end
+-        this.players = Lists.newArrayList();
++        this.players = new java.util.concurrent.CopyOnWriteArrayList<>(); // Confetti - thread-safe players list
+         this.entityTickList = new EntityTickList();
+         this.blockTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
+         this.fluidTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
