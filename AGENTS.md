@@ -1,7 +1,7 @@
 # Confetti - AI Agent Context
 
 ## Architecture
-Multi-threaded 1.20.6 Purpur fork enabling vertical scaling. Chunks are grouped into **regions** (default 8x8 chunks), and regions are locked during ticking to prevent race conditions between threads. Code executes on chunk's thread, not a main thread.
+Multi-threaded 1.21 Purpur fork enabling vertical scaling. Chunks are grouped into **regions** (default 8x8 chunks), and regions are locked during ticking to prevent race conditions between threads. Code executes on chunk's thread, not a main thread.
 
 ## Critical Build Commands
 ```bash
@@ -33,4 +33,4 @@ Folia-supported plugins work without changes. Detection: check `Bukkit.class.get
 - `allow-unsupported-plugins-to-modify-chunks-via-global-scheduler`: Only works with single-threaded regions
 
 ## Version Info
-Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.20.6-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
+Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.21-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
