@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 00:48:36 +0100
+Subject: [PATCH] Fix syncLoad deadlock by using isConfettiTickThread instead
+ of isTickThreadFor
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 9ecb7128303c2b9d221bca81a393c9a98c2f7e79..5fd7e8b8629799bd2dcc30118b1902649984797b 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -101,11 +101,15 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+             completable::complete
+         );
+ 
+-        if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(this.level, chunkX, chunkZ)) {
++        // Confetti start - use isConfettiTickThread to avoid deadlock with Server thread
++        // The Server thread IS a TickThread but NOT a ConfettiTickThread, so use isConfettiTickThread()
++        // to prevent the Server thread from deadlocking when waiting for chunks locked by ConfettiTickThreads
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+             ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler.pushChunkWait(this.level, chunkX, chunkZ);
+             this.mainThreadProcessor.managedBlock(completable::isDone);
+             ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler.popChunkWait();
+         }
++        // Confetti end - use isConfettiTickThread to avoid deadlock with Server thread
+ 
+         final ChunkAccess ret = completable.join();
+         if (ret == null) {
