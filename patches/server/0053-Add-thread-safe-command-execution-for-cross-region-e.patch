@@ -1,0 +1,233 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 01:55:35 +0100
+Subject: [PATCH] Add thread-safe command execution for cross-region entities
+
+- Confetti.java: Add ensureSync(Entity, Consumer<Entity>) method for entity operations
+- KillCommand: Use ensureSync to kill entities on their owning thread
+- GiveCommand: Use ensureSync to modify player inventories on their owning thread
+- EffectCommands: Use ensureSync for give/clear effect operations on entity's thread
+
+These changes ensure that commands which operate on entities in different regions
+are properly scheduled on the correct thread to prevent race conditions.
+
+diff --git a/src/main/java/com/vulpeslab/confetti/Confetti.java b/src/main/java/com/vulpeslab/confetti/Confetti.java
+index 3c7ee277ee939f05f7bc669389b77595e689f78f..4eabbdba0ba3422c22962bf45290b0ed19d38c6a 100644
+--- a/src/main/java/com/vulpeslab/confetti/Confetti.java
++++ b/src/main/java/com/vulpeslab/confetti/Confetti.java
+@@ -9,6 +9,8 @@ import net.minecraft.world.level.ChunkPos;
+ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.CraftWorld;
+ 
++import java.util.function.Consumer;
++
+ public class Confetti {
+ 
+     public static void runSync(Location location, Runnable runnable) {
+@@ -43,6 +45,18 @@ public class Confetti {
+         }
+     }
+ 
++    /**
++     * Ensure the consumer runs on the entity's owning region thread.
++     * If already on the correct thread, runs immediately. Otherwise schedules for next tick.
++     */
++    public static void ensureSync(Entity entity, Consumer<Entity> consumer) {
++        if (!isSync((ServerLevel) entity.level(), entity.chunkPosition())) {
++            entity.getBukkitEntity().taskScheduler.schedule(consumer, null, 1);
++        } else {
++            consumer.accept(entity);
++        }
++    }
++
+     public static void ensureSync(ServerLevel serverLevel, BlockPos blockPos, Runnable runnable) {
+         ensureSync(serverLevel, new ChunkPos(blockPos), runnable);
+     }
+diff --git a/src/main/java/net/minecraft/commands/arguments/selector/EntitySelector.java b/src/main/java/net/minecraft/commands/arguments/selector/EntitySelector.java
+index b455c7e9d18bac3654daa8510f85cc21202e254b..439dc535a51a165232f2ff1f5552a49ec31c4bda 100644
+--- a/src/main/java/net/minecraft/commands/arguments/selector/EntitySelector.java
++++ b/src/main/java/net/minecraft/commands/arguments/selector/EntitySelector.java
+@@ -2,6 +2,7 @@ package net.minecraft.commands.arguments.selector;
+ 
+ import com.mojang.brigadier.exceptions.CommandSyntaxException;
+ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
++import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.UUID;
+@@ -260,11 +261,17 @@ public class EntitySelector {
+         Object object;
+ 
+         if (i == 0) {
+-            object = this.contextFreePredicates;
++            // Confetti start - thread-safety: add entity validity check
++            List<Predicate<Entity>> list = new ObjectArrayList(this.contextFreePredicates.size() + 1);
++            list.addAll(this.contextFreePredicates);
++            list.add(EntitySelector::isEntityValid);
++            object = list;
++            // Confetti end
+         } else {
+-            List<Predicate<Entity>> list = new ObjectArrayList(this.contextFreePredicates.size() + i);
++            List<Predicate<Entity>> list = new ObjectArrayList(this.contextFreePredicates.size() + i + 1); // Confetti - +1 for validity check
+ 
+             list.addAll(this.contextFreePredicates);
++            list.add(EntitySelector::isEntityValid); // Confetti - thread-safety: add entity validity check
+             if (flag) {
+                 list.add((entity) -> {
+                     return entity.getType().isEnabled(enabledFeatures);
+@@ -289,7 +296,18 @@ public class EntitySelector {
+         return Util.allOf((List) object);
+     }
+ 
++    // Confetti start - thread-safety: check entity validity during selector iteration
++    private static boolean isEntityValid(Entity entity) {
++        // Entity may have been removed by another thread during iteration
++        // Check both isRemoved() and that the entity still has a valid level
++        return !entity.isRemoved() && entity.level() != null;
++    }
++    // Confetti end
++
+     private <T extends Entity> List<T> sortAndLimit(Vec3 pos, List<T> entities) {
++        // Confetti start - thread-safety: filter out entities that may have been removed during collection
++        entities.removeIf(entity -> !isEntityValid(entity));
++        // Confetti end
+         if (entities.size() > 1) {
+             this.order.accept(pos, entities);
+         }
+diff --git a/src/main/java/net/minecraft/server/commands/EffectCommands.java b/src/main/java/net/minecraft/server/commands/EffectCommands.java
+index ed6336065a0061af095d3395b927b8976443cb68..9538f3eed3bb5a689e4c38ed7026c1251be5ea00 100644
+--- a/src/main/java/net/minecraft/server/commands/EffectCommands.java
++++ b/src/main/java/net/minecraft/server/commands/EffectCommands.java
+@@ -11,6 +11,7 @@ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+ import java.util.Collection;
+ import java.util.Iterator;
+ import javax.annotation.Nullable;
++import com.vulpeslab.confetti.Confetti;
+ import net.minecraft.commands.CommandBuildContext;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.arguments.EntityArgument;
+@@ -83,10 +84,13 @@ public class EffectCommands {
+ 
+             if (entity instanceof LivingEntity) {
+                 MobEffectInstance mobeffect = new MobEffectInstance(statusEffect, k, amplifier, false, showParticles);
+-
+-                if (((LivingEntity) entity).addEffect(mobeffect, source.getEntity(), org.bukkit.event.entity.EntityPotionEffectEvent.Cause.COMMAND)) { // CraftBukkit
+-                    ++j;
+-                }
++                final Entity sourceEntity = source.getEntity(); // Confetti - capture for lambda
++                Confetti.ensureSync(entity, e -> { // Confetti - run on entity's owning thread
++                    if (((LivingEntity) e).addEffect(mobeffect, sourceEntity, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.COMMAND)) { // CraftBukkit
++                        // Effect applied successfully
++                    }
++                }); // Confetti
++                ++j; // Count attempts rather than successes since operation is async
+             }
+         }
+ 
+@@ -114,8 +118,11 @@ public class EffectCommands {
+         while (iterator.hasNext()) {
+             Entity entity = (Entity) iterator.next();
+ 
+-            if (entity instanceof LivingEntity && ((LivingEntity) entity).removeAllEffects(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.COMMAND)) { // CraftBukkit
+-                ++i;
++            if (entity instanceof LivingEntity) {
++                Confetti.ensureSync(entity, e -> { // Confetti - run on entity's owning thread
++                    ((LivingEntity) e).removeAllEffects(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.COMMAND); // CraftBukkit
++                }); // Confetti
++                ++i; // Count attempts
+             }
+         }
+ 
+@@ -144,8 +151,12 @@ public class EffectCommands {
+         while (iterator.hasNext()) {
+             Entity entity = (Entity) iterator.next();
+ 
+-            if (entity instanceof LivingEntity && ((LivingEntity) entity).removeEffect(statusEffect, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.COMMAND)) { // CraftBukkit
+-                ++i;
++            if (entity instanceof LivingEntity) {
++                final Holder<MobEffect> finalStatusEffect = statusEffect; // Confetti - capture for lambda
++                Confetti.ensureSync(entity, e -> { // Confetti - run on entity's owning thread
++                    ((LivingEntity) e).removeEffect(finalStatusEffect, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.COMMAND); // CraftBukkit
++                }); // Confetti
++                ++i; // Count attempts
+             }
+         }
+ 
+diff --git a/src/main/java/net/minecraft/server/commands/GiveCommand.java b/src/main/java/net/minecraft/server/commands/GiveCommand.java
+index 2f7897744f4aea718170698881773e9031a58a51..6d18cd2a9e5e9b23b8d1a89aa292dd073908aa84 100644
+--- a/src/main/java/net/minecraft/server/commands/GiveCommand.java
++++ b/src/main/java/net/minecraft/server/commands/GiveCommand.java
+@@ -7,6 +7,7 @@ import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+ import com.mojang.brigadier.exceptions.CommandSyntaxException;
+ import java.util.Collection;
+ import java.util.Iterator;
++import com.vulpeslab.confetti.Confetti;
+ import net.minecraft.commands.CommandBuildContext;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.arguments.EntityArgument;
+@@ -57,10 +58,11 @@ public class GiveCommand {
+ 
+                     l -= i1;
+                     ItemStack itemstack1 = item.createItemStack(i1, false);
++                    Confetti.ensureSync(entityplayer, () -> { // Confetti - run on player's owning thread
+                     boolean flag = entityplayer.getInventory().add(itemstack1);
+                     ItemEntity entityitem;
+ 
+-                    if (org.purpurmc.purpur.PurpurConfig.disableGiveCommandDrops) continue; // Purpur - add config option for toggling give command dropping
++                    if (org.purpurmc.purpur.PurpurConfig.disableGiveCommandDrops) return; // Purpur - add config option for toggling give command dropping // Confetti - changed continue to return
+                     if (flag && itemstack1.isEmpty()) {
+                         entityitem = entityplayer.drop(itemstack, false, false, false); // CraftBukkit - SPIGOT-2942: Add boolean to call event
+                         if (entityitem != null) {
+@@ -76,6 +78,7 @@ public class GiveCommand {
+                             entityitem.setTarget(entityplayer.getUUID());
+                         }
+                     }
++                    }); // Confetti - run on player's owning thread
+                 }
+             }
+ 
+diff --git a/src/main/java/net/minecraft/server/commands/KillCommand.java b/src/main/java/net/minecraft/server/commands/KillCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..69c7fdd9f25e2bab54830a80ca8584dc68b7757e
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/commands/KillCommand.java
+@@ -0,0 +1,39 @@
++package net.minecraft.server.commands;
++
++import com.google.common.collect.ImmutableList;
++import com.mojang.brigadier.CommandDispatcher;
++import java.util.Collection;
++import com.vulpeslab.confetti.Confetti;
++import net.minecraft.commands.CommandSourceStack;
++import net.minecraft.commands.Commands;
++import net.minecraft.commands.arguments.EntityArgument;
++import net.minecraft.network.chat.Component;
++import net.minecraft.world.entity.Entity;
++
++public class KillCommand {
++    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
++        dispatcher.register(
++            Commands.literal("kill")
++                .requires(source -> source.hasPermission(2))
++                .executes(context -> kill(context.getSource(), ImmutableList.of(context.getSource().getEntityOrException())))
++                .then(
++                    Commands.argument("targets", EntityArgument.entities())
++                        .executes(context -> kill(context.getSource(), EntityArgument.getEntities(context, "targets")))
++                )
++        );
++    }
++
++    private static int kill(CommandSourceStack source, Collection<? extends Entity> targets) {
++        for (Entity entity : targets) {
++            Confetti.ensureSync(entity, Entity::kill); // Confetti - run on entity's owning thread
++        }
++
++        if (targets.size() == 1) {
++            source.sendSuccess(() -> Component.translatable("commands.kill.success.single", targets.iterator().next().getDisplayName()), true);
++        } else {
++            source.sendSuccess(() -> Component.translatable("commands.kill.success.multiple", targets.size()), true);
++        }
++
++        return targets.size();
++    }
++}
