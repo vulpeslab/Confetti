@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 00:53:57 +0100
+Subject: [PATCH] Remove managedBlock from syncLoad entirely to prevent
+ deadlocks
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 5fd7e8b8629799bd2dcc30118b1902649984797b..00c9bc2f2a03b0b438a4972b17523ecf250b1440 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -101,15 +101,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+             completable::complete
+         );
+ 
+-        // Confetti start - use isConfettiTickThread to avoid deadlock with Server thread
+-        // The Server thread IS a TickThread but NOT a ConfettiTickThread, so use isConfettiTickThread()
+-        // to prevent the Server thread from deadlocking when waiting for chunks locked by ConfettiTickThreads
+-        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+-            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler.pushChunkWait(this.level, chunkX, chunkZ);
+-            this.mainThreadProcessor.managedBlock(completable::isDone);
+-            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler.popChunkWait();
+-        }
+-        // Confetti end - use isConfettiTickThread to avoid deadlock with Server thread
++        // Confetti start - Never use managedBlock in multithreaded environment
++        // managedBlock can cause deadlocks in Confetti because:
++        // 1. On Server thread - can deadlock waiting for chunks locked by ConfettiTickThreads
++        // 2. On ConfettiTickThread - can deadlock waiting for chunks in other locked regions
++        // Instead, just join the future and let worker threads handle the chunk loading
++        // Confetti end - Never use managedBlock in multithreaded environment
+ 
+         final ChunkAccess ret = completable.join();
+         if (ret == null) {
