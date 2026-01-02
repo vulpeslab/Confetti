@@ -1,0 +1,500 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 16:05:48 +0100
+Subject: [PATCH] Fix EntityList/ChunkEntitySlices concurrent access crash
+
+Critical fix for ArrayIndexOutOfBoundsException in Int2IntOpenHashMap:
+- Add ReentrantReadWriteLock to ChunkEntitySlices for entity list operations
+- Protect addEntity/removeEntity with write locks
+- Protect iteration methods (save, unload, getAllEntities, etc.) with read locks
+
+Fix moveEntity TOCTOU race condition:
+- Add per-entity ReentrantLock (moonrise$getSectionLock) to ChunkSystemEntity
+- Lock entity during section coordinate changes in EntityLookup.moveEntity
+- Prevents race where multiple threads try to move same entity
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/entity/ChunkSystemEntity.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/entity/ChunkSystemEntity.java
+index 2c279854bdf214538380fa354e4298ec4bd9ac4e..b1c6fa02905066fc189332fb4e620a48eddcb7ac 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/entity/ChunkSystemEntity.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/entity/ChunkSystemEntity.java
+@@ -5,6 +5,7 @@ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.monster.Shulker;
+ import net.minecraft.world.entity.vehicle.AbstractMinecart;
+ import net.minecraft.world.entity.vehicle.Boat;
++import java.util.concurrent.locks.ReentrantLock; // Confetti
+ 
+ public interface ChunkSystemEntity {
+ 
+@@ -36,4 +37,8 @@ public interface ChunkSystemEntity {
+     public void moonrise$setUpdatingSectionStatus(final boolean to);
+ 
+     public boolean moonrise$hasAnyPlayerPassengers();
++
++    // Confetti start - per-entity lock for thread-safe section changes
++    public ReentrantLock moonrise$getSectionLock();
++    // Confetti end
+ }
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+index cacdf7550d7e11993b3a7efa9e4774cbbe3e7947..66168cf7cc384b5bce4fb6df1830d8778c0b4331 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+@@ -27,6 +27,7 @@ import java.util.Iterator;
+ import java.util.List;
+ import java.util.concurrent.ConcurrentHashMap; // Confetti - thread safety
+ import java.util.concurrent.atomic.AtomicBoolean; // Confetti
++import java.util.concurrent.locks.ReentrantReadWriteLock; // Confetti - thread safety
+ import java.util.function.Predicate;
+ import org.bukkit.event.entity.EntityRemoveEvent;
+ 
+@@ -43,6 +44,7 @@ public final class ChunkEntitySlices {
+     private final ConcurrentHashMap<Class<? extends Entity>, EntityCollectionBySection> entitiesByClass; // Confetti - thread-safe
+     private final ConcurrentHashMap<EntityType<?>, EntityCollectionBySection> entitiesByType; // Confetti - thread-safe
+     private final EntityList entities = new EntityList();
++    private final ReentrantReadWriteLock entityLock = new ReentrantReadWriteLock(); // Confetti - thread safety for entity list operations
+ 
+     public FullChunkStatus status;
+ 
+@@ -127,31 +129,47 @@ public final class ChunkEntitySlices {
+     }
+ 
+     public CompoundTag save() {
+-        final int len = this.entities.size();
+-        if (len == 0) {
+-            return null;
+-        }
++        // Confetti start - thread-safe entity iteration
++        this.entityLock.readLock().lock();
++        try {
++            final int len = this.entities.size();
++            if (len == 0) {
++                return null;
++            }
++
++            final Entity[] rawData = this.entities.getRawData();
++            final List<Entity> collectedEntities = new ArrayList<>(len);
++            for (int i = 0; i < len; ++i) {
++                final Entity entity = rawData[i];
++                if (entity.shouldBeSaved()) {
++                    collectedEntities.add(entity);
++                }
++            }
+ 
+-        final Entity[] rawData = this.entities.getRawData();
+-        final List<Entity> collectedEntities = new ArrayList<>(len);
+-        for (int i = 0; i < len; ++i) {
+-            final Entity entity = rawData[i];
+-            if (entity.shouldBeSaved()) {
+-                collectedEntities.add(entity);
++            if (collectedEntities.isEmpty()) {
++                return null;
+             }
+-        }
+ 
+-        if (collectedEntities.isEmpty()) {
+-            return null;
++            return saveEntityChunk(collectedEntities, new ChunkPos(this.chunkX, this.chunkZ), (ServerLevel)this.world);
++        } finally {
++            this.entityLock.readLock().unlock();
+         }
+-
+-        return saveEntityChunk(collectedEntities, new ChunkPos(this.chunkX, this.chunkZ), (ServerLevel)this.world);
++        // Confetti end
+     }
+ 
+     // returns true if this chunk has transient entities remaining
+     public boolean unload() {
+-        final int len = this.entities.size();
+-        final Entity[] collectedEntities = Arrays.copyOf(this.entities.getRawData(), len);
++        // Confetti start - thread-safe entity iteration
++        this.entityLock.readLock().lock();
++        final Entity[] collectedEntities;
++        final int len;
++        try {
++            len = this.entities.size();
++            collectedEntities = Arrays.copyOf(this.entities.getRawData(), len);
++        } finally {
++            this.entityLock.readLock().unlock();
++        }
++        // Confetti end
+ 
+         for (int i = 0; i < len; ++i) {
+             final Entity entity = collectedEntities[i];
+@@ -171,23 +189,37 @@ public final class ChunkEntitySlices {
+             }
+         }
+ 
+-        return this.entities.size() != 0;
++        // Confetti start - thread-safe size check
++        this.entityLock.readLock().lock();
++        try {
++            return this.entities.size() != 0;
++        } finally {
++            this.entityLock.readLock().unlock();
++        }
++        // Confetti end
+     }
+ 
+     // Paper start
+     public org.bukkit.entity.Entity[] getChunkEntities() {
+         List<org.bukkit.entity.Entity> ret = new java.util.ArrayList<>();
+-        final Entity[] entities = this.entities.getRawData();
+-        for (int i = 0, size = Math.min(entities.length, this.entities.size()); i < size; ++i) {
+-            final Entity entity = entities[i];
+-            if (entity == null) {
+-                continue;
+-            }
+-            final org.bukkit.entity.Entity bukkit = entity.getBukkitEntity();
+-            if (bukkit != null && bukkit.isValid()) {
+-                ret.add(bukkit);
++        // Confetti start - thread-safe entity iteration
++        this.entityLock.readLock().lock();
++        try {
++            final Entity[] entities = this.entities.getRawData();
++            for (int i = 0, size = Math.min(entities.length, this.entities.size()); i < size; ++i) {
++                final Entity entity = entities[i];
++                if (entity == null) {
++                    continue;
++                }
++                final org.bukkit.entity.Entity bukkit = entity.getBukkitEntity();
++                if (bukkit != null && bukkit.isValid()) {
++                    ret.add(bukkit);
++                }
+             }
++        } finally {
++            this.entityLock.readLock().unlock();
+         }
++        // Confetti end
+ 
+         return ret.toArray(new org.bukkit.entity.Entity[0]);
+     }
+@@ -202,30 +234,51 @@ public final class ChunkEntitySlices {
+     // Paper end
+ 
+     private List<Entity> getAllEntities() {
+-        final int len = this.entities.size();
+-        if (len == 0) {
+-            return new ArrayList<>();
+-        }
++        // Confetti start - thread-safe entity iteration
++        this.entityLock.readLock().lock();
++        try {
++            final int len = this.entities.size();
++            if (len == 0) {
++                return new ArrayList<>();
++            }
+ 
+-        final Entity[] rawData = this.entities.getRawData();
+-        final List<Entity> collectedEntities = new ArrayList<>(len);
+-        for (int i = 0; i < len; ++i) {
+-            collectedEntities.add(rawData[i]);
+-        }
++            final Entity[] rawData = this.entities.getRawData();
++            final List<Entity> collectedEntities = new ArrayList<>(len);
++            for (int i = 0; i < len; ++i) {
++                collectedEntities.add(rawData[i]);
++            }
+ 
+-        return collectedEntities;
++            return collectedEntities;
++        } finally {
++            this.entityLock.readLock().unlock();
++        }
++        // Confetti end
+     }
+ 
+     public boolean isEmpty() {
+-        return this.entities.size() == 0;
++        // Confetti start - thread-safe size check
++        this.entityLock.readLock().lock();
++        try {
++            return this.entities.size() == 0;
++        } finally {
++            this.entityLock.readLock().unlock();
++        }
++        // Confetti end
+     }
+ 
+     public void mergeInto(final ChunkEntitySlices slices) {
+-        final Entity[] entities = this.entities.getRawData();
+-        for (int i = 0, size = Math.min(entities.length, this.entities.size()); i < size; ++i) {
+-            final Entity entity = entities[i];
+-            slices.addEntity(entity, ((ChunkSystemEntity)entity).moonrise$getSectionY());
++        // Confetti start - thread-safe entity iteration
++        this.entityLock.readLock().lock();
++        try {
++            final Entity[] entities = this.entities.getRawData();
++            for (int i = 0, size = Math.min(entities.length, this.entities.size()); i < size; ++i) {
++                final Entity entity = entities[i];
++                slices.addEntity(entity, ((ChunkSystemEntity)entity).moonrise$getSectionY());
++            }
++        } finally {
++            this.entityLock.readLock().unlock();
+         }
++        // Confetti end
+     }
+ 
+     // Confetti start - thread-safe status update prevention with spin-wait
+@@ -255,73 +308,94 @@ public final class ChunkEntitySlices {
+     public void updateStatus(final FullChunkStatus status, final EntityLookup lookup) {
+         this.status = status;
+ 
+-        final Entity[] entities = this.entities.getRawData();
++        // Confetti start - thread-safe entity iteration
++        this.entityLock.readLock().lock();
++        try {
++            final Entity[] entities = this.entities.getRawData();
+ 
+-        for (int i = 0, size = this.entities.size(); i < size; ++i) {
+-            final Entity entity = entities[i];
++            for (int i = 0, size = this.entities.size(); i < size; ++i) {
++                final Entity entity = entities[i];
+ 
+-            final Visibility oldVisibility = EntityLookup.getEntityStatus(entity);
+-            ((ChunkSystemEntity)entity).moonrise$setChunkStatus(status);
+-            final Visibility newVisibility = EntityLookup.getEntityStatus(entity);
++                final Visibility oldVisibility = EntityLookup.getEntityStatus(entity);
++                ((ChunkSystemEntity)entity).moonrise$setChunkStatus(status);
++                final Visibility newVisibility = EntityLookup.getEntityStatus(entity);
+ 
+-            lookup.entityStatusChange(entity, this, oldVisibility, newVisibility, false, false, false);
++                lookup.entityStatusChange(entity, this, oldVisibility, newVisibility, false, false, false);
++            }
++        } finally {
++            this.entityLock.readLock().unlock();
+         }
++        // Confetti end
+     }
+ 
+     public boolean addEntity(final Entity entity, final int chunkSection) {
+-        if (!this.entities.add(entity)) {
+-            return false;
+-        }
+-        ((ChunkSystemEntity)entity).moonrise$setChunkStatus(this.status);
+-        final int sectionIndex = chunkSection - this.minSection;
++        // Confetti start - thread-safe entity list operations
++        this.entityLock.writeLock().lock();
++        try {
++            if (!this.entities.add(entity)) {
++                return false;
++            }
++            ((ChunkSystemEntity)entity).moonrise$setChunkStatus(this.status);
++            final int sectionIndex = chunkSection - this.minSection;
+ 
+-        this.allEntities.addEntity(entity, sectionIndex);
++            this.allEntities.addEntity(entity, sectionIndex);
+ 
+-        if (((ChunkSystemEntity)entity).moonrise$isHardColliding()) {
+-            this.hardCollidingEntities.addEntity(entity, sectionIndex);
+-        }
++            if (((ChunkSystemEntity)entity).moonrise$isHardColliding()) {
++                this.hardCollidingEntities.addEntity(entity, sectionIndex);
++            }
+ 
+-        // Confetti start - thread-safe iteration over ConcurrentHashMap
+-        for (final var entry : this.entitiesByClass.entrySet()) {
+-            if (entry.getKey().isInstance(entity)) {
+-                entry.getValue().addEntity(entity, sectionIndex);
++            // Confetti start - thread-safe iteration over ConcurrentHashMap
++            for (final var entry : this.entitiesByClass.entrySet()) {
++                if (entry.getKey().isInstance(entity)) {
++                    entry.getValue().addEntity(entity, sectionIndex);
++                }
+             }
+-        }
+-        // Confetti end
++            // Confetti end
+ 
+-        // Confetti start - use computeIfAbsent for thread safety
+-        EntityCollectionBySection byType = this.entitiesByType.computeIfAbsent(entity.getType(), k -> new EntityCollectionBySection(this));
+-        byType.addEntity(entity, sectionIndex);
+-        // Confetti end
++            // Confetti start - use computeIfAbsent for thread safety
++            EntityCollectionBySection byType = this.entitiesByType.computeIfAbsent(entity.getType(), k -> new EntityCollectionBySection(this));
++            byType.addEntity(entity, sectionIndex);
++            // Confetti end
+ 
+-        return true;
++            return true;
++        } finally {
++            this.entityLock.writeLock().unlock();
++        }
++        // Confetti end
+     }
+ 
+     public boolean removeEntity(final Entity entity, final int chunkSection) {
+-        if (!this.entities.remove(entity)) {
+-            return false;
+-        }
+-        ((ChunkSystemEntity)entity).moonrise$setChunkStatus(null);
+-        final int sectionIndex = chunkSection - this.minSection;
++        // Confetti start - thread-safe entity list operations
++        this.entityLock.writeLock().lock();
++        try {
++            if (!this.entities.remove(entity)) {
++                return false;
++            }
++            ((ChunkSystemEntity)entity).moonrise$setChunkStatus(null);
++            final int sectionIndex = chunkSection - this.minSection;
+ 
+-        this.allEntities.removeEntity(entity, sectionIndex);
++            this.allEntities.removeEntity(entity, sectionIndex);
+ 
+-        if (((ChunkSystemEntity)entity).moonrise$isHardColliding()) {
+-            this.hardCollidingEntities.removeEntity(entity, sectionIndex);
+-        }
++            if (((ChunkSystemEntity)entity).moonrise$isHardColliding()) {
++                this.hardCollidingEntities.removeEntity(entity, sectionIndex);
++            }
+ 
+-        // Confetti start - thread-safe iteration over ConcurrentHashMap
+-        for (final var entry : this.entitiesByClass.entrySet()) {
+-            if (entry.getKey().isInstance(entity)) {
+-                entry.getValue().removeEntity(entity, sectionIndex);
++            // Confetti start - thread-safe iteration over ConcurrentHashMap
++            for (final var entry : this.entitiesByClass.entrySet()) {
++                if (entry.getKey().isInstance(entity)) {
++                    entry.getValue().removeEntity(entity, sectionIndex);
++                }
+             }
+-        }
+-        // Confetti end
++            // Confetti end
+ 
+-        final EntityCollectionBySection byType = this.entitiesByType.get(entity.getType());
+-        byType.removeEntity(entity, sectionIndex);
++            final EntityCollectionBySection byType = this.entitiesByType.get(entity.getType());
++            byType.removeEntity(entity, sectionIndex);
+ 
+-        return true;
++            return true;
++        } finally {
++            this.entityLock.writeLock().unlock();
++        }
++        // Confetti end
+     }
+ 
+     public void getHardCollidingEntities(final Entity except, final AABB box, final List<Entity> into, final Predicate<? super Entity> predicate) {
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
+index efc0c1acc8239dd7b00211a1d3bfd3fc3b2c810c..8a78a070aac0ee78dd59ddabfae62e111bb69ee7 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
+@@ -514,50 +514,58 @@ public abstract class EntityLookup implements LevelEntityGetter<Entity> {
+         // ensure we own the entity
+         this.checkThread(entity, "Cannot move entity off-main");
+ 
+-        final int sectionX = ((ChunkSystemEntity)entity).moonrise$getSectionX();
+-        final int sectionY = ((ChunkSystemEntity)entity).moonrise$getSectionY();
+-        final int sectionZ = ((ChunkSystemEntity)entity).moonrise$getSectionZ();
+-        final BlockPos newPos = entity.blockPosition();
+-        final int newSectionX = newPos.getX() >> 4;
+-        final int newSectionY = Mth.clamp(newPos.getY() >> 4, this.minSection, this.maxSection);
+-        final int newSectionZ = newPos.getZ() >> 4;
+-
+-        if (newSectionX == sectionX && newSectionY == sectionY && newSectionZ == sectionZ) {
+-            return null;
+-        }
++        // Confetti start - per-entity lock for thread-safe section changes
++        final java.util.concurrent.locks.ReentrantLock sectionLock = ((ChunkSystemEntity)entity).moonrise$getSectionLock();
++        sectionLock.lock();
++        try {
++            final int sectionX = ((ChunkSystemEntity)entity).moonrise$getSectionX();
++            final int sectionY = ((ChunkSystemEntity)entity).moonrise$getSectionY();
++            final int sectionZ = ((ChunkSystemEntity)entity).moonrise$getSectionZ();
++            final BlockPos newPos = entity.blockPosition();
++            final int newSectionX = newPos.getX() >> 4;
++            final int newSectionY = Mth.clamp(newPos.getY() >> 4, this.minSection, this.maxSection);
++            final int newSectionZ = newPos.getZ() >> 4;
++
++            if (newSectionX == sectionX && newSectionY == sectionY && newSectionZ == sectionZ) {
++                return null;
++            }
+ 
+-        // ensure the new section is owned by this tick thread
+-        this.checkThread(newSectionX, newSectionZ, "Cannot move entity off-main");
++            // ensure the new section is owned by this tick thread
++            this.checkThread(newSectionX, newSectionZ, "Cannot move entity off-main");
+ 
+-        // ensure the old section is owned by this tick thread
+-        this.checkThread(sectionX, sectionZ, "Cannot move entity off-main");
++            // ensure the old section is owned by this tick thread
++            this.checkThread(sectionX, sectionZ, "Cannot move entity off-main");
+ 
+-        final ChunkEntitySlices old = this.getChunk(sectionX, sectionZ);
+-        final ChunkEntitySlices slices = this.getOrCreateChunk(newSectionX, newSectionZ);
++            final ChunkEntitySlices old = this.getChunk(sectionX, sectionZ);
++            final ChunkEntitySlices slices = this.getOrCreateChunk(newSectionX, newSectionZ);
+ 
+-        if (!old.removeEntity(entity, sectionY)) {
+-            LOGGER.warn("Could not remove entity " + entity + " from its old chunk section (" + sectionX + "," + sectionY + "," + sectionZ + ") since it was not contained in the section");
+-        }
++            if (!old.removeEntity(entity, sectionY)) {
++                LOGGER.warn("Could not remove entity " + entity + " from its old chunk section (" + sectionX + "," + sectionY + "," + sectionZ + ") since it was not contained in the section");
++            }
+ 
+-        if (!slices.addEntity(entity, newSectionY)) {
+-            LOGGER.warn("Could not add entity " + entity + " to its new chunk section (" + newSectionX + "," + newSectionY + "," + newSectionZ + ") as it is already contained in the section");
+-        }
++            if (!slices.addEntity(entity, newSectionY)) {
++                LOGGER.warn("Could not add entity " + entity + " to its new chunk section (" + newSectionX + "," + newSectionY + "," + newSectionZ + ") as it is already contained in the section");
++            }
+ 
+-        ((ChunkSystemEntity)entity).moonrise$setSectionX(newSectionX);
+-        ((ChunkSystemEntity)entity).moonrise$setSectionY(newSectionY);
+-        ((ChunkSystemEntity)entity).moonrise$setSectionZ(newSectionZ);
++            ((ChunkSystemEntity)entity).moonrise$setSectionX(newSectionX);
++            ((ChunkSystemEntity)entity).moonrise$setSectionY(newSectionY);
++            ((ChunkSystemEntity)entity).moonrise$setSectionZ(newSectionZ);
+ 
+-        if (old.isEmpty()) {
+-            this.onEmptySlices(sectionX, sectionZ);
+-        }
++            if (old.isEmpty()) {
++                this.onEmptySlices(sectionX, sectionZ);
++            }
+ 
+-        this.entitySectionChangeCallback(
+-                entity,
+-                sectionX, sectionY, sectionZ,
+-                newSectionX, newSectionY, newSectionZ
+-        );
++            this.entitySectionChangeCallback(
++                    entity,
++                    sectionX, sectionY, sectionZ,
++                    newSectionX, newSectionY, newSectionZ
++            );
+ 
+-        return slices;
++            return slices;
++        } finally {
++            sectionLock.unlock();
++        }
++        // Confetti end
+     }
+ 
+     public void getEntitiesWithoutDragonParts(final Entity except, final AABB box, final List<Entity> into, final Predicate<? super Entity> predicate) {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index c1627213177cfa59c5816c64ac8e94666b77d052..d1e644f4b749db22f565a943a943f9b613c3f177 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -472,6 +472,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     private int sectionY = Integer.MIN_VALUE;
+     private int sectionZ = Integer.MIN_VALUE;
+     private final ThreadLocal<Boolean> updatingSectionStatus = ThreadLocal.withInitial(() -> false); // Confetti - ThreadLocal for thread safety
++    private final java.util.concurrent.locks.ReentrantLock sectionLock = new java.util.concurrent.locks.ReentrantLock(); // Confetti - per-entity lock for thread-safe section changes
+ 
+     @Override
+     public final boolean moonrise$isHardColliding() {
+@@ -528,6 +529,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         this.updatingSectionStatus.set(to); // Confetti - ThreadLocal
+     }
+ 
++    // Confetti start - per-entity lock for thread-safe section changes
++    @Override
++    public final java.util.concurrent.locks.ReentrantLock moonrise$getSectionLock() {
++        return this.sectionLock;
++    }
++    // Confetti end
++
+     @Override
+     public final boolean moonrise$hasAnyPlayerPassengers() {
+         if (this.passengers.isEmpty()) {
