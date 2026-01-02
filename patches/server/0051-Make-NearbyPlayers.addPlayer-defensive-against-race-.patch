@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 01:24:54 +0100
+Subject: [PATCH] Make NearbyPlayers.addPlayer defensive against race
+ conditions
+
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java b/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
+index b7c6d2b0101e9b376f69253848929af712356a53..f7307438a92bfb511b3c85a8cd051cef595cc4cc 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
+@@ -154,9 +154,8 @@ public final class NearbyPlayers {
+                 return;
+             }
+ 
+-            if (!list.add(player)) {
+-                throw new IllegalStateException("Already contains player " + player);
+-            }
++            // Confetti - Don't throw if already contains (race conditions can cause duplicate adds)
++            list.add(player);
+         }
+ 
+         public synchronized void removePlayer(final ServerPlayer player, final NearbyMapType type) { // Confetti - synchronized for thread safety
