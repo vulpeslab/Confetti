@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:13:07 +0100
+Subject: [PATCH] Fix EntityTickList deadlock by not holding lock during
+ iteration
+
+The synchronized forEach() was holding the lock during the entire entity tick iteration.
+If an entity tick got stuck (e.g., due to chunk loading deadlock), it would block forever
+while holding the lock. This prevented the Server thread from adding new players.
+
+Solution: Only synchronize iterator creation and finalization, not the iteration itself.
+The IteratorSafeOrderedReferenceSet supports concurrent modifications during iteration -
+it captures maxIndex at iterator creation and skips nulled elements from remove().
+
+diff --git a/src/main/java/net/minecraft/world/level/entity/EntityTickList.java b/src/main/java/net/minecraft/world/level/entity/EntityTickList.java
+index c398e083234eca067f0327a6ce8f96e709b759e3..55f4730c562be9d2ee6f25ead748887d82d5d4d5 100644
+--- a/src/main/java/net/minecraft/world/level/entity/EntityTickList.java
++++ b/src/main/java/net/minecraft/world/level/entity/EntityTickList.java
+@@ -16,6 +16,9 @@ public class EntityTickList {
+     }
+ 
+     // Confetti start - synchronized for thread safety
++    // Note: We synchronize add/remove/contains but NOT forEach during iteration callback.
++    // The IteratorSafeOrderedReferenceSet supports modifications during iteration (from same or different thread).
++    // We only synchronize the iterator creation/finish and the individual operations.
+     public synchronized void add(Entity entity) {
+         this.ensureActiveIsNotIterated();
+         this.entities.add(entity); // Paper - rewrite chunk system
+@@ -30,18 +33,25 @@ public class EntityTickList {
+         return this.entities.contains(entity); // Paper - rewrite chunk system
+     }
+ 
+-    public synchronized void forEach(Consumer<Entity> action) {
++    public void forEach(Consumer<Entity> action) {
++        // Confetti - Don't hold lock during iteration! The IteratorSafeOrderedReferenceSet
++        // supports modifications during iteration. We only synchronize iterator() and finishedIterating().
++        final ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet.Iterator<Entity> iterator;
++        synchronized (this) {
++            iterator = this.entities.iterator();
++        }
+         // Confetti end
+         // Paper start - rewrite chunk system
+         // To ensure nothing weird happens with dimension travelling, do not iterate over new entries...
+         // (by dfl iterator() is configured to not iterate over new entries)
+-        final ca.spottedleaf.moonrise.common.list.IteratorSafeOrderedReferenceSet.Iterator<Entity> iterator = this.entities.iterator();
+         try {
+             while (iterator.hasNext()) {
+                 action.accept(iterator.next());
+             }
+         } finally {
+-            iterator.finishedIterating();
++            synchronized (this) { // Confetti - synchronize finishedIterating
++                iterator.finishedIterating();
++            } // Confetti
+         }
+         // Paper end - rewrite chunk system
+     }
