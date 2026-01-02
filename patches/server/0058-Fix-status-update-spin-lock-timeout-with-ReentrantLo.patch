@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 16:39:51 +0100
+Subject: [PATCH] Fix status update spin-lock timeout with ReentrantLock
+
+Replace bounded spin-lock in ChunkEntitySlices.startPreventingStatusUpdates()
+with proper ReentrantLock for blocking synchronization. This ensures status
+updates never fail due to lock contention timeout.
+
+Changes:
+- Replace AtomicBoolean spin-lock with ReentrantLock in ChunkEntitySlices
+- Update startPreventingStatusUpdates() to use blocking lock.lock()
+- Update stopPreventingStatusUpdates() to use lock.unlock() (no parameter)
+- Update EntityLookup.entityStatusChange() to use new lock API
+
+Fixes race condition causing '[EntityLookup] Cannot update chunk status'
+errors under high load.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+index 66168cf7cc384b5bce4fb6df1830d8778c0b4331..706d32ef6e874fa59eaf78d24f5ca73d03162e8e 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+@@ -26,7 +26,7 @@ import java.util.Arrays;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.concurrent.ConcurrentHashMap; // Confetti - thread safety
+-import java.util.concurrent.atomic.AtomicBoolean; // Confetti
++import java.util.concurrent.locks.ReentrantLock; // Confetti - thread safety
+ import java.util.concurrent.locks.ReentrantReadWriteLock; // Confetti - thread safety
+ import java.util.function.Predicate;
+ import org.bukkit.event.entity.EntityRemoveEvent;
+@@ -281,27 +281,19 @@ public final class ChunkEntitySlices {
+         // Confetti end
+     }
+ 
+-    // Confetti start - thread-safe status update prevention with spin-wait
+-    private final AtomicBoolean preventStatusUpdates = new AtomicBoolean(false);
++    // Confetti start - thread-safe status update prevention with ReentrantLock
++    private final ReentrantLock statusUpdateLock = new ReentrantLock();
+     public boolean startPreventingStatusUpdates() {
+-        // Spin-wait until we can acquire the lock, with bounded retries
+-        for (int i = 0; i < 1000; i++) {
+-            if (this.preventStatusUpdates.compareAndSet(false, true)) {
+-                return false; // Successfully acquired
+-            }
+-            // Brief yield to allow other thread to finish
+-            Thread.onSpinWait();
+-        }
+-        // After many retries, still couldn't acquire - return true to indicate failure
+-        return true;
++        this.statusUpdateLock.lock();
++        return true; // Always succeeds with blocking lock
+     }
+ 
+     public boolean isPreventingStatusUpdates() {
+-        return this.preventStatusUpdates.get();
++        return this.statusUpdateLock.isLocked();
+     }
+ 
+-    public void stopPreventingStatusUpdates(final boolean prev) {
+-        this.preventStatusUpdates.set(prev);
++    public void stopPreventingStatusUpdates() {
++        this.statusUpdateLock.unlock();
+     }
+     // Confetti end
+ 
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
+index 8a78a070aac0ee78dd59ddabfae62e111bb69ee7..ad59f9d43afb8a71fb9adf103111b1c49e4b0d92 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
+@@ -241,11 +241,9 @@ public abstract class EntityLookup implements LevelEntityGetter<Entity> {
+             return;
+         }
+ 
+-        final boolean entityStatusUpdateBefore = slices == null ? false : slices.startPreventingStatusUpdates();
+-
+-        if (entityStatusUpdateBefore) {
+-            LOGGER.error("Cannot update chunk status for entity " + entity + " since entity chunk (" + slices.chunkX + "," + slices.chunkZ + ") is receiving update", new Throwable());
+-            return;
++        // Confetti - acquire blocking lock for status updates (always succeeds)
++        if (slices != null) {
++            slices.startPreventingStatusUpdates();
+         }
+ 
+         try {
+@@ -325,7 +323,7 @@ public abstract class EntityLookup implements LevelEntityGetter<Entity> {
+             }
+         } finally {
+             if (slices != null) {
+-                slices.stopPreventingStatusUpdates(false);
++                slices.stopPreventingStatusUpdates();
+             }
+         }
+     }

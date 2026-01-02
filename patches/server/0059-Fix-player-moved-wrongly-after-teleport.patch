@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 16:41:46 +0100
+Subject: [PATCH] Fix player moved wrongly after teleport
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 926ba5c3a0f5279fa41a6e24acfd92d43b06a684..eddd7d921111ad8427629efc365ef724ea9bcbcc 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -1776,6 +1776,19 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+         this.lastPitch = f1;
+         // CraftBukkit end
+ 
++        // Confetti start - Update position tracking variables immediately on teleport
++        // This prevents "moved wrongly" and "moved too quickly" warnings in multi-threaded
++        // environments where a movement packet might be processed concurrently with teleportation.
++        // Without this fix, the validation could compare the new player position against
++        // stale lastGoodX/Y/Z values, triggering false positive warnings.
++        this.firstGoodX = d0;
++        this.firstGoodY = d1;
++        this.firstGoodZ = d2;
++        this.lastGoodX = d0;
++        this.lastGoodY = d1;
++        this.lastGoodZ = d2;
++        // Confetti end
++
+         this.awaitingTeleportTime = this.tickCount;
+         this.player.moveTo(d0, d1, d2, f, f1); // Paper - Fix Entity Teleportation and cancel velocity if teleported
+         this.player.connection.send(new ClientboundPlayerPositionPacket(d0 - d3, d1 - d4, d2 - d5, f - f2, f1 - f3, set, this.awaitingTeleport));

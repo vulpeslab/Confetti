@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 16:37:43 +0100
+Subject: [PATCH] Fix pendingBlockEntities thread-safety
+
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java b/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
+index 75c8125e20b70433fe9d143a3193d821043327c3..21d9e57a54f5d462e625dc5e72dd3ef190b5ed5a 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
++++ b/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
+@@ -12,6 +12,7 @@ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.EnumSet;
+ import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.Map.Entry;
+ import java.util.Set;
+ import java.util.function.BiConsumer;
+@@ -80,7 +81,7 @@ public abstract class ChunkAccess implements BlockGetter, BiomeManager.NoiseBiom
+     // Paper - rewrite chunk system
+     private final Map<Structure, StructureStart> structureStarts = Maps.newHashMap();
+     private final Map<Structure, LongSet> structuresRefences = Maps.newHashMap();
+-    protected final Map<BlockPos, CompoundTag> pendingBlockEntities = Maps.newHashMap();
++    protected final Map<BlockPos, CompoundTag> pendingBlockEntities = new ConcurrentHashMap<>();
+     public final Map<BlockPos, BlockEntity> blockEntities = new Object2ObjectOpenHashMap();
+     protected final LevelHeightAccessor levelHeightAccessor;
+     protected final LevelChunkSection[] sections;
