@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 01:00:49 +0100
+Subject: [PATCH] Make NearbyPlayers.removePlayer defensive against race
+ conditions
+
+Don't throw if player not present - can happen due to race conditions during disconnection
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java b/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
+index 1f3daf19c6201fc1302d8496deb94ee85c574d4a..b7c6d2b0101e9b376f69253848929af712356a53 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/misc/NearbyPlayers.java
+@@ -164,13 +164,15 @@ public final class NearbyPlayers {
+ 
+             final int idx = type.ordinal();
+             final ReferenceList<ServerPlayer> list = this.players[idx];
++            // Confetti start - Don't throw if player not present (race conditions during disconnection)
+             if (list == null) {
+-                throw new IllegalStateException("Does not contain player " + player);
++                return;
+             }
+ 
+             if (!list.remove(player)) {
+-                throw new IllegalStateException("Does not contain player " + player);
++                return;
+             }
++            // Confetti end
+ 
+             if (list.size() == 0) {
+                 this.players[idx] = null;
