@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 01:04:37 +0100
+Subject: [PATCH] Fix ArrayIndexOutOfBoundsException in
+ EntityCollectionBySection
+
+Clamp sectionIndex to valid array bounds to prevent crashes when entities
+have Y coordinates outside the expected chunk section range.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+index f630d28dba0182d9ba210b85ad1495a69929e6ae..cacdf7550d7e11993b3a7efa9e4774cbbe3e7947 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
+@@ -503,14 +503,17 @@ public final class ChunkEntitySlices {
+         }
+ 
+         public void addEntity(final Entity entity, final int sectionIndex) {
+-            BasicEntityList<Entity> list = this.entitiesBySection[sectionIndex];
++            // Confetti start - bounds check sectionIndex to prevent ArrayIndexOutOfBoundsException
++            final int clampedIndex = Math.max(0, Math.min(sectionIndex, this.entitiesBySection.length - 1));
++            BasicEntityList<Entity> list = this.entitiesBySection[clampedIndex];
++            // Confetti end
+ 
+             if (list != null && list.has(entity)) {
+                 return;
+             }
+ 
+             if (list == null) {
+-                this.entitiesBySection[sectionIndex] = list = new BasicEntityList<>();
++                this.entitiesBySection[clampedIndex] = list = new BasicEntityList<>(); // Confetti - use clampedIndex
+             }
+ 
+             list.add(entity);
+@@ -518,7 +521,10 @@ public final class ChunkEntitySlices {
+         }
+ 
+         public void removeEntity(final Entity entity, final int sectionIndex) {
+-            final BasicEntityList<Entity> list = this.entitiesBySection[sectionIndex];
++            // Confetti start - bounds check sectionIndex to prevent ArrayIndexOutOfBoundsException
++            final int clampedIndex = Math.max(0, Math.min(sectionIndex, this.entitiesBySection.length - 1));
++            final BasicEntityList<Entity> list = this.entitiesBySection[clampedIndex];
++            // Confetti end
+ 
+             if (list == null || !list.remove(entity)) {
+                 return;
+@@ -527,7 +533,7 @@ public final class ChunkEntitySlices {
+             --this.count;
+ 
+             if (list.isEmpty()) {
+-                this.entitiesBySection[sectionIndex] = null;
++                this.entitiesBySection[clampedIndex] = null; // Confetti - use clampedIndex
+             }
+         }
+ 
