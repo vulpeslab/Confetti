@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 23:43:24 +0100
+Subject: [PATCH] Fix thread check: use isConfettiTickThread() instead of
+ isTickThread()
+
+The Server thread IS a TickThread (it's created as 'new TickThread(...)' in MinecraftServer.spin()),
+but it is NOT a ConfettiTickThread. The previous check using isTickThread() was returning true
+for the Server thread, allowing it to call syncLoad() and causing deadlocks.
+
+Now using isConfettiTickThread() which returns true ONLY for the actual multithreaded tick threads,
+not for the Server thread. This ensures the Server thread always uses the non-blocking *IfLoaded
+variants.
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 91bb9b70e0407644602b65d5b9b01acf78510799..54b05a26b9e113172eaec7fee7a520bd8b1d4c6f 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1227,9 +1227,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+             this.setOnGroundWithMovement(this.verticalCollisionBelow, vec3d1);
+             BlockPos blockposition = this.getOnPosLegacy();
+-            // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
++            // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
++            // The Server thread IS a TickThread but NOT a ConfettiTickThread
+             BlockState iblockdata;
+-            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                 iblockdata = this.level().getBlockStateIfLoaded(blockposition);
+                 if (iblockdata == null) {
+                     iblockdata = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
+@@ -1290,9 +1291,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+                     this.flyDist += (float) (vec3d1.length() * 0.6D);
+                     BlockPos blockposition1 = this.getOnPos();
+-                    // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
++                    // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
+                     BlockState iblockdata1;
+-                    if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++                    if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                         iblockdata1 = this.level().getBlockStateIfLoaded(blockposition1);
+                         if (iblockdata1 == null) {
+                             iblockdata1 = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
+@@ -2000,9 +2001,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         if (this.isSwimming()) {
+             this.setSwimming(this.isSprinting() && this.isInWater() && !this.isPassenger());
+         } else {
+-            // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
++            // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
+             FluidState fluidState;
+-            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                 fluidState = this.level().getFluidIfLoaded(this.blockPosition);
+             } else {
+                 fluidState = this.level().getFluidState(this.blockPosition);
+@@ -2059,9 +2060,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         }
+ 
+         BlockPos blockposition = BlockPos.containing(this.getX(), d0, this.getZ());
+-        // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
++        // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
+         FluidState fluid;
+-        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+             fluid = this.level().getFluidIfLoaded(blockposition);
+             if (fluid == null) {
+                 return; // Chunk not loaded, skip fluid check
+@@ -3005,8 +3006,8 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         final int maxZ = Mth.floor(box.maxZ);
+ 
+         final net.minecraft.world.level.chunk.ChunkSource chunkProvider = this.level.getChunkSource();
+-        // Confetti start - don't force load chunks if not on tick thread to prevent deadlocks
+-        final boolean forceLoad = ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
++        // Confetti start - don't force load chunks if not on ConfettiTickThread to prevent deadlocks
++        final boolean forceLoad = com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
+         // Confetti end
+ 
+         long lastChunkKey = ChunkPos.INVALID_CHUNK_POS;
+@@ -4668,7 +4669,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             int k1 = 0;
+             BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+             // Confetti start - use getFluidIfLoaded to prevent deadlocks in multithreaded environment
+-            final boolean useIfLoaded = !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
++            final boolean useIfLoaded = !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
+             // Confetti end
+ 
+             for (int l1 = i; l1 < j; ++l1) {
+diff --git a/src/main/java/net/minecraft/world/level/BlockCollisions.java b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+index 3f895fc0b058bbf312203fb85a8947d3bda278ae..cf48a32a0462204e39689bc3be960ea4154c5f85 100644
+--- a/src/main/java/net/minecraft/world/level/BlockCollisions.java
++++ b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+@@ -84,9 +84,9 @@ public class BlockCollisions<T> extends AbstractIterator<T> {
+                            continue;
+                         }
+                         blockState = blockGetter.getBlockState(this.pos);
+-                    // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+-                    // The Server thread is NOT a TickThread, so isTickThread() returns false for it
+-                    } else if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()
++                    // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
++                    // The Server thread IS a TickThread but NOT a ConfettiTickThread, so use isConfettiTickThread()
++                    } else if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()
+                             && ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))) {
+                         blockState = this.collisionGetter.getBlockState(this.pos);
+                     // Confetti end
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 33d16abf46053de51e4d62c9bece24b042075aed..d16d83adab0b7a31181ff9392cf8485170b4e051 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -1585,7 +1585,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+         }
+         // Paper end - Perf: Optimize capturedTileEntities lookup
+         // CraftBukkit end
+-        return this.isOutsideBuildHeight(blockposition) ? null : (!this.isClientSide && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread() ? null : this.getChunkAt(blockposition).getBlockEntity(blockposition, LevelChunk.EntityCreationType.IMMEDIATE)); // Paper - rewrite chunk system
++        return this.isOutsideBuildHeight(blockposition) ? null : (!this.isClientSide && !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread() ? null : this.getChunkAt(blockposition).getBlockEntity(blockposition, LevelChunk.EntityCreationType.IMMEDIATE)); // Paper - rewrite chunk system // Confetti - use isConfettiTickThread
+     }
+ 
+     public void setBlockEntity(BlockEntity blockEntity) {
