@@ -1,0 +1,141 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 00:06:31 +0100
+Subject: [PATCH] Make PositionCountingAreaMap thread-safe
+
+Added synchronized blocks to all public methods to prevent concurrent
+modification of the underlying Long2IntOpenHashMap which was causing
+ArrayIndexOutOfBoundsException during player removal.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/misc/PositionCountingAreaMap.java b/src/main/java/ca/spottedleaf/moonrise/common/misc/PositionCountingAreaMap.java
+index efefd94b652228d877db5dbca8b28354ad42529f..66b293cb56b8c6389c57949b4a6769095ed5381f 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/misc/PositionCountingAreaMap.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/misc/PositionCountingAreaMap.java
+@@ -9,67 +9,84 @@ public final class PositionCountingAreaMap<T> {
+ 
+     private final Reference2ReferenceOpenHashMap<T, PositionCounter> counters = new Reference2ReferenceOpenHashMap<>();
+     private final Long2IntOpenHashMap positions = new Long2IntOpenHashMap();
++    private final Object lock = new Object(); // Confetti - thread safety
+ 
+     public ReferenceSet<T> getObjects() {
+-        return this.counters.keySet();
++        synchronized (this.lock) { // Confetti - thread safety
++            return this.counters.keySet();
++        }
+     }
+ 
+     public int getTotalPositions() {
+-        return this.positions.size();
++        synchronized (this.lock) { // Confetti - thread safety
++            return this.positions.size();
++        }
+     }
+ 
+     public boolean hasObjectsNear(final int toX, final int toZ) {
+-        return this.positions.containsKey(IntPairUtil.key(toX, toZ));
++        synchronized (this.lock) { // Confetti - thread safety
++            return this.positions.containsKey(IntPairUtil.key(toX, toZ));
++        }
+     }
+ 
+     public int getObjectsNear(final int toX, final int toZ) {
+-        return this.positions.get(IntPairUtil.key(toX, toZ));
++        synchronized (this.lock) { // Confetti - thread safety
++            return this.positions.get(IntPairUtil.key(toX, toZ));
++        }
+     }
+ 
+     public boolean add(final T parameter, final int toX, final int toZ, final int distance) {
+-        final PositionCounter existing = this.counters.get(parameter);
+-        if (existing != null) {
+-            return false;
+-        }
++        synchronized (this.lock) { // Confetti - thread safety
++            final PositionCounter existing = this.counters.get(parameter);
++            if (existing != null) {
++                return false;
++            }
+ 
+-        final PositionCounter counter = new PositionCounter(parameter);
++            final PositionCounter counter = new PositionCounter(parameter);
+ 
+-        this.counters.put(parameter, counter);
++            this.counters.put(parameter, counter);
+ 
+-        return counter.add(toX, toZ, distance);
++            return counter.add(toX, toZ, distance);
++        }
+     }
+ 
+     public boolean addOrUpdate(final T parameter, final int toX, final int toZ, final int distance) {
+-        final PositionCounter existing = this.counters.get(parameter);
+-        if (existing != null) {
+-            return existing.update(toX, toZ, distance);
+-        }
++        synchronized (this.lock) { // Confetti - thread safety
++            final PositionCounter existing = this.counters.get(parameter);
++            if (existing != null) {
++                return existing.update(toX, toZ, distance);
++            }
+ 
+-        final PositionCounter counter = new PositionCounter(parameter);
++            final PositionCounter counter = new PositionCounter(parameter);
+ 
+-        this.counters.put(parameter, counter);
++            this.counters.put(parameter, counter);
+ 
+-        return counter.add(toX, toZ, distance);
++            return counter.add(toX, toZ, distance);
++        }
+     }
+ 
+     public boolean remove(final T parameter) {
+-        final PositionCounter counter = this.counters.remove(parameter);
+-        if (counter == null) {
+-            return false;
+-        }
++        synchronized (this.lock) { // Confetti - thread safety
++            final PositionCounter counter = this.counters.remove(parameter);
++            if (counter == null) {
++                return false;
++            }
+ 
+-        counter.remove();
++            counter.remove();
+ 
+-        return true;
++            return true;
++        }
+     }
+ 
+     public boolean update(final T parameter, final int toX, final int toZ, final int distance) {
+-        final PositionCounter counter = this.counters.get(parameter);
+-        if (counter == null) {
+-            return false;
+-        }
++        synchronized (this.lock) { // Confetti - thread safety
++            final PositionCounter counter = this.counters.get(parameter);
++            if (counter == null) {
++                return false;
++            }
+ 
+-        return counter.update(toX, toZ, distance);
++            return counter.update(toX, toZ, distance);
++        }
+     }
+ 
+     private final class PositionCounter extends SingleUserAreaMap<T> {
+@@ -80,11 +97,13 @@ public final class PositionCountingAreaMap<T> {
+ 
+         @Override
+         protected void addCallback(final T parameter, final int toX, final int toZ) {
++            // Note: Already synchronized via parent methods
+             PositionCountingAreaMap.this.positions.addTo(IntPairUtil.key(toX, toZ), 1);
+         }
+ 
+         @Override
+         protected void removeCallback(final T parameter, final int toX, final int toZ) {
++            // Note: Already synchronized via parent methods
+             final long key = IntPairUtil.key(toX, toZ);
+             if (PositionCountingAreaMap.this.positions.addTo(key, -1) == 1) {
+                 PositionCountingAreaMap.this.positions.remove(key);
