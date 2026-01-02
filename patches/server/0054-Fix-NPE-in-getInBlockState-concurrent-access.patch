@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 01:59:41 +0100
+Subject: [PATCH] Fix NPE in getInBlockState concurrent access
+
+- Add getInBlockStateSafe() method that never returns null (defaults to AIR)
+- Add null check in LivingEntity.onClimbable()
+- Use getInBlockStateSafe() in all block state checks that could NPE in concurrent contexts
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index f14f89220ed40f64597e8aa998ed4c30936b4b80..c1627213177cfa59c5816c64ac8e94666b77d052 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1916,7 +1916,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     public boolean isInBubbleColumn() {
+-        return this.getInBlockState().is(Blocks.BUBBLE_COLUMN);
++        return this.getInBlockStateSafe().is(Blocks.BUBBLE_COLUMN); // Confetti - use thread-safe variant
+     }
+ 
+     public boolean isInWaterOrRain() {
+@@ -4688,6 +4688,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         return this.inBlockState;
+     }
+ 
++    // Confetti start - thread-safe getInBlockState that never returns null
++    public BlockState getInBlockStateSafe() {
++        BlockState state = this.getInBlockState();
++        return state != null ? state : Blocks.AIR.defaultBlockState();
++    }
++    // Confetti end
++
+     public ChunkPos chunkPosition() {
+         return this.chunkPosition;
+     }
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index fe6bd79c1e7729334039019c69a1ac256a43a94c..b4744c3db05cc11b06c7746f8a18c04bcae4f6cd 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -2165,6 +2165,12 @@ public abstract class LivingEntity extends Entity implements Attackable {
+             BlockPos blockposition = this.blockPosition();
+             BlockState iblockdata = this.getInBlockState();
+ 
++            // Confetti start - null check for concurrent chunk access
++            if (iblockdata == null) {
++                return false;
++            }
++            // Confetti end
++
+             if (iblockdata.is(BlockTags.CLIMBABLE)) {
+                 this.lastClimbablePos = Optional.of(blockposition);
+                 return true;
+@@ -3159,7 +3165,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+         this.move(MoverType.SELF, this.getDeltaMovement());
+         Vec3 vec3d1 = this.getDeltaMovement();
+ 
+-        if ((this.horizontalCollision || this.jumping) && (this.onClimbable() || this.getInBlockState().is(Blocks.POWDER_SNOW) && PowderSnowBlock.canEntityWalkOnPowderSnow(this))) {
++        if ((this.horizontalCollision || this.jumping) && (this.onClimbable() || this.getInBlockStateSafe().is(Blocks.POWDER_SNOW) && PowderSnowBlock.canEntityWalkOnPowderSnow(this))) { // Confetti - use thread-safe variant
+             vec3d1 = new Vec3(vec3d1.x, 0.2D, vec3d1.z);
+         }
+ 
+@@ -3190,7 +3196,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+             double d1 = Mth.clamp(motion.z, -0.15000000596046448D, 0.15000000596046448D);
+             double d2 = Math.max(motion.y, -0.15000000596046448D);
+ 
+-            if (d2 < 0.0D && !this.getInBlockState().is(Blocks.SCAFFOLDING) && this.isSuppressingSlidingDownLadder() && this instanceof net.minecraft.world.entity.player.Player) {
++            if (d2 < 0.0D && !this.getInBlockStateSafe().is(Blocks.SCAFFOLDING) && this.isSuppressingSlidingDownLadder() && this instanceof net.minecraft.world.entity.player.Player) { // Confetti - use thread-safe variant
+                 d2 = 0.0D;
+             }
+ 
+diff --git a/src/main/java/net/minecraft/world/entity/monster/breeze/Breeze.java b/src/main/java/net/minecraft/world/entity/monster/breeze/Breeze.java
+index 0d8e49e4f3c52244f8f84d6e4beeaa60aa6acdd9..3c1640d2f1319c6d60eff866000a88a69978d99b 100644
+--- a/src/main/java/net/minecraft/world/entity/monster/breeze/Breeze.java
++++ b/src/main/java/net/minecraft/world/entity/monster/breeze/Breeze.java
+@@ -148,7 +148,7 @@ public class Breeze extends Monster {
+ 
+     public void emitJumpTrailParticles() {
+         if (++this.jumpTrailStartedTick <= 5) {
+-            BlockState blockState = !this.getInBlockState().isAir() ? this.getInBlockState() : this.getBlockStateOn();
++            BlockState blockState = !this.getInBlockStateSafe().isAir() ? this.getInBlockStateSafe() : this.getBlockStateOn(); // Confetti - use thread-safe variant
+             Vec3 vec3 = this.getDeltaMovement();
+             Vec3 vec32 = this.position().add(vec3).add(0.0, 0.1F, 0.0);
+ 
+@@ -162,7 +162,7 @@ public class Breeze extends Monster {
+         if (!this.isPassenger()) {
+             Vec3 vec3 = this.getBoundingBox().getCenter();
+             Vec3 vec32 = new Vec3(vec3.x, this.position().y, vec3.z);
+-            BlockState blockState = !this.getInBlockState().isAir() ? this.getInBlockState() : this.getBlockStateOn();
++            BlockState blockState = !this.getInBlockStateSafe().isAir() ? this.getInBlockStateSafe() : this.getBlockStateOn(); // Confetti - use thread-safe variant
+             if (blockState.getRenderShape() != RenderShape.INVISIBLE) {
+                 for (int i = 0; i < count; i++) {
+                     this.level().addParticle(new BlockParticleOption(ParticleTypes.BLOCK, blockState), vec32.x, vec32.y, vec32.z, 0.0, 0.0, 0.0);
+diff --git a/src/main/java/net/minecraft/world/level/block/PowderSnowBlock.java b/src/main/java/net/minecraft/world/level/block/PowderSnowBlock.java
+index 5eac1a54398dfa5571b98fb6eefca9d2bf9b2793..6399f7685c24bbab0ed6750ade6655afdc5e653a 100644
+--- a/src/main/java/net/minecraft/world/level/block/PowderSnowBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/PowderSnowBlock.java
+@@ -64,7 +64,7 @@ public class PowderSnowBlock extends Block implements BucketPickup {
+     @Override
+     protected void entityInside(BlockState state, Level world, BlockPos pos, Entity entity) {
+         if (!new io.papermc.paper.event.entity.EntityInsideBlockEvent(entity.getBukkitEntity(), org.bukkit.craftbukkit.block.CraftBlock.at(world, pos)).callEvent()) { return; } // Paper - Add EntityInsideBlockEvent
+-        if (!(entity instanceof LivingEntity) || entity.getInBlockState().is((Block) this)) {
++        if (!(entity instanceof LivingEntity) || entity.getInBlockStateSafe().is((Block) this)) { // Confetti - use thread-safe variant
+             entity.makeStuckInBlock(state, new Vec3(0.8999999761581421D, 1.5D, 0.8999999761581421D));
+             if (world.isClientSide) {
+                 RandomSource randomsource = world.getRandom();
