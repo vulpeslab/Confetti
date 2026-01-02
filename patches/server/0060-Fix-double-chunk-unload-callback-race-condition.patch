@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 16:47:02 +0100
+Subject: [PATCH] Fix double chunk unload callback race condition
+
+Add AtomicBoolean guard to unloadCallback() similar to loadCallback().
+Prevents the same chunk from being unloaded multiple times from different threads.
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index 1ecae299636c6535293057d77f991ecdf9c2af74..eda7927921db40a258ae39efd3d819c6b996c5b2 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -130,8 +130,9 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+     // Paper start
+     boolean loadedTicketLevel;
+     // Paper end
+-    // Confetti start - prevent double load callback in multithreaded environment
++    // Confetti start - prevent double load/unload callback in multithreaded environment
+     private final AtomicBoolean loadCallbackCalled = new AtomicBoolean(false);
++    private final AtomicBoolean unloadCallbackCalled = new AtomicBoolean(false);
+     // Confetti end
+     // Paper start - rewrite chunk system
+     private boolean postProcessingDone;
+@@ -710,6 +711,11 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+     }
+ 
+     public void unloadCallback() {
++        // Confetti start - thread-safe double call prevention
++        if (!this.unloadCallbackCalled.compareAndSet(false, true)) {
++            return; // Already called from another thread
++        }
++        // Confetti end
+         if (!this.loadedTicketLevel) { LOGGER.error("Double calling chunk unload!", new Throwable()); } // Paper
+         org.bukkit.Server server = this.level.getCraftServer();
+         ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().chunkHolderManager.getChunkHolder(this.locX, this.locZ).getEntityChunk().callEntitiesUnloadEvent(); // Paper - rewrite chunk system
