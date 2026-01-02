@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:17:57 +0100
+Subject: [PATCH] Fix deadlock in Entity.move when getBlockState loads chunks
+ from wrong thread
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 6f0c2d5099b7724493cbf84db562c0a7b19896ca..5c67388795dd4f6173e66c20e94e4cdec2280ede 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1227,7 +1227,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+             this.setOnGroundWithMovement(this.verticalCollisionBelow, vec3d1);
+             BlockPos blockposition = this.getOnPosLegacy();
+-            BlockState iblockdata = this.level().getBlockState(blockposition);
++            // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++            BlockState iblockdata;
++            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
++                    && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, blockposition.getX() >> 4, blockposition.getZ() >> 4)) {
++                iblockdata = this.level().getBlockStateIfLoaded(blockposition);
++                if (iblockdata == null) {
++                    iblockdata = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
++                }
++            } else {
++                iblockdata = this.level().getBlockState(blockposition);
++            }
++            // Confetti end
+ 
+             this.checkFallDamage(vec3d1.y, this.onGround(), iblockdata, blockposition);
+             if (this.isRemoved()) {
