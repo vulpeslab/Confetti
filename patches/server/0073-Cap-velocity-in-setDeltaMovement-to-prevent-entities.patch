@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 00:28:40 +0100
+Subject: [PATCH] Cap velocity in setDeltaMovement to prevent entities flying
+ into other regions
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 54b05a26b9e113172eaec7fee7a520bd8b1d4c6f..1c238a64952054e9df1eee4cb5a18ca04e9d9b93 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -4812,11 +4812,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     public void setDeltaMovement(Vec3 velocity) {
+-        // Confetti start - why is something setting the entity velocity to larger than one region...
+-        if (velocity.horizontalDistanceSqr() > RegionPos.MAX_DISTANCE_SQR + 1 && velocity.horizontalDistanceSqr() > this.deltaMovement.horizontalDistanceSqr()) {
+-            LOGGER.warn("Velocity is being set larger than the Confetti region size: {} for entity {}", velocity, this, new Exception("Velocity larger than region size"));
++        // Confetti start - cap velocity to prevent entities flying into other regions
++        if (velocity.horizontalDistanceSqr() > RegionPos.MAX_DISTANCE_SQR) {
++            double y = velocity.y;
++            velocity = velocity.normalize().scale(RegionPos.REGION_SIZE * 16);
++            velocity = new Vec3(velocity.x, y, velocity.z); // preserve vertical velocity
+         }
+-        // Confetti end - why is something setting the entity velocity to larger than one region...
++        // Confetti end - cap velocity to prevent entities flying into other regions
+         synchronized (this.posLock) { // Paper
+         this.deltaMovement = velocity;
+         } // Paper
