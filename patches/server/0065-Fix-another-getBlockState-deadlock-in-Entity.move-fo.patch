@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:22:45 +0100
+Subject: [PATCH] Fix another getBlockState deadlock in Entity.move for
+ movement emission
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 5c67388795dd4f6173e66c20e94e4cdec2280ede..963dc94ae4e80343ddc5960e7fc040c0835018d2 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1291,7 +1291,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+                     this.flyDist += (float) (vec3d1.length() * 0.6D);
+                     BlockPos blockposition1 = this.getOnPos();
+-                    BlockState iblockdata1 = this.level().getBlockState(blockposition1);
++                    // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++                    BlockState iblockdata1;
++                    if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel1
++                            && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel1, blockposition1.getX() >> 4, blockposition1.getZ() >> 4)) {
++                        iblockdata1 = this.level().getBlockStateIfLoaded(blockposition1);
++                        if (iblockdata1 == null) {
++                            iblockdata1 = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
++                        }
++                    } else {
++                        iblockdata1 = this.level().getBlockState(blockposition1);
++                    }
++                    // Confetti end
+                     boolean flag2 = this.isStateClimbable(iblockdata1);
+ 
+                     if (!flag2) {
