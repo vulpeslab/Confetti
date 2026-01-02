@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:03:27 +0100
+Subject: [PATCH] Fix more deadlocks in Entity fluid checks
+
+When an entity ticks, methods like updateFluidOnEyes, updateSwimming, and
+updateFluidHeightAndDoFluidPushing can call getFluidState which synchronously
+loads chunks. In Confetti's multithreaded environment, when the entity is near
+a region boundary, this can deadlock if the chunk is owned by another thread.
+
+These methods now use getFluidIfLoaded on server levels to prevent deadlocks.
+If the chunk is not loaded, the fluid check is safely skipped.
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index d1e644f4b749db22f565a943a943f9b613c3f177..6f0c2d5099b7724493cbf84db562c0a7b19896ca 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1951,7 +1951,16 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         if (this.isSwimming()) {
+             this.setSwimming(this.isSprinting() && this.isInWater() && !this.isPassenger());
+         } else {
+-            this.setSwimming(this.isSprinting() && this.isUnderWater() && !this.isPassenger() && this.level().getFluidState(this.blockPosition).is(FluidTags.WATER));
++            // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++            FluidState fluidState;
++            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
++                    && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, this.blockPosition.getX() >> 4, this.blockPosition.getZ() >> 4)) {
++                fluidState = this.level().getFluidIfLoaded(this.blockPosition);
++            } else {
++                fluidState = this.level().getFluidState(this.blockPosition);
++            }
++            this.setSwimming(this.isSprinting() && this.isUnderWater() && !this.isPassenger() && fluidState != null && fluidState.is(FluidTags.WATER));
++            // Confetti end
+         }
+ 
+     }
+@@ -2002,7 +2011,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         }
+ 
+         BlockPos blockposition = BlockPos.containing(this.getX(), d0, this.getZ());
+-        FluidState fluid = this.level().getFluidState(blockposition);
++        // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++        FluidState fluid;
++        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
++                && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, blockposition.getX() >> 4, blockposition.getZ() >> 4)) {
++            fluid = this.level().getFluidIfLoaded(blockposition);
++            if (fluid == null) {
++                return; // Chunk not loaded, skip fluid check
++            }
++        } else {
++            fluid = this.level().getFluidState(blockposition);
++        }
++        // Confetti end
+         double d1 = (double) ((float) blockposition.getY() + fluid.getHeight(this.level(), blockposition));
+ 
+         if (d1 > d0) {
+@@ -4577,12 +4597,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             Vec3 vec3d = Vec3.ZERO;
+             int k1 = 0;
+             BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++            // Confetti start - use getFluidIfLoaded to prevent deadlocks in multithreaded environment
++            final boolean useIfLoaded = this.level() instanceof net.minecraft.server.level.ServerLevel;
++            // Confetti end
+ 
+             for (int l1 = i; l1 < j; ++l1) {
+                 for (int i2 = k; i2 < l; ++i2) {
+                     for (int j2 = i1; j2 < j1; ++j2) {
+                         blockposition_mutableblockposition.set(l1, i2, j2);
+-                        FluidState fluid = this.level().getFluidState(blockposition_mutableblockposition);
++                        // Confetti start - use getFluidIfLoaded to prevent deadlocks
++                        FluidState fluid = useIfLoaded ? this.level().getFluidIfLoaded(blockposition_mutableblockposition) : this.level().getFluidState(blockposition_mutableblockposition);
++                        if (fluid == null) continue; // Chunk not loaded, skip
++                        // Confetti end
+ 
+                         if (fluid.is(tag)) {
+                             double d2 = (double) ((float) i2 + fluid.getHeight(this.level(), blockposition_mutableblockposition));
