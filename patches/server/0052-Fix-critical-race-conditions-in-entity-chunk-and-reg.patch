@@ -1,0 +1,204 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 01:43:09 +0100
+Subject: [PATCH] Fix critical race conditions in entity, chunk, and region
+ handling
+
+- Entity.fluidHeight: Use synchronized wrapper (Object2DoubleMaps.synchronize) to prevent ArrayIndexOutOfBoundsException
+- ConfettiRegionScheduler.runOnMany: Release partial locks before scheduling retry to prevent deadlocks
+- LevelChunkRegion.hasBlockEvents: Add synchronization for thread-safety
+- LevelChunkRegion.forEachTickingEntity: Add null check to prevent NPE from concurrent modification
+- SimpleStampedLock.optimisticRead: Only catch ConcurrentModificationException/ArrayIndexOutOfBoundsException, not all Throwables
+- ConfettiRegionLocker.getLockedRegions: Create fresh unmodifiable view each call to avoid stale references
+- LevelChunkRegionMap.moveTickingEntity/moveTrackedEntity: Add to new region before removing from old to prevent missing ticks
+- LevelChunkRegionMap.getOrCreate: Add double-check within write lock to prevent race condition
+
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+index f2ac1d2d89cc7dcd9c3c87897cc3a15a88c457a9..526669f91116a4a00466a75e4f0a261f52e238f7 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegion.java
+@@ -61,7 +61,10 @@ public class LevelChunkRegion {
+         IteratorSafeOrderedReferenceSet.Iterator<Entity> iterator = this.tickingEntities.iterator();
+         try {
+             while (iterator.hasNext()) {
+-                action.accept(iterator.next());
++                Entity entity = iterator.next();
++                if (entity != null) { // Confetti - null check for thread-safety
++                    action.accept(entity);
++                }
+             }
+         } finally {
+             iterator.finishedIterating();
+@@ -183,7 +186,7 @@ public class LevelChunkRegion {
+         this.blockEvents.addAll(blockEvents);
+     }
+ 
+-    public boolean hasBlockEvents() {
++    public synchronized boolean hasBlockEvents() { // Confetti - synchronized for thread-safety
+         return !this.blockEvents.isEmpty();
+     }
+ 
+diff --git a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+index 24349c8775d2c0d3524d340fc2aaa5cb34cc97f1..f865298086a100c843a509b57ab361cd2828c854 100644
+--- a/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
++++ b/src/main/java/com/vulpeslab/confetti/region/LevelChunkRegionMap.java
+@@ -31,7 +31,16 @@ public class LevelChunkRegionMap {
+             return levelChunkRegion;
+         }
+ 
+-        return regionsLock.write(() -> regions.computeIfAbsent(regionPos.longKey, k -> new LevelChunkRegion(level, regionPos)));
++        // Confetti - Double-check within write lock to prevent race condition
++        return regionsLock.write(() -> {
++            LevelChunkRegion existing = regions.get(regionPos.longKey);
++            if (existing != null) {
++                return existing;
++            }
++            LevelChunkRegion newRegion = new LevelChunkRegion(level, regionPos);
++            regions.put(regionPos.longKey, newRegion);
++            return newRegion;
++        });
+     }
+ 
+     public LevelChunkRegion get(RegionPos regionPos) {
+@@ -88,9 +97,12 @@ public class LevelChunkRegionMap {
+         RegionPos toRegion = RegionPos.forChunk(newChunkPos);
+ 
+         if (!fromRegion.equals(toRegion)) {
++            // Confetti - Add to new region before removing from old to prevent missing ticks
++            LevelChunkRegion toRegionChunk = getOrCreate(toRegion);
++            LevelChunkRegion fromRegionChunk = getOrCreate(fromRegion);
++            toRegionChunk.addTickingEntity(entity);
++            fromRegionChunk.removeTickingEntity(entity);
+             entity.previousTickingChunkPosRegion = newChunkPos;
+-            getOrCreate(fromRegion).removeTickingEntity(entity);
+-            getOrCreate(toRegion).addTickingEntity(entity);
+         }
+     }
+ 
+@@ -126,14 +138,19 @@ public class LevelChunkRegionMap {
+         RegionPos toRegion = RegionPos.forChunk(newChunkPos);
+ 
+         if (!fromRegion.equals(toRegion)) {
+-            entity.previousTrackedChunkPosRegion = newChunkPos;
+-            getOrCreate(fromRegion).removeTrackedEntity(entity);
+-            getOrCreate(toRegion).addTrackedEntity(entity);
+-
++            // Confetti - Add to new region before removing from old to prevent missing tracking
++            LevelChunkRegion toRegionChunk = getOrCreate(toRegion);
++            LevelChunkRegion fromRegionChunk = getOrCreate(fromRegion);
++            
++            toRegionChunk.addTrackedEntity(entity);
++            fromRegionChunk.removeTrackedEntity(entity);
++            
+             if (entity instanceof Mob mob) {
+-                getOrCreate(fromRegion).removeNavigatingMob(mob);
+-                getOrCreate(toRegion).addNavigatingMob(mob);
++                toRegionChunk.addNavigatingMob(mob);
++                fromRegionChunk.removeNavigatingMob(mob);
+             }
++            
++            entity.previousTrackedChunkPosRegion = newChunkPos;
+         }
+     }
+ 
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+index b62dfe06b7c1be8b34aeb091260cb7b1493cb44e..163d2e72e5e0d220b7c7675d5ffcba1b9792a8c0 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+@@ -34,7 +34,6 @@ public class ConfettiRegionLocker {
+     private final ThreadLocal<Set<RegionPos>> localLocks = ThreadLocal.withInitial(ObjectOpenHashSet::new);
+     private final ThreadLocal<Set<RegionPos>> readOnlyLocks = ThreadLocal.withInitial(ObjectOpenHashSet::new);
+     private final ThreadLocal<Set<RegionPos>> writeLocks = ThreadLocal.withInitial(ObjectOpenHashSet::new);
+-    private final ThreadLocal<Set<RegionPos>> unmodifiableLocalLocks = ThreadLocal.withInitial(() -> Collections.unmodifiableSet(localLocks.get()));
+ 
+     /**
+      * Checks if the current thread holds a read lock for the given region
+@@ -56,8 +55,8 @@ public class ConfettiRegionLocker {
+      * Returns an unmodifiable view of the locked regions for the current thread.
+      */
+     public Set<RegionPos> getLockedRegions() {
+-        // Use an unmodifiable view to ensure the underlying set doesn't get accidentally modified
+-        return unmodifiableLocalLocks.get();
++        // Confetti - Create unmodifiable view each time to ensure correct backing set reference
++        return Collections.unmodifiableSet(localLocks.get());
+     }
+ 
+     /**
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+index bcaa52a2316d046f380ecfbd78c229f9213b0faa..212360c13391213f6528f9cf2d05fe207d6231b0 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+@@ -127,24 +127,27 @@ public class ConfettiRegionScheduler {
+     private void runOnMany(RegionPos[] regionPosArray, Runnable runnable, CompletableFuture<Void> future) {
+         ConfettiRegionLocker.RegionLock[] locks = new ConfettiRegionLocker.RegionLock[regionPosArray.length];
+         try {
+-            try {
+-                for (int i = 0; i < regionPosArray.length; i++) {
+-                    locks[i] = locker.tryTakeLockNow(regionPosArray[i]);
+-                    if (locks[i] == null) {
+-                        locker.onUnlock(regionPosArray[i], () -> CompletableFuture.runAsync(() -> runOnMany(regionPosArray, runnable, future), ConfettiTickThread.getExecutor()));
+-                        return;
++            for (int i = 0; i < regionPosArray.length; i++) {
++                locks[i] = locker.tryTakeLockNow(regionPosArray[i]);
++                if (locks[i] == null) {
++                    // Confetti - Release all previously acquired locks before scheduling retry
++                    for (int j = i - 1; j >= 0; j--) {
++                        if (locks[j] != null) locks[j].unlock();
+                     }
++                    locker.onUnlock(regionPosArray[i], () -> CompletableFuture.runAsync(() -> runOnMany(regionPosArray, runnable, future), ConfettiTickThread.getExecutor()));
++                    return;
+                 }
++            }
+ 
+-                // All locks acquired, run the task
++            // All locks acquired, run the task
++            try {
+                 runnable.run();
++                future.complete(null);
+             } finally {
+                 for (int i = locks.length - 1; i >= 0; i--) {
+                     if (locks[i] != null) locks[i].unlock();
+                 }
+             }
+-
+-            future.complete(null);
+         } catch (Exception e) {
+             future.completeExceptionally(e);
+         }
+diff --git a/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java b/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java
+index d912076a3f66540c22ef64077efb89694fa14005..75553e9846810454bc3a270b6e279fdb0b2a2500 100644
+--- a/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java
++++ b/src/main/java/com/vulpeslab/confetti/util/SimpleStampedLock.java
+@@ -59,8 +59,9 @@ public class SimpleStampedLock {
+                 }
+             } catch (final Error error) {
+                 throw error;
+-            } catch (final Throwable thr) {
+-                // ignore
++            } catch (final ArrayIndexOutOfBoundsException | java.util.ConcurrentModificationException cme) {
++                // Confetti - Only catch exceptions that indicate concurrent modification
++                // Let other exceptions propagate
+             }
+         }
+ 
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 350c3c1af30f2a584b0ff853198bf56c63711cf1..f14f89220ed40f64597e8aa998ed4c30936b4b80 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.floats.FloatArraySet;
+ import it.unimi.dsi.fastutil.floats.FloatArrays;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
++import it.unimi.dsi.fastutil.objects.Object2DoubleMaps; // Confetti - thread safety
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.HashSet;
+@@ -592,7 +593,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         this.nextStep = 1.0F;
+         this.random = world == null || world.purpurConfig.entitySharedRandom ? SHARED_RANDOM : RandomSource.create(); // Paper - Share random for entities to make them more random // Purpur
+         this.remainingFireTicks = -this.getFireImmuneTicks();
+-        this.fluidHeight = new Object2DoubleArrayMap(2);
++        this.fluidHeight = Object2DoubleMaps.synchronize(new Object2DoubleArrayMap<>(2)); // Confetti - thread-safe synchronized wrapper
+         this.fluidOnEyes = new HashSet();
+         this.firstTick = true;
+         this.levelCallback = EntityInLevelCallback.NULL;
