@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:44:25 +0100
+Subject: [PATCH] Fix ConcurrentModificationException in SimpleCriterionTrigger
+ by using synchronized set
+
+
+diff --git a/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java b/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
+index 35772110e9318df46a2729dbc0b5879b290011b7..de1bea5f25fbea43dc487ad9152467855886f892 100644
+--- a/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
++++ b/src/main/java/net/minecraft/advancements/critereon/SimpleCriterionTrigger.java
+@@ -19,17 +19,25 @@ public abstract class SimpleCriterionTrigger<T extends SimpleCriterionTrigger.Si
+ 
+     @Override
+     public final void addPlayerListener(PlayerAdvancements manager, CriterionTrigger.Listener<T> conditions) {
+-        manager.criterionData.computeIfAbsent(this, managerx -> Sets.newHashSet()).add(conditions);  // Paper - fix AdvancementDataPlayer leak
++        // Confetti start - use synchronized set for thread safety
++        @SuppressWarnings("unchecked")
++        Set<CriterionTrigger.Listener<T>> set = (Set<CriterionTrigger.Listener<T>>) (Set<?>) manager.criterionData.computeIfAbsent(this, managerx -> java.util.Collections.synchronizedSet(Sets.newHashSet()));
++        synchronized (set) {
++            set.add(conditions);
++        }
++        // Confetti end
+     }
+ 
+     @Override
+     public final void removePlayerListener(PlayerAdvancements manager, CriterionTrigger.Listener<T> conditions) {
+         Set<CriterionTrigger.Listener<T>> set = (Set) manager.criterionData.get(this); // Paper - fix AdvancementDataPlayer leak
+         if (set != null) {
++            synchronized (set) { // Confetti - thread-safe
+             set.remove(conditions);
+             if (set.isEmpty()) {
+                 manager.criterionData.remove(this); // Paper - fix AdvancementDataPlayer leak
+             }
++            } // Confetti
+         }
+     }
+ 
+@@ -45,7 +53,13 @@ public abstract class SimpleCriterionTrigger<T extends SimpleCriterionTrigger.Si
+             LootContext lootContext = null; // EntityPredicate.createContext(player, player); // Paper - Perf: lazily create LootContext for criterions
+             List<CriterionTrigger.Listener<T>> list = null;
+ 
+-            for (CriterionTrigger.Listener<T> listener : set) {
++            // Confetti start - snapshot to avoid ConcurrentModificationException
++            CriterionTrigger.Listener<T>[] snapshot;
++            synchronized (set) {
++                snapshot = set.toArray(new CriterionTrigger.Listener[0]);
++            }
++            for (CriterionTrigger.Listener<T> listener : snapshot) {
++            // Confetti end
+                 T simpleInstance = listener.trigger();
+                 if (predicate.test(simpleInstance)) {
+                     Optional<ContextAwarePredicate> optional = simpleInstance.player();

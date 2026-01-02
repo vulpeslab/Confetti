@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 18:05:46 +0100
+Subject: [PATCH] Simplify thread checks to use isTickThread() directly
+
+The previous checks using isTickThreadFor() were more complex and
+could potentially have edge cases. Simplify by just checking if
+we're on ANY tick thread using isTickThread().
+
+The Server thread is NOT a TickThread, so this reliably detects
+when we need to use non-blocking chunk access methods.
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 963dc94ae4e80343ddc5960e7fc040c0835018d2..9c0312e4c1e0d7ee29ffcdc272eb097121e67a5b 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1973,10 +1973,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         if (this.isSwimming()) {
+             this.setSwimming(this.isSprinting() && this.isInWater() && !this.isPassenger());
+         } else {
+-            // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++            // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+             FluidState fluidState;
+-            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
+-                    && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, this.blockPosition.getX() >> 4, this.blockPosition.getZ() >> 4)) {
++            if (this.level() instanceof net.minecraft.server.level.ServerLevel && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+                 fluidState = this.level().getFluidIfLoaded(this.blockPosition);
+             } else {
+                 fluidState = this.level().getFluidState(this.blockPosition);
+@@ -2033,10 +2032,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         }
+ 
+         BlockPos blockposition = BlockPos.containing(this.getX(), d0, this.getZ());
+-        // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++        // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+         FluidState fluid;
+-        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
+-                && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, blockposition.getX() >> 4, blockposition.getZ() >> 4)) {
++        if (this.level() instanceof net.minecraft.server.level.ServerLevel && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+             fluid = this.level().getFluidIfLoaded(blockposition);
+             if (fluid == null) {
+                 return; // Chunk not loaded, skip fluid check
+diff --git a/src/main/java/net/minecraft/world/level/BlockCollisions.java b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+index 901aee3c17b35738df605c504c1b431db261ec23..3f895fc0b058bbf312203fb85a8947d3bda278ae 100644
+--- a/src/main/java/net/minecraft/world/level/BlockCollisions.java
++++ b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+@@ -84,13 +84,10 @@ public class BlockCollisions<T> extends AbstractIterator<T> {
+                            continue;
+                         }
+                         blockState = blockGetter.getBlockState(this.pos);
+-                    // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
+-                    // We must check isTickThreadFor FIRST to avoid any chance of sync loading from the Server thread
++                    // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+                     // The Server thread is NOT a TickThread, so isTickThread() returns false for it
+-                    } else if (this.collisionGetter instanceof net.minecraft.server.level.ServerLevel level
+-                            ? ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, x >> 4, z >> 4)
+-                                && ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))
+-                            : ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))) {
++                    } else if (ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()
++                            && ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))) {
+                         blockState = this.collisionGetter.getBlockState(this.pos);
+                     // Confetti end
+                     } else {

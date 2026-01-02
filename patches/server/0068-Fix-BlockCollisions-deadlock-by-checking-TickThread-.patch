@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:58:02 +0100
+Subject: [PATCH] Fix BlockCollisions deadlock by checking TickThread first
+
+The previous condition could still allow getBlockState to be called from
+the Server thread because the condition order allowed short-circuiting
+in unexpected ways.
+
+The new logic ensures that for ServerLevel:
+1. FIRST check isTickThreadFor() - must return true
+2. THEN check player/collision conditions
+
+This guarantees the Server thread (which is NOT a TickThread) will always
+use getBlockStateIfLoaded instead of getBlockState, preventing deadlocks
+when the target chunk's region is locked by a ConfettiTickThread.
+
+diff --git a/src/main/java/net/minecraft/world/level/BlockCollisions.java b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+index 1d404ea5f49b6e9224d60ee78696f80da8ed28a5..901aee3c17b35738df605c504c1b431db261ec23 100644
+--- a/src/main/java/net/minecraft/world/level/BlockCollisions.java
++++ b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+@@ -85,8 +85,12 @@ public class BlockCollisions<T> extends AbstractIterator<T> {
+                         }
+                         blockState = blockGetter.getBlockState(this.pos);
+                     // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
+-                    } else if (((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))
+-                            && (!(this.collisionGetter instanceof net.minecraft.server.level.ServerLevel level) || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, x >> 4, z >> 4))) {
++                    // We must check isTickThreadFor FIRST to avoid any chance of sync loading from the Server thread
++                    // The Server thread is NOT a TickThread, so isTickThread() returns false for it
++                    } else if (this.collisionGetter instanceof net.minecraft.server.level.ServerLevel level
++                            ? ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, x >> 4, z >> 4)
++                                && ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))
++                            : ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))) {
+                         blockState = this.collisionGetter.getBlockState(this.pos);
+                     // Confetti end
+                     } else {

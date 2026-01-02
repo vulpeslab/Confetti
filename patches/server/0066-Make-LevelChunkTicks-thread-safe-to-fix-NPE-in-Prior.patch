@@ -1,0 +1,139 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 17:30:56 +0100
+Subject: [PATCH] Make LevelChunkTicks thread-safe to fix NPE in PriorityQueue
+ during concurrent access
+
+
+diff --git a/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java b/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
+index 4e607ab38088d51615c5d00895d540954d835aa3..9ec435a493fd52ab92971b0398b07d7ab7ee5eb6 100644
+--- a/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
++++ b/src/main/java/net/minecraft/world/ticks/LevelChunkTicks.java
+@@ -19,6 +19,7 @@ import net.minecraft.nbt.ListTag;
+ import net.minecraft.world.level.ChunkPos;
+ 
+ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickContainerAccess<T>, ca.spottedleaf.moonrise.patches.chunk_system.ticks.ChunkSystemLevelChunkTicks { // Paper - rewrite chunk system
++    private final Object lock = new Object(); // Confetti - thread-safe
+     private final Queue<ScheduledTick<T>> tickQueue = new PriorityQueue<>(ScheduledTick.DRAIN_ORDER);
+     @Nullable
+     private List<SavedTick<T>> pendingTicks;
+@@ -41,12 +42,16 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+ 
+     @Override
+     public final boolean moonrise$isDirty(final long tick) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         return this.dirty || (!this.tickQueue.isEmpty() && tick != this.lastSaved);
++        } // Confetti - thread-safe
+     }
+ 
+     @Override
+     public final void moonrise$clearDirty() {
++        synchronized (this.lock) { // Confetti - thread-safe
+         this.dirty = false;
++        } // Confetti - thread-safe
+     }
+     // Paper end - rewrite chunk system
+ 
+@@ -62,32 +67,41 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+     }
+ 
+     public void setOnTickAdded(@Nullable BiConsumer<LevelChunkTicks<T>, ScheduledTick<T>> tickConsumer) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         this.onTickAdded = tickConsumer;
++        } // Confetti - thread-safe
+     }
+ 
+     @Nullable
+     public ScheduledTick<T> peek() {
++        synchronized (this.lock) { // Confetti - thread-safe
+         return this.tickQueue.peek();
++        } // Confetti - thread-safe
+     }
+ 
+     @Nullable
+     public ScheduledTick<T> poll() {
++        synchronized (this.lock) { // Confetti - thread-safe
+         ScheduledTick<T> scheduledTick = this.tickQueue.poll();
+         if (scheduledTick != null) {
+             this.ticksPerPosition.remove(scheduledTick); this.dirty = true; // Paper - rewrite chunk system
+         }
+ 
+         return scheduledTick;
++        } // Confetti - thread-safe
+     }
+ 
+     @Override
+     public void schedule(ScheduledTick<T> orderedTick) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         if (this.ticksPerPosition.add(orderedTick)) {
+             this.scheduleUnchecked(orderedTick); this.dirty = true; // Paper - rewrite chunk system
+         }
++        } // Confetti - thread-safe
+     }
+ 
+     private void scheduleUnchecked(ScheduledTick<T> orderedTick) {
++        // Confetti - caller must hold lock
+         this.tickQueue.add(orderedTick);
+         if (this.onTickAdded != null) {
+             this.onTickAdded.accept(this, orderedTick);
+@@ -96,10 +110,13 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+ 
+     @Override
+     public boolean hasScheduledTick(BlockPos pos, T type) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         return this.ticksPerPosition.contains(ScheduledTick.probe(type, pos));
++        } // Confetti - thread-safe
+     }
+ 
+     public void removeIf(Predicate<ScheduledTick<T>> predicate) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         Iterator<ScheduledTick<T>> iterator = this.tickQueue.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -109,19 +126,25 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+                 this.ticksPerPosition.remove(scheduledTick);
+             }
+         }
++        } // Confetti - thread-safe
+     }
+ 
+     public Stream<ScheduledTick<T>> getAll() {
++        synchronized (this.lock) { // Confetti - thread-safe
+         return this.tickQueue.stream();
++        } // Confetti - thread-safe
+     }
+ 
+     @Override
+     public int count() {
++        synchronized (this.lock) { // Confetti - thread-safe
+         return this.tickQueue.size() + (this.pendingTicks != null ? this.pendingTicks.size() : 0);
++        } // Confetti - thread-safe
+     }
+ 
+     @Override
+     public ListTag save(long l, Function<T, String> function) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         this.lastSaved = l; // Paper - rewrite chunk system
+         ListTag listTag = new ListTag();
+         if (this.pendingTicks != null) {
+@@ -135,10 +158,12 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+         }
+ 
+         return listTag;
++        } // Confetti - thread-safe
+     }
+ 
+     // Confetti start - thread-safe by capturing reference locally
+     public void unpack(long time) {
++        synchronized (this.lock) { // Confetti - thread-safe
+         List<SavedTick<T>> pending = this.pendingTicks;
+         if (pending != null) {
+             this.lastSaved = time; // Paper - rewrite chunk system
+@@ -150,6 +175,7 @@ public class LevelChunkTicks<T> implements SerializableTickContainer<T>, TickCon
+         }
+ 
+         this.pendingTicks = null;
++        } // Confetti - thread-safe
+     }
+     // Confetti end
+ 

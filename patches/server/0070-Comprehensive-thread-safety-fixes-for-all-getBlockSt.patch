@@ -1,0 +1,584 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 18:21:19 +0100
+Subject: [PATCH] Comprehensive thread-safety fixes for all
+ getBlockState/getFluidState/getChunk calls
+
+- Fixed Entity.java: move(), isInWall(), updateSwimming(), updateFluidOnEyes(), updateFluidHeightAndDoFluidPushing()
+- Fixed LivingEntity.java: travel() fluid check
+- Fixed Player.java: travel(), freeAt(), playStepSound()
+- Fixed ServerPlayer.java: findRespawnAndUseSpawnBlock(), startSleepInBed(), doCheckFallDamage()
+- Fixed ServerGamePacketListenerImpl.java: noBlocksAround(), handleSetCommandBlock(), handleSetStructureBlock(), handleSetJigsawBlock(), sign spawn protection check
+- Fixed PlayerList.java: respawn anchor/bed check
+
+All changes use isTickThread() instead of complex isTickThreadFor() checks.
+Server thread is NOT a TickThread, so isTickThread() properly identifies when
+we need to use non-blocking *IfLoaded variants.
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 9631e0582f9b478c3a0b65bcb619b01fb1f638e2..01ba1420fbe3ee567d36ed23c0b163af2d99475c 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -1313,7 +1313,10 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+     }
+ 
+     public static Optional<ServerPlayer.RespawnPosAngle> findRespawnAndUseSpawnBlock(ServerLevel world, BlockPos pos, float spawnAngle, boolean spawnForced, boolean alive) {
+-        BlockState iblockdata = world.getBlockState(pos);
++        // Confetti start - use thread-safe variant
++        BlockState iblockdata = world.getBlockStateIfLoaded(pos);
++        if (iblockdata == null) return Optional.empty();
++        // Confetti end
+         Block block = iblockdata.getBlock();
+ 
+         if (block instanceof RespawnAnchorBlock && (spawnForced || (Integer) iblockdata.getValue(RespawnAnchorBlock.CHARGE) > 0) && RespawnAnchorBlock.canSetSpawn(world)) {
+@@ -1334,7 +1337,10 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+             return Optional.empty();
+         } else {
+             boolean flag2 = block.isPossibleToRespawnInThis(iblockdata);
+-            BlockState iblockdata1 = world.getBlockState(pos.above());
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata1 = world.getBlockStateIfLoaded(pos.above());
++            if (iblockdata1 == null) return Optional.empty();
++            // Confetti end
+             boolean flag3 = iblockdata1.getBlock().isPossibleToRespawnInThis(iblockdata1);
+ 
+             return flag2 && flag3 ? Optional.of(new ServerPlayer.RespawnPosAngle(new Vec3((double) pos.getX() + 0.5D, (double) pos.getY() + 0.1D, (double) pos.getZ() + 0.5D), spawnAngle, false, false)) : Optional.empty(); // CraftBukkit
+@@ -1554,7 +1560,11 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+ 
+     @Override
+     public Either<net.minecraft.world.entity.player.Player.BedSleepingProblem, Unit> startSleepInBed(BlockPos blockposition, boolean force) {
+-        Direction enumdirection = (Direction) this.level().getBlockState(blockposition).getValue(HorizontalDirectionalBlock.FACING);
++        // Confetti start - use thread-safe variant
++        BlockState blockState = this.level().getBlockStateIfLoaded(blockposition);
++        if (blockState == null) return Either.left(net.minecraft.world.entity.player.Player.BedSleepingProblem.OTHER_PROBLEM);
++        Direction enumdirection = (Direction) blockState.getValue(HorizontalDirectionalBlock.FACING);
++        // Confetti end
+         Either<net.minecraft.world.entity.player.Player.BedSleepingProblem, Unit> bedResult = this.getBedResult(blockposition, enumdirection);
+ 
+         if (bedResult.left().orElse(null) == net.minecraft.world.entity.player.Player.BedSleepingProblem.OTHER_PROBLEM) {
+@@ -1681,7 +1691,10 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+         if (!this.touchingUnloadedChunk()) {
+             this.checkSupportingBlock(onGround, new Vec3(xDifference, yDifference, zDifference));
+             BlockPos blockposition = this.getOnPosLegacy();
+-            BlockState iblockdata = this.level().getBlockState(blockposition);
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata = this.level().getBlockStateIfLoaded(blockposition);
++            if (iblockdata == null) return;
++            // Confetti end
+ 
+             if (this.spawnExtraParticlesOnFall && onGround && this.fallDistance > 0.0F) {
+                 Vec3 vec3d = blockposition.getCenter().add(0.0D, 0.5D, 0.0D);
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index eddd7d921111ad8427629efc365ef724ea9bcbcc..a8a825b87abd857277cb951b5c0b48ea40bea15a 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -148,6 +148,7 @@ import net.minecraft.world.entity.ExperienceOrb;
+ import net.minecraft.world.entity.HasCustomInventoryScreen;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
++import net.minecraft.world.level.chunk.LevelChunk; // Confetti
+ import net.minecraft.world.entity.MoverType;
+ import net.minecraft.world.entity.PlayerRideableJumping;
+ import net.minecraft.world.entity.RelativeMovement;
+@@ -713,7 +714,28 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+     }
+ 
+     private boolean noBlocksAround(Entity entity) {
+-        return entity.level().getBlockStates(entity.getBoundingBox().inflate(0.0625D).expandTowards(0.0D, -0.55D, 0.0D)).allMatch(BlockBehaviour.BlockStateBase::isAir);
++        // Confetti start - manually check blocks to avoid sync chunk loading
++        AABB box = entity.getBoundingBox().inflate(0.0625D).expandTowards(0.0D, -0.55D, 0.0D);
++        int minX = Mth.floor(box.minX);
++        int maxX = Mth.floor(box.maxX);
++        int minY = Mth.floor(box.minY);
++        int maxY = Mth.floor(box.maxY);
++        int minZ = Mth.floor(box.minZ);
++        int maxZ = Mth.floor(box.maxZ);
++        
++        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
++        for (int x = minX; x <= maxX; x++) {
++            for (int y = minY; y <= maxY; y++) {
++                for (int z = minZ; z <= maxZ; z++) {
++                    pos.set(x, y, z);
++                    BlockState state = entity.level().getBlockStateIfLoaded(pos);
++                    if (state == null) return false; // Can't verify, assume not safe
++                    if (!state.isAir()) return false;
++                }
++            }
++        }
++        return true;
++        // Confetti end
+     }
+ 
+     @Override
+@@ -895,7 +917,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+ 
+             if (commandblocklistenerabstract != null) {
+                 CommandBlockEntity.Mode tileentitycommand_type = tileentitycommand.getMode();
+-                BlockState iblockdata = this.player.level().getBlockState(blockposition);
++                // Confetti start - use thread-safe variant
++                BlockState iblockdata = this.player.level().getBlockStateIfLoaded(blockposition);
++                if (iblockdata == null) return;
++                // Confetti end
+                 Direction enumdirection = (Direction) iblockdata.getValue(CommandBlock.FACING);
+                 BlockState iblockdata1;
+ 
+@@ -916,7 +941,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+                 if (iblockdata3 != iblockdata) {
+                     this.player.level().setBlock(blockposition, iblockdata3, 2);
+                     tileentity.setBlockState(iblockdata3);
+-                    this.player.level().getChunkAt(blockposition).setBlockEntity(tileentity);
++                    // Confetti start - use thread-safe variant
++                    LevelChunk chunk = this.player.level().getChunkIfLoaded(blockposition);
++                    if (chunk != null) chunk.setBlockEntity(tileentity);
++                    // Confetti end
+                 }
+ 
+                 commandblocklistenerabstract.setCommand(s);
+@@ -1025,7 +1053,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.serverLevel());
+         if (this.player.canUseGameMasterBlocks()) {
+             BlockPos blockposition = packet.getPos();
+-            BlockState iblockdata = this.player.level().getBlockState(blockposition);
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata = this.player.level().getBlockStateIfLoaded(blockposition);
++            if (iblockdata == null) return;
++            // Confetti end
+             BlockEntity tileentity = this.player.level().getBlockEntity(blockposition);
+ 
+             if (tileentity instanceof StructureBlockEntity) {
+@@ -1083,7 +1114,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.serverLevel());
+         if (this.player.canUseGameMasterBlocks()) {
+             BlockPos blockposition = packet.getPos();
+-            BlockState iblockdata = this.player.level().getBlockState(blockposition);
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata = this.player.level().getBlockStateIfLoaded(blockposition);
++            if (iblockdata == null) return;
++            // Confetti end
+             BlockEntity tileentity = this.player.level().getBlockEntity(blockposition);
+ 
+             if (tileentity instanceof JigsawBlockEntity) {
+@@ -1959,7 +1993,14 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+                     int i = this.player.level().getMaxBuildHeight();
+ 
+                     if (blockposition.getY() < i) {
+-                        if (this.awaitingPositionFromClient == null && (worldserver.mayInteract(this.player, blockposition) || (worldserver.paperConfig().spawn.allowUsingSignsInsideSpawnProtection && worldserver.getBlockState(blockposition).getBlock() instanceof net.minecraft.world.level.block.SignBlock))) { // Paper - Allow using signs inside spawn protection
++                        // Confetti start - use thread-safe variant for sign check
++                        boolean canInteract = this.awaitingPositionFromClient == null && worldserver.mayInteract(this.player, blockposition);
++                        if (!canInteract && worldserver.paperConfig().spawn.allowUsingSignsInsideSpawnProtection) {
++                            BlockState signState = worldserver.getBlockStateIfLoaded(blockposition);
++                            canInteract = signState != null && signState.getBlock() instanceof net.minecraft.world.level.block.SignBlock;
++                        }
++                        if (canInteract) { // Paper - Allow using signs inside spawn protection
++                        // Confetti end
+                             InteractionResult enuminteractionresult = this.player.gameMode.useItemOn(this.player, worldserver, itemstack, enumhand, movingobjectpositionblock);
+ 
+                             if (enuminteractionresult.consumesAction()) {
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 1416cb74b851b344a95afb657d0b53b8c2124cd8..246cefc0ab803ce3054b196b84fca2769b4945d0 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -899,15 +899,17 @@ public abstract class PlayerList {
+         entityplayer1.setHealth(entityplayer1.getHealth());
+         if (!flag) {
+             BlockPos blockposition = BlockPos.containing(dimensiontransition.pos());
+-            BlockState iblockdata = worldserver.getBlockState(blockposition);
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata = worldserver.getBlockStateIfLoaded(blockposition);
+ 
+-            if (iblockdata.is(Blocks.RESPAWN_ANCHOR)) {
++            if (iblockdata != null && iblockdata.is(Blocks.RESPAWN_ANCHOR)) {
+                 entityplayer1.connection.send(new ClientboundSoundPacket(SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.BLOCKS, (double) blockposition.getX(), (double) blockposition.getY(), (double) blockposition.getZ(), 1.0F, 1.0F, worldserver.getRandom().nextLong()));
+             }
+             // Paper start - Add PlayerPostRespawnEvent
+-            if (iblockdata.is(net.minecraft.tags.BlockTags.BEDS) && !dimensiontransition.missingRespawnBlock()) {
++            if (iblockdata != null && iblockdata.is(net.minecraft.tags.BlockTags.BEDS) && !dimensiontransition.missingRespawnBlock()) {
+                 isBedSpawn = true;
+             }
++            // Confetti end
+             // Paper end - Add PlayerPostRespawnEvent
+         }
+         // Added from changeDimension
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 9c0312e4c1e0d7ee29ffcdc272eb097121e67a5b..91bb9b70e0407644602b65d5b9b01acf78510799 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1227,10 +1227,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+             this.setOnGroundWithMovement(this.verticalCollisionBelow, vec3d1);
+             BlockPos blockposition = this.getOnPosLegacy();
+-            // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++            // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+             BlockState iblockdata;
+-            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
+-                    && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel, blockposition.getX() >> 4, blockposition.getZ() >> 4)) {
++            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+                 iblockdata = this.level().getBlockStateIfLoaded(blockposition);
+                 if (iblockdata == null) {
+                     iblockdata = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
+@@ -1291,10 +1290,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+                     this.flyDist += (float) (vec3d1.length() * 0.6D);
+                     BlockPos blockposition1 = this.getOnPos();
+-                    // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++                    // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+                     BlockState iblockdata1;
+-                    if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel1
+-                            && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverLevel1, blockposition1.getX() >> 4, blockposition1.getZ() >> 4)) {
++                    if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+                         iblockdata1 = this.level().getBlockStateIfLoaded(blockposition1);
+                         if (iblockdata1 == null) {
+                             iblockdata1 = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
+@@ -1453,7 +1451,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             if (offset <= 1.0E-5F) {
+                 return blockposition;
+             } else {
+-                BlockState iblockdata = this.level().getBlockState(blockposition);
++                // Confetti start - use thread-safe variant
++                BlockState iblockdata = this.level().getBlockStateIfLoaded(blockposition);
++                if (iblockdata == null) return blockposition.atY(Mth.floor(this.position.y - (double) offset));
++                // Confetti end
+ 
+                 return ((double) offset > 0.5D || !iblockdata.is(BlockTags.FENCES)) && !iblockdata.is(BlockTags.WALLS) && !(iblockdata.getBlock() instanceof FenceGateBlock) ? blockposition.atY(Mth.floor(this.position.y - (double) offset)) : blockposition;
+             }
+@@ -1467,17 +1468,31 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     protected float getBlockJumpFactor() {
+-        float f = this.level().getBlockState(this.blockPosition()).getBlock().getJumpFactor();
+-        float f1 = this.level().getBlockState(this.getBlockPosBelowThatAffectsMyMovement()).getBlock().getJumpFactor();
++        // Confetti start - use thread-safe variants
++        BlockState state1 = this.level().getBlockStateIfLoaded(this.blockPosition());
++        BlockState state2 = this.level().getBlockStateIfLoaded(this.getBlockPosBelowThatAffectsMyMovement());
++        float f = state1 != null ? state1.getBlock().getJumpFactor() : 1.0F;
++        float f1 = state2 != null ? state2.getBlock().getJumpFactor() : 1.0F;
++        // Confetti end
+ 
+         return (double) f == 1.0D ? f1 : f;
+     }
+ 
+     protected float getBlockSpeedFactor() {
+-        BlockState iblockdata = this.level().getBlockState(this.blockPosition());
++        // Confetti start - use thread-safe variants
++        BlockState iblockdata = this.level().getBlockStateIfLoaded(this.blockPosition());
++        if (iblockdata == null) return 1.0F;
+         float f = iblockdata.getBlock().getSpeedFactor();
+ 
+-        return !iblockdata.is(Blocks.WATER) && !iblockdata.is(Blocks.BUBBLE_COLUMN) ? ((double) f == 1.0D ? this.level().getBlockState(this.getBlockPosBelowThatAffectsMyMovement()).getBlock().getSpeedFactor() : f) : f;
++        if (!iblockdata.is(Blocks.WATER) && !iblockdata.is(Blocks.BUBBLE_COLUMN)) {
++            if ((double) f == 1.0D) {
++                BlockState below = this.level().getBlockStateIfLoaded(this.getBlockPosBelowThatAffectsMyMovement());
++                return below != null ? below.getBlock().getSpeedFactor() : 1.0F;
++            }
++            return f;
++        }
++        return f;
++        // Confetti end
+     }
+ 
+     protected Vec3 maybeBackOffFromEdge(Vec3 movement, MoverType type) {
+@@ -1738,7 +1753,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                         }
+ 
+                         blockposition_mutableblockposition.set(i, j, k);
+-                        BlockState iblockdata = this.level().getBlockState(blockposition_mutableblockposition);
++                        // Confetti start - use thread-safe variant
++                        BlockState iblockdata = this.level().getBlockStateIfLoaded(blockposition_mutableblockposition);
++                        if (iblockdata == null) continue;
++                        // Confetti end
+ 
+                         try {
+                             iblockdata.entityInside(this.level(), blockposition_mutableblockposition, this);
+@@ -1762,7 +1780,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     public BlockPos adjustSpawnLocation(ServerLevel world, BlockPos basePos) {
+         BlockPos blockposition1 = world.getSharedSpawnPos();
+         Vec3 vec3d = blockposition1.getCenter();
+-        int i = world.getChunkAt(blockposition1).getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockposition1.getX(), blockposition1.getZ()) + 1;
++        // Confetti start - use thread-safe variant
++        net.minecraft.world.level.chunk.LevelChunk chunk = world.getChunkIfLoaded(blockposition1);
++        int i = chunk != null ? chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockposition1.getX(), blockposition1.getZ()) + 1 : blockposition1.getY();
++        // Confetti end
+ 
+         return BlockPos.containing(vec3d.x, (double) i, vec3d.z);
+     }
+@@ -1794,7 +1815,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     protected BlockPos getPrimaryStepSoundBlockPos(BlockPos pos) {
+         BlockPos blockposition1 = pos.above();
+-        BlockState iblockdata = this.level().getBlockState(blockposition1);
++        // Confetti start - use thread-safe variant
++        BlockState iblockdata = this.level().getBlockStateIfLoaded(blockposition1);
++        if (iblockdata == null) return pos;
++        // Confetti end
+ 
+         return !iblockdata.is(BlockTags.INSIDE_STEP_SOUND_BLOCKS) && !iblockdata.is(BlockTags.COMBINATION_STEP_SOUND_BLOCKS) ? pos : blockposition1;
+     }
+@@ -1901,9 +1925,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         if (onGround) {
+             if (this.fallDistance > 0.0F) {
+                 state.getBlock().fallOn(this.level(), state, landedPosition, this, this.fallDistance);
++                // Confetti start - use thread-safe variant
+                 this.level().gameEvent((Holder) GameEvent.HIT_GROUND, this.position, GameEvent.Context.of(this, (BlockState) this.mainSupportingBlockPos.map((blockposition1) -> {
+-                    return this.level().getBlockState(blockposition1);
++                    BlockState blockState = this.level().getBlockStateIfLoaded(blockposition1);
++                    return blockState != null ? blockState : state;
+                 }).orElse(state)));
++                // Confetti end
+             }
+ 
+             this.resetFallDistance();
+@@ -1975,7 +2002,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         } else {
+             // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+             FluidState fluidState;
+-            if (this.level() instanceof net.minecraft.server.level.ServerLevel && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+                 fluidState = this.level().getFluidIfLoaded(this.blockPosition);
+             } else {
+                 fluidState = this.level().getFluidState(this.blockPosition);
+@@ -2034,7 +2061,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         BlockPos blockposition = BlockPos.containing(this.getX(), d0, this.getZ());
+         // Confetti start - don't load chunks unless we're on a tick thread to prevent deadlocks
+         FluidState fluid;
+-        if (this.level() instanceof net.minecraft.server.level.ServerLevel && !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
++        if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThread()) {
+             fluid = this.level().getFluidIfLoaded(blockposition);
+             if (fluid == null) {
+                 return; // Chunk not loaded, skip fluid check
+@@ -2091,11 +2118,17 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     /** @deprecated */
+     @Deprecated
+     protected BlockState getBlockStateOnLegacy() {
+-        return this.level().getBlockState(this.getOnPosLegacy());
++        // Confetti start - use thread-safe variant
++        BlockState state = this.level().getBlockStateIfLoaded(this.getOnPosLegacy());
++        return state != null ? state : Blocks.AIR.defaultBlockState();
++        // Confetti end
+     }
+ 
+     public BlockState getBlockStateOn() {
+-        return this.level().getBlockState(this.getOnPos());
++        // Confetti start - use thread-safe variant
++        BlockState state = this.level().getBlockStateIfLoaded(this.getOnPos());
++        return state != null ? state : Blocks.AIR.defaultBlockState();
++        // Confetti end
+     }
+ 
+     public boolean canSpawnSprintParticle() {
+@@ -2104,7 +2137,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     protected void spawnSprintParticle() {
+         BlockPos blockposition = this.getOnPosLegacy();
+-        BlockState iblockdata = this.level().getBlockState(blockposition);
++        // Confetti start - use thread-safe variant
++        BlockState iblockdata = this.level().getBlockStateIfLoaded(blockposition);
++        if (iblockdata == null) return;
++        // Confetti end
+ 
+         if (iblockdata.getRenderShape() != RenderShape.INVISIBLE) {
+             Vec3 vec3d = this.getDeltaMovement();
+@@ -2180,7 +2216,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         this.yo = y;
+         this.zo = d4;
+         this.setPos(d3, y, d4);
+-        if (this.valid) this.level.getChunk((int) Math.floor(this.getX()) >> 4, (int) Math.floor(this.getZ()) >> 4); // CraftBukkit
++        // Confetti - removed sync chunk load that could cause deadlock
+     }
+ 
+     public void moveTo(Vec3 pos) {
+@@ -2969,6 +3005,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         final int maxZ = Mth.floor(box.maxZ);
+ 
+         final net.minecraft.world.level.chunk.ChunkSource chunkProvider = this.level.getChunkSource();
++        // Confetti start - don't force load chunks if not on tick thread to prevent deadlocks
++        final boolean forceLoad = ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
++        // Confetti end
+ 
+         long lastChunkKey = ChunkPos.INVALID_CHUNK_POS;
+         net.minecraft.world.level.chunk.LevelChunk lastChunk = null;
+@@ -2977,8 +3016,16 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             for (int fx = minX; fx <= maxX; ++fx) {
+                 final int newChunkX = fx >> 4;
+                 final int newChunkZ = fz >> 4;
+-                final net.minecraft.world.level.chunk.LevelChunk chunk = lastChunkKey == (lastChunkKey = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkKey(newChunkX, newChunkZ)) ?
+-                    lastChunk : (lastChunk = (net.minecraft.world.level.chunk.LevelChunk)chunkProvider.getChunk(newChunkX, newChunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, true));
++                // Confetti start - don't force load chunks if not on tick thread
++                final net.minecraft.world.level.chunk.LevelChunk chunk;
++                if (lastChunkKey == (lastChunkKey = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkKey(newChunkX, newChunkZ))) {
++                    chunk = lastChunk;
++                } else {
++                    chunk = (net.minecraft.world.level.chunk.LevelChunk)chunkProvider.getChunk(newChunkX, newChunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, forceLoad);
++                    lastChunk = chunk;
++                }
++                if (chunk == null) continue; // Skip if chunk not loaded and we're not on tick thread
++                // Confetti end
+                 tempPos.setX(fx);
+                 for (int fy = minY; fy <= maxY; ++fy) {
+                     tempPos.setY(fy);
+@@ -3718,7 +3765,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             Direction enumdirection1 = aenumdirection[j];
+ 
+             blockposition_mutableblockposition.setWithOffset(blockposition, enumdirection1);
+-            if (!this.level().getBlockState(blockposition_mutableblockposition).isCollisionShapeFullBlock(this.level(), blockposition_mutableblockposition)) {
++            // Confetti start - use thread-safe variant
++            BlockState blockState = this.level().getBlockStateIfLoaded(blockposition_mutableblockposition);
++            if (blockState != null && !blockState.isCollisionShapeFullBlock(this.level(), blockposition_mutableblockposition)) {
++            // Confetti end
+                 double d4 = vec3d.get(enumdirection1.getAxis());
+                 double d5 = enumdirection1.getAxisDirection() == Direction.AxisDirection.POSITIVE ? 1.0D - d4 : d4;
+ 
+@@ -4618,7 +4668,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             int k1 = 0;
+             BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+             // Confetti start - use getFluidIfLoaded to prevent deadlocks in multithreaded environment
+-            final boolean useIfLoaded = this.level() instanceof net.minecraft.server.level.ServerLevel;
++            final boolean useIfLoaded = !ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
+             // Confetti end
+ 
+             for (int l1 = i; l1 < j; ++l1) {
+@@ -4736,7 +4786,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     public BlockState getInBlockState() {
+         if (this.inBlockState == null) {
+-            this.inBlockState = this.level().getBlockState(this.blockPosition());
++            // Confetti start - use thread-safe variant
++            BlockState state = this.level().getBlockStateIfLoaded(this.blockPosition());
++            this.inBlockState = state != null ? state : Blocks.AIR.defaultBlockState();
++            // Confetti end
+         }
+ 
+         return this.inBlockState;
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index b4744c3db05cc11b06c7746f8a18c04bcae4f6cd..78c5e84e544d2c3e81c1d39de28b37503c4d68ce 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -71,6 +71,7 @@ import net.minecraft.tags.ItemTags;
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.Difficulty;
++import net.minecraft.world.level.material.Fluids; // Confetti
+ import net.minecraft.world.InteractionHand;
+ import net.minecraft.world.damagesource.CombatRules;
+ import net.minecraft.world.damagesource.CombatTracker;
+@@ -470,7 +471,10 @@ public abstract class LivingEntity extends Entity implements Attackable {
+                 }
+             }
+ 
+-            if (this.isEyeInFluid(FluidTags.WATER) && !this.level().getBlockState(BlockPos.containing(this.getX(), this.getEyeY(), this.getZ())).is(Blocks.BUBBLE_COLUMN)) {
++            // Confetti start - use thread-safe variant
++            BlockState bubbleColumnCheck = this.level().getBlockStateIfLoaded(BlockPos.containing(this.getX(), this.getEyeY(), this.getZ()));
++            if (this.isEyeInFluid(FluidTags.WATER) && (bubbleColumnCheck == null || !bubbleColumnCheck.is(Blocks.BUBBLE_COLUMN))) {
++            // Confetti end
+                 boolean flag1 = !this.canBreatheUnderwater() && !MobEffectUtil.hasWaterBreathing(this) && (!flag || !((net.minecraft.world.entity.player.Player) this).getAbilities().invulnerable);
+ 
+                 if (flag1) {
+@@ -2187,7 +2191,10 @@ public abstract class LivingEntity extends Entity implements Attackable {
+         if (!(Boolean) state.getValue(TrapDoorBlock.OPEN)) {
+             return false;
+         } else {
+-            BlockState iblockdata1 = this.level().getBlockState(pos.below());
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata1 = this.level().getBlockStateIfLoaded(pos.below());
++            if (iblockdata1 == null) return false;
++            // Confetti end
+ 
+             return iblockdata1.is(Blocks.LADDER) && iblockdata1.getValue(LadderBlock.FACING) == state.getValue(TrapDoorBlock.FACING);
+         }
+@@ -2243,7 +2250,10 @@ public abstract class LivingEntity extends Entity implements Attackable {
+             int i = Mth.floor(this.getX());
+             int j = Mth.floor(this.getY() - 0.20000000298023224D);
+             int k = Mth.floor(this.getZ());
+-            BlockState iblockdata = this.level().getBlockState(new BlockPos(i, j, k));
++            // Confetti start - use thread-safe variant
++            BlockState iblockdata = this.level().getBlockStateIfLoaded(new BlockPos(i, j, k));
++            if (iblockdata == null) return;
++            // Confetti end
+ 
+             if (!iblockdata.isAir()) {
+                 SoundType soundeffecttype = iblockdata.getSoundType();
+@@ -2896,8 +2906,16 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
+         if (this.isRemoved()) {
+             vec3d = this.position();
+-        } else if (!vehicle.isRemoved() && !this.level().getBlockState(vehicle.blockPosition()).is(BlockTags.PORTALS)) {
+-            vec3d = vehicle.getDismountLocationForPassenger(this);
++        // Confetti start - use thread-safe variant
++        } else if (!vehicle.isRemoved()) {
++            BlockState portalState = this.level().getBlockStateIfLoaded(vehicle.blockPosition());
++            if (portalState != null && !portalState.is(BlockTags.PORTALS)) {
++                vec3d = vehicle.getDismountLocationForPassenger(this);
++            } else {
++                double d0 = Math.max(this.getY(), vehicle.getY());
++                vec3d = new Vec3(this.getX(), d0, this.getZ());
++            }
++        // Confetti end
+         } else {
+             double d0 = Math.max(this.getY(), vehicle.getY());
+ 
+@@ -2984,7 +3002,10 @@ public abstract class LivingEntity extends Entity implements Attackable {
+                 d0 = Math.min(d0, 0.01D);
+             }
+ 
+-            FluidState fluid = this.level().getFluidState(this.blockPosition());
++            // Confetti start - use thread-safe variant
++            FluidState fluid = this.level().getFluidIfLoaded(this.blockPosition());
++            if (fluid == null) fluid = Fluids.EMPTY.defaultFluidState();
++            // Confetti end
+             double d1;
+             float f;
+ 
+@@ -3093,7 +3114,10 @@ public abstract class LivingEntity extends Entity implements Attackable {
+                 }
+             } else {
+                 BlockPos blockposition = this.getBlockPosBelowThatAffectsMyMovement();
+-                float f4 = this.level().getBlockState(blockposition).getBlock().getFriction();
++                // Confetti start - use thread-safe variant
++                BlockState frictionState = this.level().getBlockStateIfLoaded(blockposition);
++                float f4 = frictionState != null ? frictionState.getBlock().getFriction() : 0.6F;
++                // Confetti end
+ 
+                 f = this.onGround() ? f4 * 0.91F : 0.91F;
+                 Vec3 vec3d6 = this.handleRelativeFrictionAndCalculateMovement(movementInput, f4);
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index 330b21946564e6a7b463a258c02fee3f91e0f057..153396b25a43257ead8617d28f967c6455a4af09 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -1708,7 +1708,10 @@ public abstract class Player extends LivingEntity {
+             d0 = this.getLookAngle().y;
+             double d1 = d0 < -0.2D ? 0.085D : 0.06D;
+ 
+-            if (d0 <= 0.0D || this.jumping || !this.level().getBlockState(BlockPos.containing(this.getX(), this.getY() + 1.0D - 0.1D, this.getZ())).getFluidState().isEmpty()) {
++            // Confetti start - use thread-safe variant
++            BlockState swimCheckState = this.level().getBlockStateIfLoaded(BlockPos.containing(this.getX(), this.getY() + 1.0D - 0.1D, this.getZ()));
++            if (d0 <= 0.0D || this.jumping || (swimCheckState != null && !swimCheckState.getFluidState().isEmpty())) {
++            // Confetti end
+                 Vec3 vec3d1 = this.getDeltaMovement();
+ 
+                 this.setDeltaMovement(vec3d1.add(0.0D, (d0 - vec3d1.y) * d1, 0.0D));
+@@ -1744,7 +1747,10 @@ public abstract class Player extends LivingEntity {
+     }
+ 
+     protected boolean freeAt(BlockPos pos) {
+-        return !this.level().getBlockState(pos).isSuffocating(this.level(), pos);
++        // Confetti start - use thread-safe variant
++        BlockState state = this.level().getBlockStateIfLoaded(pos);
++        return state == null || !state.isSuffocating(this.level(), pos);
++        // Confetti end
+     }
+ 
+     @Override
+@@ -1837,7 +1843,13 @@ public abstract class Player extends LivingEntity {
+             BlockPos blockposition1 = this.getPrimaryStepSoundBlockPos(pos);
+ 
+             if (!pos.equals(blockposition1)) {
+-                BlockState iblockdata1 = this.level().getBlockState(blockposition1);
++                // Confetti start - use thread-safe variant
++                BlockState iblockdata1 = this.level().getBlockStateIfLoaded(blockposition1);
++                if (iblockdata1 == null) {
++                    super.playStepSound(pos, state);
++                    return;
++                }
++                // Confetti end
+ 
+                 if (iblockdata1.is(BlockTags.COMBINATION_STEP_SOUND_BLOCKS)) {
+                     this.playCombinationStepSounds(iblockdata1, state);
