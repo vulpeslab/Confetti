@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Fri, 2 Jan 2026 16:55:39 +0100
+Subject: [PATCH] Fix deadlock in BlockCollisions when loading chunks from
+ wrong thread
+
+When a player moves and collision checking is triggered, the server thread
+may attempt to synchronously load a chunk that belongs to a region locked
+by a ConfettiTickThread. This causes a deadlock because syncLoad calls
+completable.join() but the chunk can only be loaded by the thread that
+owns the region.
+
+The fix adds a check to verify we're on the correct tick thread before
+allowing synchronous chunk loading. If we're not on the correct thread,
+we fall back to getBlockStateIfLoaded which returns null for unloaded
+chunks instead of blocking.
+
+diff --git a/src/main/java/net/minecraft/world/level/BlockCollisions.java b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+index cd89623a44f02d7db77f0d0f87545cf80841f403..1d404ea5f49b6e9224d60ee78696f80da8ed28a5 100644
+--- a/src/main/java/net/minecraft/world/level/BlockCollisions.java
++++ b/src/main/java/net/minecraft/world/level/BlockCollisions.java
+@@ -84,8 +84,11 @@ public class BlockCollisions<T> extends AbstractIterator<T> {
+                            continue;
+                         }
+                         blockState = blockGetter.getBlockState(this.pos);
+-                    } else if ((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks)) {
++                    // Confetti start - don't load chunks unless we're on the correct tick thread to prevent deadlocks
++                    } else if (((!far && source instanceof net.minecraft.server.level.ServerPlayer) || (source != null && source.collisionLoadChunks))
++                            && (!(this.collisionGetter instanceof net.minecraft.server.level.ServerLevel level) || ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(level, x >> 4, z >> 4))) {
+                         blockState = this.collisionGetter.getBlockState(this.pos);
++                    // Confetti end
+                     } else {
+                         blockState = this.collisionGetter.getBlockStateIfLoaded(this.pos);
+                     }
