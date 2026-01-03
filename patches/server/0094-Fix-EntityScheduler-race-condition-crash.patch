@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 17:17:14 +0100
+Subject: [PATCH] Fix EntityScheduler race condition crash
+
+Change executeTick() to gracefully handle retired schedulers instead of throwing.
+In a multithreaded environment, the scheduler can be retired between the isRemoved()
+check and executeTick() call, causing a race condition crash with many players.
+
+diff --git a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+index 520861e350c66836f4fc7edb616acb4d5dfb802a..df93df7ee3b0103aa44f6ee5c629963c6305f16a 100644
+--- a/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
++++ b/src/main/java/io/papermc/paper/threadedregions/EntityScheduler.java
+@@ -138,18 +138,23 @@ public final class EntityScheduler {
+     /**
+      * Executes a tick for the scheduler.
+      *
+-     * @throws IllegalStateException If the scheduler is retired.
++     * @return {@code true} if the tick was executed, {@code false} if the scheduler is retired.
+      */
+-    public void executeTick() {
++    public boolean executeTick() { // Confetti - return boolean instead of throwing
+         final Entity thisEntity = this.entity.getHandleRaw();
+ 
+-        TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
++        // Confetti start - skip tick thread check for ConfettiTickThreads (cross-dimension operations)
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            TickThread.ensureTickThread(thisEntity, "May not tick entity scheduler asynchronously");
++        }
++        // Confetti end
+         final List<ScheduledTask> toRun;
+         synchronized (this.stateLock) {
++            // Confetti start - gracefully handle retired scheduler (can happen due to race conditions in multithreaded environment)
+             if (this.tickCount == RETIRED_TICK_COUNT) {
+-                LogUtils.getClassLogger().error("Tried to execute tick on entity, but was retired here: {}", this.entity.getHandle(), retiredReason); // Confetti
+-                throw new IllegalStateException("Ticking retired scheduler");
++                return false; // Just skip instead of throwing
+             }
++            // Confetti end
+             ++this.tickCount;
+             if (this.oneTimeDelayed.isEmpty()) {
+                 toRun = null;
+@@ -181,5 +186,6 @@ public final class EntityScheduler {
+                 break;
+             }
+         }
++        return true; // Confetti
+     }
+ }
