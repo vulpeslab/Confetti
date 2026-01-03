@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 14:38:15 +0100
+Subject: [PATCH] Fix: canSyncLoadChunk for proper sync load gating
+
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java b/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
+index 3f5f34f488132a6fa4fe85653419a6a6d1cafd57..47f19879bbe57691db39b508aabacf4af5ce7a80 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
+@@ -113,18 +113,17 @@ public class TickThread extends Thread {
+     public static boolean isTickThreadFor(final Level world, final int chunkX, final int chunkZ) {
+         // Confetti start - check region lock
+         if (world instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+-            // For ConfettiTickThreads, check if they hold the region lock
+             if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                 return com.vulpeslab.confetti.Confetti.isSync(serverLevel, new net.minecraft.world.level.ChunkPos(chunkX, chunkZ));
+             }
+-            // The Server thread is allowed to process any entity/chunk (for packet handling, etc.)
+-            // but should use canSyncLoadChunk() to check if sync chunk loading is safe
++            // For the server thread, allow processing any chunk for validation purposes
++            // (packet handling, etc.) - actual sync chunk loading is gated by canSyncLoadChunk()
+             net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
+             if (server != null && Thread.currentThread() == server.getRunningThread()) {
+-                return true; // Server thread is allowed to work with any chunk
++                // Server thread is conceptually allowed to work with any entity/chunk,
++                // but sync chunk loading should use canSyncLoadChunk() instead
++                return true;
+             }
+-            // For any other thread in a ServerLevel, check if they hold the lock
+-            return com.vulpeslab.confetti.Confetti.isSync(serverLevel, new net.minecraft.world.level.ChunkPos(chunkX, chunkZ));
+         }
+         // Confetti end
+         return isTickThread();
+@@ -134,7 +133,9 @@ public class TickThread extends Thread {
+     /**
+      * Checks if the current thread can safely perform synchronous chunk loading for the given chunk.
+      * This is more restrictive than isTickThreadFor() - the Server thread is NOT allowed to do sync
+-     * chunk loads even though it passes isTickThreadFor() checks.
++     * chunk loads even though it passes isTickThreadFor() checks for validation.
++     *
++     * Only threads that actually hold the region lock should do sync chunk loads.
+      */
+     public static boolean canSyncLoadChunk(final Level world, final int chunkX, final int chunkZ) {
+         if (!(world instanceof net.minecraft.server.level.ServerLevel serverLevel)) {

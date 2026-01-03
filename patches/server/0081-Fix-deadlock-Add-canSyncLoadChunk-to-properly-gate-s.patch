@@ -1,0 +1,580 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 14:32:13 +0100
+Subject: [PATCH] Fix deadlock: Add canSyncLoadChunk to properly gate sync
+ chunk loads
+
+The Server thread should never do sync chunk loads as it doesn't hold any region locks.
+Previously, isTickThreadFor() was used to decide whether to use sync or async chunk
+loading, but the Server thread was incorrectly treated as 'on tick thread' due to
+fallback logic that returned true for any TickThread.
+
+This fix:
+1. Changes isTickThreadFor() to explicitly return true for the Server thread
+   (so validation/ensureTickThread checks pass for packet handling)
+2. Adds canSyncLoadChunk() method that returns FALSE for the Server thread
+   (so sync chunk loading is prevented)
+3. Updates Entity.move and ServerLevel.doBlockEvent to use canSyncLoadChunk()
+   for the chunk loading decision
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java b/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
+index 11b7f15755dde766140c29bedca456c80d53293f..3f5f34f488132a6fa4fe85653419a6a6d1cafd57 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
++++ b/src/main/java/ca/spottedleaf/moonrise/common/util/TickThread.java
+@@ -6,6 +6,7 @@ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
++import net.minecraft.util.Mth; // Confetti
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -98,42 +99,80 @@ public class TickThread extends Thread {
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final BlockPos pos) {
+-        return isTickThread();
++        return isTickThreadFor(world, pos.getX() >> 4, pos.getZ() >> 4);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final ChunkPos pos) {
+-        return isTickThread();
++        return isTickThreadFor(world, pos.x, pos.z);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final Vec3 pos) {
+-        return isTickThread();
++        return isTickThreadFor(world, net.minecraft.util.Mth.floor(pos.x) >> 4, net.minecraft.util.Mth.floor(pos.z) >> 4);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final int chunkX, final int chunkZ) {
++        // Confetti start - check region lock
++        if (world instanceof net.minecraft.server.level.ServerLevel serverLevel) {
++            // For ConfettiTickThreads, check if they hold the region lock
++            if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                return com.vulpeslab.confetti.Confetti.isSync(serverLevel, new net.minecraft.world.level.ChunkPos(chunkX, chunkZ));
++            }
++            // The Server thread is allowed to process any entity/chunk (for packet handling, etc.)
++            // but should use canSyncLoadChunk() to check if sync chunk loading is safe
++            net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
++            if (server != null && Thread.currentThread() == server.getRunningThread()) {
++                return true; // Server thread is allowed to work with any chunk
++            }
++            // For any other thread in a ServerLevel, check if they hold the lock
++            return com.vulpeslab.confetti.Confetti.isSync(serverLevel, new net.minecraft.world.level.ChunkPos(chunkX, chunkZ));
++        }
++        // Confetti end
+         return isTickThread();
+     }
+ 
++    // Confetti start - separate method to check if sync chunk loading is safe
++    /**
++     * Checks if the current thread can safely perform synchronous chunk loading for the given chunk.
++     * This is more restrictive than isTickThreadFor() - the Server thread is NOT allowed to do sync
++     * chunk loads even though it passes isTickThreadFor() checks.
++     */
++    public static boolean canSyncLoadChunk(final Level world, final int chunkX, final int chunkZ) {
++        if (!(world instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
++            return isTickThread();
++        }
++        // Only threads that actually hold the region lock can do sync chunk loads
++        // This prevents the Server thread (and any other thread) from deadlocking
++        return com.vulpeslab.confetti.Confetti.isSync(serverLevel, new net.minecraft.world.level.ChunkPos(chunkX, chunkZ));
++    }
++    // Confetti end
++
+     public static boolean isTickThreadFor(final Level world, final AABB aabb) {
+-        return isTickThread();
++        return isTickThreadFor(world, net.minecraft.util.Mth.floor(aabb.minX) >> 4, net.minecraft.util.Mth.floor(aabb.minZ) >> 4, net.minecraft.util.Mth.floor(aabb.maxX) >> 4, net.minecraft.util.Mth.floor(aabb.maxZ) >> 4);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final double blockX, final double blockZ) {
+-        return isTickThread();
++        return isTickThreadFor(world, net.minecraft.util.Mth.floor(blockX) >> 4, net.minecraft.util.Mth.floor(blockZ) >> 4);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final Vec3 position, final Vec3 deltaMovement, final int buffer) {
+-        return isTickThread();
++        // Just check the current position, it's usually enough
++        return isTickThreadFor(world, position);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final int fromChunkX, final int fromChunkZ, final int toChunkX, final int toChunkZ) {
+-        return isTickThread();
++        return isTickThreadFor(world, fromChunkX, fromChunkZ) && isTickThreadFor(world, toChunkX, toChunkZ);
+     }
+ 
+     public static boolean isTickThreadFor(final Level world, final int chunkX, final int chunkZ, final int radius) {
+-        return isTickThread();
++        for (int x = chunkX - radius; x <= chunkX + radius; x++) {
++            for (int z = chunkZ - radius; z <= chunkZ + radius; z++) {
++                if (!isTickThreadFor(world, x, z)) return false;
++            }
++        }
++        return true;
+     }
+ 
+     public static boolean isTickThreadFor(final Entity entity) {
+-        return isTickThread();
++        return isTickThreadFor(entity.level(), entity.chunkPosition());
+     }
+ }
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ThreadedTicketLevelPropagator.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ThreadedTicketLevelPropagator.java
+index 310a8f80debadd64c2d962ebf83b7d0505ce6e42..3bf18b3bb09c533fa5c70257a44394497101c591 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ThreadedTicketLevelPropagator.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ThreadedTicketLevelPropagator.java
+@@ -913,7 +913,6 @@ public abstract class ThreadedTicketLevelPropagator {
+                 // the decode operation then is val - 1, and the encode operation is val + 1
+                 final int xOff = (set & 3) - 1;
+                 final int zOff = ((set >>> 2) & 3) - 1;
+-                System.out.println("Encoded: (" + xOff + "," + zOff + ")");
+             }
+         }
+ 
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+index b6b13d6fb5b0406ca689a8616f1c7b6732f8c3e6..48c5564e5dd0e7702e5e7604fecf1d41a2dfd094 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -35,10 +35,6 @@ public class ConfettiChunkTicker {
+                 region -> futures.add(this.tickRegion(level, region, spawnState))
+         );
+ 
+-        if (!futures.isEmpty()) {
+-            LogUtils.getClassLogger().info("[Confetti] tickChunks: level={}, regions={}", level.dimension().location(), futures.size());
+-        }
+-
+         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+     }
+ 
+@@ -116,5 +112,4 @@ public class ConfettiChunkTicker {
+         }
+     }
+ 
+-}
+-
++}
+\ No newline at end of file
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+index a4de3e130cf9615b068fa671f717ad84784edb11..9284fff729589d99bbc373c40e68b159ae9af695 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+@@ -70,6 +70,11 @@ public class ConfettiRegionLocker {
+         int tries = 0;
+         RegionLock lock;
+         while ((lock = this.tryTakeLockNow(regionPos)) == null) {
++            // Confetti start - poll tasks on main thread to avoid deadlock
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                net.minecraft.server.MinecraftServer.getServer().pollTask();
++            }
++            // Confetti end
+             LockSupport.parkNanos(Math.min(100_000, 1_000 * (++tries)));
+         }
+         return lock;
+@@ -323,12 +328,17 @@ public class ConfettiRegionLocker {
+             return tailUnlockFuture = tailUnlockFuture.handle((v, ex) -> {
+                 // Run the next task regardless of whether previous completed normally or exceptionally
+                 try {
+-                    return nextTask.get();
++                    CompletableFuture<Void> result = nextTask.get();
++                    if (result == null) {
++                        com.mojang.logging.LogUtils.getClassLogger().error("nextTask.get() returned null in onUnlock callback!");
++                        return CompletableFuture.<Void>completedFuture(null);
++                    }
++                    return result;
+                 } catch (Exception e) {
+                     com.mojang.logging.LogUtils.getClassLogger().error("Exception scheduling unlock callback", e);
+                     return CompletableFuture.<Void>completedFuture(null);
+                 }
+-            }).thenCompose(f -> f);
++            }).thenCompose(f -> f != null ? f : CompletableFuture.completedFuture(null));
+         }
+     }
+ 
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+index e744454726f30cb4741c49bd0a71f6ed0ec8203d..12f968cc968a22bfdedc5ffadff930c5ac93df44 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+@@ -102,35 +102,22 @@ public class ConfettiRegionScheduler {
+         return a.uuid.compareTo(b.uuid);
+     }
+ 
+-    private static final java.util.concurrent.atomic.AtomicInteger runAttempts = new java.util.concurrent.atomic.AtomicInteger(0);
+-    private static final java.util.concurrent.atomic.AtomicInteger lockFails = new java.util.concurrent.atomic.AtomicInteger(0);
+-    private static final java.util.concurrent.atomic.AtomicInteger lockSuccesses = new java.util.concurrent.atomic.AtomicInteger(0);
+-    private static final java.util.concurrent.atomic.AtomicInteger completions = new java.util.concurrent.atomic.AtomicInteger(0);
+-
+     private void run(RegionPos regionPos, Runnable runnable, CompletableFuture<Void> future) {
+-        int attempt = runAttempts.incrementAndGet();
+-        if (attempt % 100 == 0) {
+-            com.mojang.logging.LogUtils.getClassLogger().info("[Confetti] run() attempt={}, lockFails={}, lockSuccesses={}, completions={}", attempt, lockFails.get(), lockSuccesses.get(), completions.get());
+-        }
+-        
+         ConfettiRegionLocker.RegionLock lock = null;
+         try {
+             lock = locker.tryTakeLockNow(regionPos);
+             if (lock == null) {
+-                lockFails.incrementAndGet();
+                 // Wait for unlock, then retry
+                 locker.onUnlock(regionPos, () -> CompletableFuture.runAsync(() -> run(regionPos, runnable, future), ConfettiTickThread.getExecutor()));
+                 return;
+             }
+ 
+-            lockSuccesses.incrementAndGet();
+             try {
+                 runnable.run();
+             } finally {
+                 lock.unlock();
+             }
+ 
+-            completions.incrementAndGet();
+             future.complete(null);
+         } catch (Exception e) {
+             future.completeExceptionally(e);
+diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
+index 94bdf8a7803002da1bb570c20b6b80bcf9e364de..c3e3208be72ea03ae9b666d3e982b30116b78711 100644
+--- a/src/main/java/net/minecraft/network/Connection.java
++++ b/src/main/java/net/minecraft/network/Connection.java
+@@ -631,7 +631,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+     public void tick() {
+         // Confetti start - only tick player connections on their owning thread
+         if (this.packetListener instanceof net.minecraft.server.network.ServerGamePacketListenerImpl serverGamePacketListener) {
+-            if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(serverGamePacketListener.player)) {
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                 return;
+             }
+         }
+diff --git a/src/main/java/net/minecraft/network/protocol/PacketUtils.java b/src/main/java/net/minecraft/network/protocol/PacketUtils.java
+index 01efbc507b3d58f13f78ee286f93df40cdc3f0cb..e66422016d7c3ce76aae2d696e4d43fa96c31847 100644
+--- a/src/main/java/net/minecraft/network/protocol/PacketUtils.java
++++ b/src/main/java/net/minecraft/network/protocol/PacketUtils.java
+@@ -13,6 +13,7 @@ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.RunningOnDifferentThreadException;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.network.ServerCommonPacketListenerImpl;
++import net.minecraft.server.network.ServerGamePacketListenerImpl; // Confetti
+ // CraftBukkit end
+ import net.minecraft.util.thread.BlockableEventLoop;
+ 
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index c7544bddccddb4fd071543506740b3ebaa4d6db8..5264229213aaa8cb93442120b280d37e08592cad 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1518,6 +1518,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     }
+ 
+     @Override
++    @Override
++    public void managedBlock(BooleanSupplier stopCondition) {
++        // Confetti start - use polling loop instead of managedBlock to avoid deadlock
++        while (!stopCondition.getAsBoolean()) {
++            if (!this.pollTask()) {
++                this.waitForTasks();
++            }
++        }
++        // Confetti end
++    }
++
+     public void waitForTasks() {
+         boolean flag = this.isTickTimeLoggingEnabled();
+         long i = flag ? Util.getNanos() : 0L;
+@@ -1553,25 +1564,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     }
+ 
+     private boolean pollTaskInternal() {
+-        if (super.pollTask()) {
++        boolean ret = super.pollTask();
++        if (ret) {
+             this.moonrise$executeMidTickTasks(); // Paper - rewrite chunk system
+-            return true;
+-        } else {
+-            boolean ret = false; // Paper - force execution of all worlds, do not just bias the first
+-            if (this.tickRateManager.isSprinting() || this.haveTime()) {
+-                Iterator iterator = this.getAllLevels().iterator();
+-
+-                while (iterator.hasNext()) {
+-                    ServerLevel worldserver = (ServerLevel) iterator.next();
++        }
+ 
+-                    if (worldserver.getChunkSource().pollTask()) {
+-                        ret = true; // Paper - force execution of all worlds, do not just bias the first
+-                    }
+-                }
++        // Confetti start - always poll all levels to prevent starvation
++        Iterator iterator = this.getAllLevels().iterator();
++        while (iterator.hasNext()) {
++            ServerLevel worldserver = (ServerLevel) iterator.next();
++            if (worldserver.getChunkSource().pollTask()) {
++                ret = true;
+             }
+-
+-            return ret; // Paper - force execution of all worlds, do not just bias the first
+         }
++        // Confetti end
++
++        return ret;
+     }
+ 
+     public void doRunTask(TickTask ticktask) { // CraftBukkit - decompile error
+@@ -1622,7 +1630,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     }
+ 
+     public void tickServer(BooleanSupplier shouldKeepTicking) {
+-        //co.aikar.timings.TimingsManager.FULL_SERVER_TICK.startTiming(); // Paper // Purpur
++        LOGGER.info("[Confetti] Running latest code version!"); // Confetti - debug
+         long i = Util.getNanos();
+ 
+         // Paper start - move oversleep into full server tick
+@@ -1877,30 +1885,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         while (!allFutures.isDone()) {
+             // Poll and process pending tasks to keep the server responsive
+             this.pollTaskInternal();
+-            pollCount++;
+             // Brief wait to avoid busy-spinning
+             if (!allFutures.isDone()) {
+                 try {
+                     allFutures.get(1, java.util.concurrent.TimeUnit.MILLISECONDS);
+                 } catch (java.util.concurrent.TimeoutException ignored) {
+                     // Expected - just continue the loop
+-                    long elapsed = System.currentTimeMillis() - waitStart;
+-                    if (elapsed > 5000 && elapsed % 1000 < 10) {
+-                        // Log every second after 5 seconds
+-                        int completedCount = 0;
+-                        for (CompletableFuture<Void> f : futures) {
+-                            if (f.isDone()) completedCount++;
+-                        }
+-                        LOGGER.warn("[Confetti] World tick futures taking too long: {}ms, completed={}/{}, pollCount={}", 
+-                            elapsed, completedCount, futures.size(), pollCount);
+-                    }
+-                    // Safety timeout - after 30 seconds, cancel and continue
+-                    if (elapsed > 30000) {
+-                        LOGGER.error("[Confetti] World tick futures timed out after 30s! Forcing continuation. completed={}/{}", 
+-                            futures.stream().filter(CompletableFuture::isDone).count(), futures.size());
+-                        allFutures.cancel(true);
+-                        break;
+-                    }
+                 } catch (java.util.concurrent.ExecutionException | InterruptedException e) {
+                     throw new RuntimeException("World tick failed", e);
+                 }
+diff --git a/src/main/java/net/minecraft/server/level/PlayerRespawnLogic.java b/src/main/java/net/minecraft/server/level/PlayerRespawnLogic.java
+index f9278db937cd90d857ce20cbaa66efe0dad81a63..f4f8efa0d78ed3130cfca5347908ec4be4b41549 100644
+--- a/src/main/java/net/minecraft/server/level/PlayerRespawnLogic.java
++++ b/src/main/java/net/minecraft/server/level/PlayerRespawnLogic.java
+@@ -44,23 +44,27 @@ public class PlayerRespawnLogic {
+         }
+     }
+ 
+-    @Nullable
+     public static BlockPos getSpawnPosInChunk(ServerLevel world, ChunkPos chunkPos) {
+-        if (SharedConstants.debugVoidTerrain(chunkPos)) {
+-            return null;
+-        } else {
+-            return world.chunkScheduler.getRegionLocker().lockRegion(RegionPos.forChunk(chunkPos), () -> { // Confetti - lock region
+-            for (int i = chunkPos.getMinBlockX(); i <= chunkPos.getMaxBlockX(); i++) {
+-                for (int j = chunkPos.getMinBlockZ(); j <= chunkPos.getMaxBlockZ(); j++) {
+-                    BlockPos blockPos = getOverworldRespawnPos(world, i, j);
+-                    if (blockPos != null) {
+-                        return blockPos;
+-                    }
++        world.getChunk(chunkPos.x, chunkPos.z); // Confetti - force load chunk before locking region to avoid deadlock
++        return world.chunkScheduler.getRegionLocker().lockRegion(RegionPos.forChunk(chunkPos), () -> { // Confetti - lock region
++            LevelChunk chunk = world.getChunk(chunkPos.x, chunkPos.z);
++            int i = chunk.getMinBuildHeight();
++            boolean flag = world.dimensionType().hasCeiling();
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++
++            for (int j = chunk.getMaxBuildHeight(); j >= i; --j) {
++                blockposition_mutableblockposition.set(chunkPos.getMinBlockX() + 8, j, chunkPos.getMinBlockZ() + 8);
++                BlockState iblockdata = world.getBlockState(blockposition_mutableblockposition);
++                if (flag && !iblockdata.isAir()) {
++                    continue;
++                }
++
++                if (iblockdata.getFluidState().isEmpty() && iblockdata.getCollisionShape(world, blockposition_mutableblockposition).isEmpty()) {
++                    return blockposition_mutableblockposition.immutable();
+                 }
+             }
+ 
+             return null;
+-            }); // Confetti
+-        }
++        });
+     }
+ }
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 00c9bc2f2a03b0b438a4972b17523ecf250b1440..6b4ee31495f541ea63488f0d48e1670e86c38178 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -101,12 +101,13 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+             completable::complete
+         );
+ 
+-        // Confetti start - Never use managedBlock in multithreaded environment
+-        // managedBlock can cause deadlocks in Confetti because:
+-        // 1. On Server thread - can deadlock waiting for chunks locked by ConfettiTickThreads
+-        // 2. On ConfettiTickThread - can deadlock waiting for chunks in other locked regions
+-        // Instead, just join the future and let worker threads handle the chunk loading
+-        // Confetti end - Never use managedBlock in multithreaded environment
++        // Confetti start - use managedBlock when not on a ConfettiTickThread to avoid deadlock
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler.pushChunkWait(this.level, chunkX, chunkZ);
++            this.mainThreadProcessor.managedBlock(completable::isDone);
++            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler.popChunkWait();
++        }
++        // Confetti end - use managedBlock when not on a ConfettiTickThread to avoid deadlock
+ 
+         final ChunkAccess ret = completable.join();
+         if (ret == null) {
+@@ -728,9 +729,13 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+ 
+         @Override
+         public void managedBlock(BooleanSupplier stopCondition) {
+-            super.managedBlock(() -> {
+-                return MinecraftServer.throwIfFatalException() && stopCondition.getAsBoolean();
+-            });
++            // Confetti start - use polling loop instead of managedBlock to avoid deadlock
++            while (!stopCondition.getAsBoolean()) {
++                if (!this.pollTask()) {
++                    this.waitForTasks();
++                }
++            }
++            // Confetti end
+         }
+ 
+         @Override
+@@ -764,13 +769,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         public boolean pollTask() {
+             // Paper start - rewrite chunk system
+             final ServerChunkCache serverChunkCache = ServerChunkCache.this;
+-            if (serverChunkCache.runDistanceManagerUpdates()) {
+-                return true;
+-            } else {
+-                return super.pollTask() | ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)serverChunkCache.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
+-            }
+-            // Paper end - rewrite chunk system
+-        // CraftBukkit end
++            // Confetti start - ensure all task types get a chance to run
++            boolean ret = serverChunkCache.runDistanceManagerUpdates();
++            ret |= super.pollTask();
++            ret |= ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)serverChunkCache.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
++            return ret;
++            // Confetti end
+         }
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index cdb44dede0e8985dc674ae8bc0a584b7e059a44c..03e894fda7e625b1541158d7e13e4d7a3fbdbfcf 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -1902,7 +1902,17 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+     }
+ 
+     private boolean doBlockEvent(BlockEventData event) {
+-        BlockState iblockdata = this.getBlockState(event.pos());
++        // Confetti start - use getBlockStateIfLoaded when we don't hold the region lock to prevent deadlocks
++        BlockState iblockdata;
++        if (!ca.spottedleaf.moonrise.common.util.TickThread.canSyncLoadChunk(this, event.pos().getX() >> 4, event.pos().getZ() >> 4)) {
++            iblockdata = this.getBlockStateIfLoaded(event.pos());
++            if (iblockdata == null) {
++                return false; // Cannot trigger event if chunk is not loaded
++            }
++        } else {
++            iblockdata = this.getBlockState(event.pos());
++        }
++        // Confetti end
+ 
+         return iblockdata.is(event.block()) ? iblockdata.triggerEvent(this, event.pos(), event.paramA(), event.paramB()) : false;
+     }
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 1c238a64952054e9df1eee4cb5a18ca04e9d9b93..e5449723d5d2a3f4c791082151166d0e2518f362 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1227,10 +1227,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+             this.setOnGroundWithMovement(this.verticalCollisionBelow, vec3d1);
+             BlockPos blockposition = this.getOnPosLegacy();
+-            // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
+-            // The Server thread IS a TickThread but NOT a ConfettiTickThread
++            // Confetti start - don't do sync chunk loads unless we hold the region lock to prevent deadlocks
+             BlockState iblockdata;
+-            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
++                    && !ca.spottedleaf.moonrise.common.util.TickThread.canSyncLoadChunk(serverLevel, blockposition.getX() >> 4, blockposition.getZ() >> 4)) {
+                 iblockdata = this.level().getBlockStateIfLoaded(blockposition);
+                 if (iblockdata == null) {
+                     iblockdata = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
+@@ -1291,9 +1291,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+                     this.flyDist += (float) (vec3d1.length() * 0.6D);
+                     BlockPos blockposition1 = this.getOnPos();
+-                    // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
++                    // Confetti start - use non-blocking IfLoaded variant when on ConfettiTickThread to prevent deadlocks
+                     BlockState iblockdata1;
+-                    if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                    if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                         iblockdata1 = this.level().getBlockStateIfLoaded(blockposition1);
+                         if (iblockdata1 == null) {
+                             iblockdata1 = Blocks.AIR.defaultBlockState(); // Fallback to air if chunk not loaded
+@@ -2001,9 +2001,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         if (this.isSwimming()) {
+             this.setSwimming(this.isSprinting() && this.isInWater() && !this.isPassenger());
+         } else {
+-            // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
++            // Confetti start - use non-blocking IfLoaded variant when on ConfettiTickThread to prevent deadlocks
+             FluidState fluidState;
+-            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+                 fluidState = this.level().getFluidIfLoaded(this.blockPosition);
+             } else {
+                 fluidState = this.level().getFluidState(this.blockPosition);
+@@ -2060,9 +2060,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         }
+ 
+         BlockPos blockposition = BlockPos.containing(this.getX(), d0, this.getZ());
+-        // Confetti start - don't load chunks unless we're on a ConfettiTickThread to prevent deadlocks
++        // Confetti start - use non-blocking IfLoaded variant when on ConfettiTickThread to prevent deadlocks
+         FluidState fluid;
+-        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+             fluid = this.level().getFluidIfLoaded(blockposition);
+             if (fluid == null) {
+                 return; // Chunk not loaded, skip fluid check
+@@ -3006,8 +3006,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         final int maxZ = Mth.floor(box.maxZ);
+ 
+         final net.minecraft.world.level.chunk.ChunkSource chunkProvider = this.level.getChunkSource();
+-        // Confetti start - don't force load chunks if not on ConfettiTickThread to prevent deadlocks
+-        final boolean forceLoad = com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
++        // Confetti start - never force load chunks when on ConfettiTickThread to prevent deadlocks
++        // When holding a region lock, blocking chunk loads could deadlock with other regions
++        final boolean forceLoad = !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
+         // Confetti end
+ 
+         long lastChunkKey = ChunkPos.INVALID_CHUNK_POS;
+@@ -4668,8 +4669,8 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             Vec3 vec3d = Vec3.ZERO;
+             int k1 = 0;
+             BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+-            // Confetti start - use getFluidIfLoaded to prevent deadlocks in multithreaded environment
+-            final boolean useIfLoaded = !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
++            // Confetti start - use getFluidIfLoaded to prevent deadlocks when holding region locks
++            final boolean useIfLoaded = com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
+             // Confetti end
+ 
+             for (int l1 = i; l1 < j; ++l1) {
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index eda7927921db40a258ae39efd3d819c6b996c5b2..a48bf30466646264bc34f6670f2193084ee54404 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -848,11 +848,7 @@ public class LevelChunk extends ChunkAccess implements ca.spottedleaf.moonrise.p
+             }
+         }
+ 
+-        UnmodifiableIterator unmodifiableiterator = ImmutableList.copyOf(this.pendingBlockEntities.keySet()).iterator();
+-
+-        while (unmodifiableiterator.hasNext()) {
+-            BlockPos blockposition1 = (BlockPos) unmodifiableiterator.next();
+-
++        for (BlockPos blockposition1 : new java.util.ArrayList<>(this.pendingBlockEntities.keySet())) {
+             this.getBlockEntity(blockposition1);
+         }
+ 

@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 14:33:52 +0100
+Subject: [PATCH] Fix duplicate managedBlock method
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 5264229213aaa8cb93442120b280d37e08592cad..ad415cde4c3119c5fcef6c5665c2c4431f795448 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1505,9 +1505,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+ 
+     @Override
+     public void managedBlock(BooleanSupplier stopCondition) {
+-        super.managedBlock(() -> {
+-            return MinecraftServer.throwIfFatalException() && stopCondition.getAsBoolean();
+-        });
++        // Confetti start - use polling loop instead of super.managedBlock to avoid deadlock
++        // Also check throwIfFatalException per Paper's original implementation
++        while (!stopCondition.getAsBoolean() && MinecraftServer.throwIfFatalException()) {
++            if (!this.pollTask()) {
++                this.waitForTasks();
++            }
++        }
++        // Confetti end
+     }
+ 
+     protected void waitUntilNextTick() {
+@@ -1517,18 +1522,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         });
+     }
+ 
+-    @Override
+-    @Override
+-    public void managedBlock(BooleanSupplier stopCondition) {
+-        // Confetti start - use polling loop instead of managedBlock to avoid deadlock
+-        while (!stopCondition.getAsBoolean()) {
+-            if (!this.pollTask()) {
+-                this.waitForTasks();
+-            }
+-        }
+-        // Confetti end
+-    }
+-
+     public void waitForTasks() {
+         boolean flag = this.isTickTimeLoggingEnabled();
+         long i = flag ? Util.getNanos() : 0L;

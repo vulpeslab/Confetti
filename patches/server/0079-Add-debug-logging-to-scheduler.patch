@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 10:36:35 +0100
+Subject: [PATCH] Add debug logging to scheduler
+
+
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+index 3df7d18e738668560bc2997e24a37b32324fd0fe..b6b13d6fb5b0406ca689a8616f1c7b6732f8c3e6 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
+@@ -35,6 +35,10 @@ public class ConfettiChunkTicker {
+                 region -> futures.add(this.tickRegion(level, region, spawnState))
+         );
+ 
++        if (!futures.isEmpty()) {
++            LogUtils.getClassLogger().info("[Confetti] tickChunks: level={}, regions={}", level.dimension().location(), futures.size());
++        }
++
+         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+     }
+ 
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+index 212360c13391213f6528f9cf2d05fe207d6231b0..d7654f4c77f57deda0ca0519e292943279daa3f1 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+@@ -102,22 +102,35 @@ public class ConfettiRegionScheduler {
+         return a.uuid.compareTo(b.uuid);
+     }
+ 
++    private static final java.util.concurrent.atomic.AtomicInteger runAttempts = new java.util.concurrent.atomic.AtomicInteger(0);
++    private static final java.util.concurrent.atomic.AtomicInteger lockFails = new java.util.concurrent.atomic.AtomicInteger(0);
++    private static final java.util.concurrent.atomic.AtomicInteger lockSuccesses = new java.util.concurrent.atomic.AtomicInteger(0);
++    private static final java.util.concurrent.atomic.AtomicInteger completions = new java.util.concurrent.atomic.AtomicInteger(0);
++
+     private void run(RegionPos regionPos, Runnable runnable, CompletableFuture<Void> future) {
++        int attempt = runAttempts.incrementAndGet();
++        if (attempt % 100 == 0) {
++            com.mojang.logging.LogUtils.getClassLogger().info("[Confetti] run() attempt={}, lockFails={}, lockSuccesses={}, completions={}", attempt, lockFails.get(), lockSuccesses.get(), completions.get());
++        }
++        
+         ConfettiRegionLocker.RegionLock lock = null;
+         try {
+             lock = locker.tryTakeLockNow(regionPos);
+             if (lock == null) {
++                lockFails.incrementAndGet();
+                 // Wait for unlock, then retry
+                 locker.onUnlock(regionPos, () -> CompletableFuture.runAsync(() -> run(regionPos, runnable, future), ConfettiTickThread.getExecutor()));
+                 return;
+             }
+ 
++            lockSuccesses.incrementAndGet();
+             try {
+                 runnable.run();
+             } finally {
+                 lock.unlock();
+             }
+ 
++            completions.incrementAndGet();
+             future.complete(null);
+         } catch (Exception e) {
+             future.completeExceptionally(e);

@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 10:50:51 +0100
+Subject: [PATCH] Fix callback chain breaking on exceptions and add timeout
+ safety
+
+
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+index 163d2e72e5e0d220b7c7675d5ffcba1b9792a8c0..a4de3e130cf9615b068fa671f717ad84784edb11 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionLocker.java
+@@ -191,7 +191,13 @@ public class ConfettiRegionLocker {
+             }
+         }
+ 
+-        return nextTask.get();
++        // No locked region found, run immediately
++        try {
++            return nextTask.get();
++        } catch (Exception e) {
++            com.mojang.logging.LogUtils.getClassLogger().error("Exception in immediate unlock callback", e);
++            return CompletableFuture.completedFuture(null);
++        }
+     }
+ 
+     public interface RegionLock {
+@@ -312,8 +318,17 @@ public class ConfettiRegionLocker {
+         }
+ 
+         // Confetti - synchronized to prevent race condition in tailUnlockFuture assignment
++        // Confetti - use handle() to ensure exceptions don't break the callback chain
+         public synchronized CompletableFuture<Void> onUnlock(Supplier<CompletableFuture<Void>> nextTask) {
+-            return tailUnlockFuture = tailUnlockFuture.thenCompose(v -> nextTask.get());
++            return tailUnlockFuture = tailUnlockFuture.handle((v, ex) -> {
++                // Run the next task regardless of whether previous completed normally or exceptionally
++                try {
++                    return nextTask.get();
++                } catch (Exception e) {
++                    com.mojang.logging.LogUtils.getClassLogger().error("Exception scheduling unlock callback", e);
++                    return CompletableFuture.<Void>completedFuture(null);
++                }
++            }).thenCompose(f -> f);
+         }
+     }
+ 
+diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+index d7654f4c77f57deda0ca0519e292943279daa3f1..e744454726f30cb4741c49bd0a71f6ed0ec8203d 100644
+--- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
++++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
+@@ -147,7 +147,12 @@ public class ConfettiRegionScheduler {
+                     for (int j = i - 1; j >= 0; j--) {
+                         if (locks[j] != null) locks[j].unlock();
+                     }
+-                    locker.onUnlock(regionPosArray[i], () -> CompletableFuture.runAsync(() -> runOnMany(regionPosArray, runnable, future), ConfettiTickThread.getExecutor()));
++                    try {
++                        locker.onUnlock(regionPosArray[i], () -> CompletableFuture.runAsync(() -> runOnMany(regionPosArray, runnable, future), ConfettiTickThread.getExecutor()));
++                    } catch (Exception e) {
++                        com.mojang.logging.LogUtils.getClassLogger().error("Failed to schedule retry for regions", e);
++                        future.completeExceptionally(e);
++                    }
+                     return;
+                 }
+             }
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index f114726019178125f970bf6b706dd82b02c49bc4..c7544bddccddb4fd071543506740b3ebaa4d6db8 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1872,15 +1872,35 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         
+         // Wait for all world tick futures to complete while still processing server tasks
+         CompletableFuture<Void> allFutures = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
++        long waitStart = System.currentTimeMillis();
++        int pollCount = 0;
+         while (!allFutures.isDone()) {
+             // Poll and process pending tasks to keep the server responsive
+             this.pollTaskInternal();
++            pollCount++;
+             // Brief wait to avoid busy-spinning
+             if (!allFutures.isDone()) {
+                 try {
+                     allFutures.get(1, java.util.concurrent.TimeUnit.MILLISECONDS);
+                 } catch (java.util.concurrent.TimeoutException ignored) {
+                     // Expected - just continue the loop
++                    long elapsed = System.currentTimeMillis() - waitStart;
++                    if (elapsed > 5000 && elapsed % 1000 < 10) {
++                        // Log every second after 5 seconds
++                        int completedCount = 0;
++                        for (CompletableFuture<Void> f : futures) {
++                            if (f.isDone()) completedCount++;
++                        }
++                        LOGGER.warn("[Confetti] World tick futures taking too long: {}ms, completed={}/{}, pollCount={}", 
++                            elapsed, completedCount, futures.size(), pollCount);
++                    }
++                    // Safety timeout - after 30 seconds, cancel and continue
++                    if (elapsed > 30000) {
++                        LOGGER.error("[Confetti] World tick futures timed out after 30s! Forcing continuation. completed={}/{}", 
++                            futures.stream().filter(CompletableFuture::isDone).count(), futures.size());
++                        allFutures.cancel(true);
++                        break;
++                    }
+                 } catch (java.util.concurrent.ExecutionException | InterruptedException e) {
+                     throw new RuntimeException("World tick failed", e);
+                 }
