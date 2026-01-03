@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_version:
+        description: 'Increment build number before release'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Git Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          cache: 'gradle'
+          distribution: 'temurin'
+
+      - name: Configure Git User Details
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "Github Actions"
+
+      - name: Extract version info
+        id: version
+        run: |
+          MC_VERSION=$(grep 'mcVersion' gradle.properties | cut -d'=' -f2 | tr -d ' ')
+          CURRENT_VERSION=$(grep '^version' gradle.properties | cut -d'=' -f2 | tr -d ' ')
+          CURRENT_BUILD=$(echo "$CURRENT_VERSION" | grep -oP 'build\.\K[0-9]+' || echo "0")
+          echo "mc_version=$MC_VERSION" >> $GITHUB_OUTPUT
+          echo "current_build=$CURRENT_BUILD" >> $GITHUB_OUTPUT
+          echo "Current: MC $MC_VERSION, Build $CURRENT_BUILD"
+
+      - name: Increment build number
+        if: ${{ inputs.bump_version }}
+        id: bump
+        run: |
+          MC_VERSION="${{ steps.version.outputs.mc_version }}"
+          CURRENT_BUILD="${{ steps.version.outputs.current_build }}"
+          NEW_BUILD=$((CURRENT_BUILD + 1))
+          NEW_VERSION="${MC_VERSION}-build.${NEW_BUILD}"
+          sed -i "s/^version = .*/version = ${NEW_VERSION}/" gradle.properties
+          echo "new_build=$NEW_BUILD" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped to: $NEW_VERSION"
+
+      - name: Use current version (no bump)
+        if: ${{ !inputs.bump_version }}
+        id: nobump
+        run: |
+          MC_VERSION="${{ steps.version.outputs.mc_version }}"
+          CURRENT_BUILD="${{ steps.version.outputs.current_build }}"
+          echo "new_build=$CURRENT_BUILD" >> $GITHUB_OUTPUT
+          echo "new_version=${MC_VERSION}-build.${CURRENT_BUILD}" >> $GITHUB_OUTPUT
+
+      - name: Set final version
+        id: final
+        run: |
+          if [ "${{ inputs.bump_version }}" == "true" ]; then
+            echo "version=${{ steps.bump.outputs.new_version }}" >> $GITHUB_OUTPUT
+            echo "build=${{ steps.bump.outputs.new_build }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.nobump.outputs.new_version }}" >> $GITHUB_OUTPUT
+            echo "build=${{ steps.nobump.outputs.new_build }}" >> $GITHUB_OUTPUT
+          fi
+          echo "mc_version=${{ steps.version.outputs.mc_version }}" >> $GITHUB_OUTPUT
+
+      - name: Apply Patches
+        run: ./gradlew applyPatches --stacktrace
+
+      - name: Build Paperclip jar
+        run: ./gradlew createMojmapPaperclipJar --stacktrace
+
+      - name: Prepare release artifact
+        id: artifact
+        run: |
+          VERSION="${{ steps.final.outputs.version }}"
+          JAR_NAME="confetti-${VERSION}.jar"
+          SOURCE_JAR=$(ls build/libs/confetti-paperclip-*-mojmap.jar | head -1)
+          cp "$SOURCE_JAR" "build/libs/${JAR_NAME}"
+          SHA256=$(sha256sum "build/libs/${JAR_NAME}" | cut -d' ' -f1)
+          echo "jar_name=$JAR_NAME" >> $GITHUB_OUTPUT
+          echo "jar_path=build/libs/${JAR_NAME}" >> $GITHUB_OUTPUT
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        if: ${{ inputs.bump_version }}
+        run: |
+          git add gradle.properties
+          git commit -m "Bump version to ${{ steps.final.outputs.version }}"
+          git push
+
+      - name: Create and push tag
+        run: |
+          TAG="v${{ steps.final.outputs.version }}"
+          git tag -a "$TAG" -m "Release ${{ steps.final.outputs.version }}"
+          git push origin "$TAG"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag for this MC version
+          MC_VERSION="${{ steps.final.outputs.mc_version }}"
+          CURRENT_TAG="v${{ steps.final.outputs.version }}"
+          PREV_TAG=$(git tag -l "v${MC_VERSION}-build.*" | grep -v "$CURRENT_TAG" | sort -V | tail -1 || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating changelog from $PREV_TAG to $CURRENT_TAG"
+            CHANGELOG=$(git log --pretty=format:"- %s" "$PREV_TAG".."$CURRENT_TAG" --no-merges | head -50)
+          else
+            echo "No previous tag found, using recent commits"
+            CHANGELOG=$(git log --pretty=format:"- %s" -20 --no-merges)
+          fi
+
+          # Escape for GitHub Actions
+          CHANGELOG="${CHANGELOG//'%'/'%25'}"
+          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+          CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
+          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.final.outputs.version }}
+          name: Confetti ${{ steps.final.outputs.version }}
+          body: |
+            ## Confetti ${{ steps.final.outputs.version }}
+
+            **Minecraft Version:** ${{ steps.final.outputs.mc_version }}
+            **Build:** ${{ steps.final.outputs.build }}
+
+            ### Changes
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Checksums
+            **SHA-256:** `${{ steps.artifact.outputs.sha256 }}`
+
+            ### Installation
+            1. Download `${{ steps.artifact.outputs.jar_name }}`
+            2. Place in your server directory
+            3. Run with `java -jar ${{ steps.artifact.outputs.jar_name }}`
+          files: ${{ steps.artifact.outputs.jar_path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.final.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** v${{ steps.final.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **JAR:** ${{ steps.artifact.outputs.jar_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **SHA-256:** \`${{ steps.artifact.outputs.sha256 }}\`" >> $GITHUB_STEP_SUMMARY

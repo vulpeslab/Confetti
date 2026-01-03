@@ -1,25 +1,46 @@
-name: Generate Jars
-on: [ push, pull_request ]
+name: Build
+
+on:
+  push:
+    branches: ['*']
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  pull_request:
+    branches: ['*']
+
 jobs:
-  paperclip:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Git Repository
         uses: actions/checkout@v4
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           cache: 'gradle'
           distribution: 'temurin'
+
       - name: Configure Git User Details
         run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions"
+
+      - name: Extract version info
+        id: version
+        run: |
+          VERSION=$(grep '^version' gradle.properties | cut -d'=' -f2 | tr -d ' ')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Apply Patches
         run: ./gradlew applyPatches --stacktrace
+
       - name: Build Paperclip jar
         run: ./gradlew createMojmapPaperclipJar --stacktrace
+
       - name: Upload Paperclip jar
         uses: actions/upload-artifact@v4
         with:
-          name: confetti.jar
+          name: confetti-${{ steps.version.outputs.version }}
           path: build/libs/confetti-paperclip-*-mojmap.jar
