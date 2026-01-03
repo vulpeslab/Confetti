@@ -44,10 +44,10 @@ index 163d2e72e5e0d220b7c7675d5ffcba1b9792a8c0..a4de3e130cf9615b068fa671f717ad84
      }
  
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
-index d7654f4c77f57deda0ca0519e292943279daa3f1..e744454726f30cb4741c49bd0a71f6ed0ec8203d 100644
+index 212360c13391213f6528f9cf2d05fe207d6231b0..12f968cc968a22bfdedc5ffadff930c5ac93df44 100644
 --- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
-@@ -147,7 +147,12 @@ public class ConfettiRegionScheduler {
+@@ -134,7 +134,12 @@ public class ConfettiRegionScheduler {
                      for (int j = i - 1; j >= 0; j--) {
                          if (locks[j] != null) locks[j].unlock();
                      }

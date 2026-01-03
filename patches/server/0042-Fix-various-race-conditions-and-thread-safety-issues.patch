@@ -894,23 +894,24 @@ index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59
                          this.removePlayer(player);
                      }
 diff --git a/src/main/java/net/minecraft/server/level/PlayerMap.java b/src/main/java/net/minecraft/server/level/PlayerMap.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..f58fcae82cd87e29ea172adbf479ca84f6336fb1
---- /dev/null
+index 12f1345ff70388fb217100bfc717ef861785381d..f58fcae82cd87e29ea172adbf479ca84f6336fb1 100644
+--- a/src/main/java/net/minecraft/server/level/PlayerMap.java
 +++ b/src/main/java/net/minecraft/server/level/PlayerMap.java
-@@ -0,0 +1,48 @@
-+package net.minecraft.server.level;
-+
-+import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
-+import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
+@@ -2,36 +2,47 @@ package net.minecraft.server.level;
+ 
+ import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
+ import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
 +import com.vulpeslab.confetti.util.SimpleStampedLock;
 +
 +import java.util.List;
-+import java.util.Set;
+ import java.util.Set;
 +import java.util.concurrent.CopyOnWriteArrayList;
-+
-+public final class PlayerMap {
-+    private final Object2BooleanMap<ServerPlayer> players = new Object2BooleanOpenHashMap<>();
+ 
+ public final class PlayerMap {
+     private final Object2BooleanMap<ServerPlayer> players = new Object2BooleanOpenHashMap<>();
+-
+-    public Set<ServerPlayer> getAllPlayers() {
+-        return this.players.keySet();
 +    private final SimpleStampedLock playersLock = new SimpleStampedLock(); // Confetti
 +    private final CopyOnWriteArrayList<ServerPlayer> playersList = new CopyOnWriteArrayList<>(); // Confetti
 +
@@ -919,34 +920,40 @@ index 0000000000000000000000000000000000000000..f58fcae82cd87e29ea172adbf479ca84
 +        //  - Players aren't added/removed often, so a CopyOnWriteArrayList is sufficient
 +        // return this.players.keySet(); // Confetti
 +        return this.playersList; // Confetti
-+    }
-+
-+    public void addPlayer(ServerPlayer player, boolean inactive) {
+     }
+ 
+     public void addPlayer(ServerPlayer player, boolean inactive) {
+-        this.players.put(player, inactive);
 +        this.playersLock.write(() -> this.players.put(player, inactive)); // Confetti
 +        this.playersList.add(player); // Confetti
-+    }
-+
-+    public void removePlayer(ServerPlayer player) {
+     }
+ 
+     public void removePlayer(ServerPlayer player) {
+-        this.players.removeBoolean(player);
 +        this.playersLock.write(() -> this.players.removeBoolean(player)); // Confetti
 +        this.playersList.remove(player); // Confetti
-+    }
-+
-+    public void ignorePlayer(ServerPlayer player) {
+     }
+ 
+     public void ignorePlayer(ServerPlayer player) {
+-        this.players.replace(player, true);
 +        this.playersLock.write(() -> this.players.replace(player, true)); // Confetti
-+    }
-+
-+    public void unIgnorePlayer(ServerPlayer player) {
+     }
+ 
+     public void unIgnorePlayer(ServerPlayer player) {
+-        this.players.replace(player, false);
 +        this.playersLock.write(() -> this.players.replace(player, false)); // Confetti
-+    }
-+
-+    public boolean ignoredOrUnknown(ServerPlayer player) {
+     }
+ 
+     public boolean ignoredOrUnknown(ServerPlayer player) {
+-        return this.players.getOrDefault(player, true);
 +        return this.playersLock.optimisticRead(() -> this.players.getOrDefault(player, true)); // Confetti
-+    }
-+
-+    public boolean ignored(ServerPlayer player) {
+     }
+ 
+     public boolean ignored(ServerPlayer player) {
+-        return this.players.getBoolean(player);
 +        return this.playersLock.optimisticRead(() -> this.players.getBoolean(player)); // Confetti
-+    }
-+}
+     }
+ }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
 index d3c271b638ae7b8f044000c551daba7dd05d8fb2..cdb44dede0e8985dc674ae8bc0a584b7e059a44c 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
@@ -1018,43 +1025,42 @@ index f22fb84c7e7929d6c80c44b13179cf385d8a43f9..d7928fdfb9cdb46b4a0b5cc06658cfdc
      public void managedBlock(BooleanSupplier stopCondition) {
          this.blockingCount++;
 diff --git a/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java b/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..80da7213a3dc11cbefb1d2e4c18e6fb4db1a0e60
---- /dev/null
+index 137fe86e33d63c629d69072ee7cbc15cdef1a4d8..80da7213a3dc11cbefb1d2e4c18e6fb4db1a0e60 100644
+--- a/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java
 +++ b/src/main/java/net/minecraft/util/thread/ReentrantBlockableEventLoop.java
-@@ -0,0 +1,32 @@
-+package net.minecraft.util.thread;
-+
+@@ -1,7 +1,10 @@
+ package net.minecraft.util.thread;
+ 
 +import java.util.concurrent.atomic.AtomicInteger;
 +
 +// Confetti - use AtomicInteger for thread safety
-+public abstract class ReentrantBlockableEventLoop<R extends Runnable> extends BlockableEventLoop<R> {
+ public abstract class ReentrantBlockableEventLoop<R extends Runnable> extends BlockableEventLoop<R> {
+-    private int reentrantCount;
 +    private final AtomicInteger reentrantCount = new AtomicInteger(); // Confetti - use AtomicInteger
-+
-+    public ReentrantBlockableEventLoop(String name) {
-+        super(name);
-+    }
-+
-+    @Override
-+    public boolean scheduleExecutables() {
-+        return this.runningTask() || super.scheduleExecutables();
-+    }
-+
-+    protected boolean runningTask() {
+ 
+     public ReentrantBlockableEventLoop(String name) {
+         super(name);
+@@ -13,17 +16,17 @@ public abstract class ReentrantBlockableEventLoop<R extends Runnable> extends Bl
+     }
+ 
+     protected boolean runningTask() {
+-        return this.reentrantCount != 0;
 +        return this.reentrantCount.get() != 0; // Confetti - use AtomicInteger
-+    }
-+
-+    @Override
-+    public void doRunTask(R task) {
+     }
+ 
+     @Override
+     public void doRunTask(R task) {
+-        this.reentrantCount++;
 +        this.reentrantCount.getAndIncrement(); // Confetti - use AtomicInteger
-+
-+        try {
-+            super.doRunTask(task);
-+        } finally {
+ 
+         try {
+             super.doRunTask(task);
+         } finally {
+-            this.reentrantCount--;
 +            this.reentrantCount.getAndDecrement(); // Confetti - use AtomicInteger
-+        }
-+    }
-+}
+         }
+     }
+ }
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
 index 6b9901d28cd250dbfd38d537ca0f1298216beb52..e4e775c7952b820b6780cf4f5cac519749adce38 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
@@ -1579,61 +1585,27 @@ index 80a43def4912a3228cd95117d5c2aac68798b4ec..c398e083234eca067f0327a6ce8f96e7
          // To ensure nothing weird happens with dimension travelling, do not iterate over new entries...
          // (by dfl iterator() is configured to not iterate over new entries)
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..99505f0db7bc36d89b55b5193c73e5d98215ce38
---- /dev/null
+index 763b315b1d761bc3bd82d9b847ed3f64fd5ce991..99505f0db7bc36d89b55b5193c73e5d98215ce38 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapIndex.java
-@@ -0,0 +1,50 @@
-+package net.minecraft.world.level.saveddata.maps;
-+
-+import it.unimi.dsi.fastutil.objects.Object2IntMap;
-+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
-+import it.unimi.dsi.fastutil.objects.Object2IntMap.Entry;
-+import net.minecraft.core.HolderLookup;
-+import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.util.datafix.DataFixTypes;
-+import net.minecraft.world.level.saveddata.SavedData;
-+
-+public class MapIndex extends SavedData {
-+    public static final String FILE_NAME = "idcounts";
-+    private final Object2IntMap<String> usedAuxIds = new Object2IntOpenHashMap<>();
-+
-+    public static SavedData.Factory<MapIndex> factory() {
-+        return new SavedData.Factory<>(MapIndex::new, MapIndex::load, DataFixTypes.SAVED_DATA_MAP_INDEX);
-+    }
-+
-+    public MapIndex() {
-+        this.usedAuxIds.defaultReturnValue(-1);
-+    }
-+
-+    public static MapIndex load(CompoundTag nbt, HolderLookup.Provider registryLookup) {
-+        MapIndex mapIndex = new MapIndex();
-+
-+        for (String string : nbt.getAllKeys()) {
-+            if (nbt.contains(string, 99)) {
-+                mapIndex.usedAuxIds.put(string, nbt.getInt(string));
-+            }
-+        }
-+
-+        return mapIndex;
-+    }
-+
-+    @Override
+@@ -33,7 +33,7 @@ public class MapIndex extends SavedData {
+     }
+ 
+     @Override
+-    public CompoundTag save(CompoundTag nbt, HolderLookup.Provider registryLookup) {
 +    public synchronized CompoundTag save(CompoundTag nbt, HolderLookup.Provider registryLookup) { // Confetti - thread-safe
-+        for (Entry<String> entry : this.usedAuxIds.object2IntEntrySet()) {
-+            nbt.putInt(entry.getKey(), entry.getIntValue());
-+        }
-+
-+        return nbt;
-+    }
-+
+         for (Entry<String> entry : this.usedAuxIds.object2IntEntrySet()) {
+             nbt.putInt(entry.getKey(), entry.getIntValue());
+         }
+@@ -41,7 +41,7 @@ public class MapIndex extends SavedData {
+         return nbt;
+     }
+ 
+-    public MapId getFreeAuxValueForMap() {
 +    public synchronized MapId getFreeAuxValueForMap() { // Confetti - thread-safe
-+        int i = this.usedAuxIds.getInt("map") + 1;
-+        this.usedAuxIds.put("map", i);
-+        this.setDirty();
-+        return new MapId(i);
-+    }
-+}
+         int i = this.usedAuxIds.getInt("map") + 1;
+         this.usedAuxIds.put("map", i);
+         this.setDirty();
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 index 7a53a5b5490e6b00b9f755fb3e18fb38f4bc1252..14fec7f7ea98914c355f885f29f32e3bfb2e5d35 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java

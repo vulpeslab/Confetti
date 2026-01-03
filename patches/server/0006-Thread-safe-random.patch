@@ -5,7 +5,7 @@ Subject: [PATCH] Thread-safe random
 
 
 diff --git a/src/main/java/net/minecraft/world/level/levelgen/LegacyRandomSource.java b/src/main/java/net/minecraft/world/level/levelgen/LegacyRandomSource.java
-index 0a289920a32fb8bc15024062d7b73e00759e0e49..eac33c6afe84df22452cd300c3450cdb65eabfa7 100644
+index 99dfa36a4f00217c7f9566af988b5210d99a273c..474fa90adf22da57cb082fe2e43acdd07f29885c 100644
 --- a/src/main/java/net/minecraft/world/level/levelgen/LegacyRandomSource.java
 +++ b/src/main/java/net/minecraft/world/level/levelgen/LegacyRandomSource.java
 @@ -30,6 +30,10 @@ public class LegacyRandomSource implements BitRandomSource {

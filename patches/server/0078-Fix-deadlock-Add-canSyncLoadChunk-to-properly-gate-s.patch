@@ -132,21 +132,10 @@ index 310a8f80debadd64c2d962ebf83b7d0505ce6e42..3bf18b3bb09c533fa5c70257a4439449
          }
  
 diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
-index b6b13d6fb5b0406ca689a8616f1c7b6732f8c3e6..48c5564e5dd0e7702e5e7604fecf1d41a2dfd094 100644
+index 3df7d18e738668560bc2997e24a37b32324fd0fe..48c5564e5dd0e7702e5e7604fecf1d41a2dfd094 100644
 --- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
 +++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiChunkTicker.java
-@@ -35,10 +35,6 @@ public class ConfettiChunkTicker {
-                 region -> futures.add(this.tickRegion(level, region, spawnState))
-         );
- 
--        if (!futures.isEmpty()) {
--            LogUtils.getClassLogger().info("[Confetti] tickChunks: level={}, regions={}", level.dimension().location(), futures.size());
--        }
--
-         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
-     }
- 
-@@ -116,5 +112,4 @@ public class ConfettiChunkTicker {
+@@ -112,5 +112,4 @@ public class ConfettiChunkTicker {
          }
      }
  
@@ -190,46 +179,6 @@ index a4de3e130cf9615b068fa671f717ad84784edb11..9284fff729589d99bbc373c40e68b159
          }
      }
  
-diff --git a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
-index e744454726f30cb4741c49bd0a71f6ed0ec8203d..12f968cc968a22bfdedc5ffadff930c5ac93df44 100644
---- a/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
-+++ b/src/main/java/com/vulpeslab/confetti/threading/ConfettiRegionScheduler.java
-@@ -102,35 +102,22 @@ public class ConfettiRegionScheduler {
-         return a.uuid.compareTo(b.uuid);
-     }
- 
--    private static final java.util.concurrent.atomic.AtomicInteger runAttempts = new java.util.concurrent.atomic.AtomicInteger(0);
--    private static final java.util.concurrent.atomic.AtomicInteger lockFails = new java.util.concurrent.atomic.AtomicInteger(0);
--    private static final java.util.concurrent.atomic.AtomicInteger lockSuccesses = new java.util.concurrent.atomic.AtomicInteger(0);
--    private static final java.util.concurrent.atomic.AtomicInteger completions = new java.util.concurrent.atomic.AtomicInteger(0);
--
-     private void run(RegionPos regionPos, Runnable runnable, CompletableFuture<Void> future) {
--        int attempt = runAttempts.incrementAndGet();
--        if (attempt % 100 == 0) {
--            com.mojang.logging.LogUtils.getClassLogger().info("[Confetti] run() attempt={}, lockFails={}, lockSuccesses={}, completions={}", attempt, lockFails.get(), lockSuccesses.get(), completions.get());
--        }
--        
-         ConfettiRegionLocker.RegionLock lock = null;
-         try {
-             lock = locker.tryTakeLockNow(regionPos);
-             if (lock == null) {
--                lockFails.incrementAndGet();
-                 // Wait for unlock, then retry
-                 locker.onUnlock(regionPos, () -> CompletableFuture.runAsync(() -> run(regionPos, runnable, future), ConfettiTickThread.getExecutor()));
-                 return;
-             }
- 
--            lockSuccesses.incrementAndGet();
-             try {
-                 runnable.run();
-             } finally {
-                 lock.unlock();
-             }
- 
--            completions.incrementAndGet();
-             future.complete(null);
-         } catch (Exception e) {
-             future.completeExceptionally(e);
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
 index 94bdf8a7803002da1bb570c20b6b80bcf9e364de..c3e3208be72ea03ae9b666d3e982b30116b78711 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
@@ -256,7 +205,7 @@ index 01efbc507b3d58f13f78ee286f93df40cdc3f0cb..e66422016d7c3ce76aae2d696e4d43fa
  import net.minecraft.util.thread.BlockableEventLoop;
  
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index c7544bddccddb4fd071543506740b3ebaa4d6db8..5264229213aaa8cb93442120b280d37e08592cad 100644
+index c7544bddccddb4fd071543506740b3ebaa4d6db8..b4cd75f5e6fd1eb68f6758fb6be5fcf71308014c 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -1518,6 +1518,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -315,16 +264,15 @@ index c7544bddccddb4fd071543506740b3ebaa4d6db8..5264229213aaa8cb93442120b280d37e
      }
  
      public void doRunTask(TickTask ticktask) { // CraftBukkit - decompile error
-@@ -1622,7 +1630,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1622,7 +1630,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void tickServer(BooleanSupplier shouldKeepTicking) {
 -        //co.aikar.timings.TimingsManager.FULL_SERVER_TICK.startTiming(); // Paper // Purpur
-+        LOGGER.info("[Confetti] Running latest code version!"); // Confetti - debug
          long i = Util.getNanos();
  
          // Paper start - move oversleep into full server tick
-@@ -1877,30 +1885,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1877,30 +1884,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          while (!allFutures.isDone()) {
              // Poll and process pending tasks to keep the server responsive
              this.pollTaskInternal();
