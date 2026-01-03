@@ -1,9 +1,12 @@
 # Confetti - AI Agent Context
 
-## Architecture
-Multi-threaded 1.21 Purpur fork enabling vertical scaling. Chunks are grouped into **regions** (default 8x8 chunks), and regions are locked during ticking to prevent race conditions between threads. Code executes on chunk's thread, not a main thread.
+## Project Overview
+**Confetti** is a high-performance Minecraft server fork (based on Purpur 1.21) that implements vertical scaling through multithreaded region-based ticking. Similar to Folia but uses a different approach to chunk management and locking.
 
-## ⚠️ CRITICAL: Patch Workflow (DO NOT SKIP!)
+## Architecture
+Multi-threaded Purpur fork enabling vertical scaling. Chunks are grouped into **regions** (default 8x8 chunks), and regions are locked during ticking to prevent race conditions between threads. Code executes on chunk's thread, not a main thread.
+
+## CRITICAL: Patch Workflow (DO NOT SKIP!)
 **Changes made to `confetti-server/` or `confetti-api/` will be LOST if `applyPatches` is run!**
 
 After making code changes, you MUST:
@@ -22,14 +25,19 @@ After making code changes, you MUST:
 
 **Why?** The paperweight-patcher system generates `confetti-server/` from `patches/server/`. Running `applyPatches` regenerates the entire directory from patches, destroying any uncommitted work.
 
-## Critical Build Commands
+## Build Commands
 ```bash
-./gradlew applyPatches              # Patch upstream Paper (WARNING: overwrites confetti-server!)
+./gradlew applyPatches                        # Patch upstream Paper (WARNING: overwrites confetti-server!)
 ./gradlew shadowjar createMojmapPaperclipJar  # Build final jar
-./gradlew publishToMavenLocal      # Publish API locally
-./gradlew rebuildPatches            # Update patches after code changes (commit to subrepo first!)
+./gradlew publishToMavenLocal                 # Publish API locally
+./gradlew rebuildPatches                      # Update patches after code changes (commit to subrepo first!)
 ```
 Output jar: `build/libs/confetti-paperclip-*-mojmap.jar`
+
+## Test Server Environment
+- `test-server/server.jar` is a **symlink** to the build output. No need to copy JARs manually after building.
+- Launch with `cd test-server && ./start.sh`.
+- Check `test-server/logs/latest.log` and `test-server/crash-reports/` for runtime issues.
 
 ## Project Structure
 - `patches/api/` - API patches (branding, Folia compatibility checks)
@@ -37,6 +45,17 @@ Output jar: `build/libs/confetti-paperclip-*-mojmap.jar`
 - `confetti-api/` - Generated API module
 - `confetti-server/` - Generated server module
 - `confetti.yml` - Runtime configuration (region-size, thread-count)
+
+## Technologies
+- **Language:** Java 21+
+- **Build System:** Gradle (using the Paperweight framework)
+- **Base Upstream:** Purpur -> Paper -> Spigot -> Bukkit
+- **Platform:** Minecraft 1.21
+
+### Prerequisites
+- JDK 21 or higher
+- Git (configured with user name and email)
+- (macOS) `diffutils` installed via Homebrew (`brew install diffutils`)
 
 ## Multithreading Core Concepts
 1. **Region locking**: When ticking a chunk, its region and 8 neighboring regions are locked. See `patches/server/0005-Add-multithreading-region-scheduler.patch` for `RegionPos` implementation.
@@ -58,6 +77,27 @@ Folia-supported plugins work without changes. Detection: check `Bukkit.class.get
 - `region-size`: Power of 2, min 8 recommended (lightning rods have 8-chunk radius)
 - `thread-count`: `-1` = CPU cores - 1, `1` = disable multithreading
 - `allow-unsupported-plugins-to-modify-chunks-via-global-scheduler`: Only works with single-threaded regions
+
+## Development Guidelines
+
+### Multithreading Conventions
+- **Thread Safety:** Always assume code can be executed concurrently unless it's explicitly on the Global Scheduler.
+- **Data Structures:** Prefer `ConcurrentHashMap` or synchronized collections for shared state.
+- **Task Scheduling:** Use `Bukkit.getRegionScheduler()` or `entity.getScheduler()` instead of `Bukkit.getScheduler()`.
+- **Async Operations:** Use `teleportAsync` instead of `teleport`.
+
+### Important Files
+- `README.md`: General project info and build instructions.
+- `HOW_IT_WORKS.md`: Deep dive into the region locking architecture.
+- `CONFETTI_YAML.md`: Documentation for `confetti.yml` configuration.
+- `DEVELOPING_A_MULTITHREAD_PLUGIN.md`: Guide for plugin developers.
+- `todos.md` & `bugs.md`: Current development focus and known critical issues.
+
+## Testing Server with Bots
+To test under load, use the Minecraft Stress Test tool:
+```bash
+java -Dbot.count=150 -Dbot.ip=127.0.0.1 -jar minecraft-stress-test-1.0.0-SNAPSHOT-jar-with-dependencies.jar
+```
 
 ## Version Info
 Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.21-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
