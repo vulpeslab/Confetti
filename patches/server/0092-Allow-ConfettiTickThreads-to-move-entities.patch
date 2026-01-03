@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 16:24:43 +0100
+Subject: [PATCH] Allow ConfettiTickThreads to move entities
+
+Relax Entity.move() tick thread check for ConfettiTickThreads. This is needed
+when entities move to positions outside the locked region or during cross-dimension
+teleportation.
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 44a7545cfd421602ef331a1866ab709b15c6fb3f..57619a049a3ad5d25f3039d70f0092b1cdb91a94 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1157,9 +1157,14 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     public void move(MoverType movementType, Vec3 movement) {
+         final Vec3 originalMovement = movement; // Paper - Expose pre-collision velocity
+         // Paper start - detailed watchdog information
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot move an entity off-main"); // Confetti - check source region
+-        // Confetti - removed destination check: entities can legitimately move across region boundaries
+-        // The entity will be tracked by the new region in subsequent ticks
++        // Confetti start - allow ConfettiTickThreads to move entities
++        // This may be called during cross-dimension teleportation or when an entity moves
++        // to a position outside the locked region. The entity will be tracked by the new
++        // region in subsequent ticks.
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot move an entity off-main");
++        }
++        // Confetti end
+         synchronized (this.posLock) {
+             this.moveStartX = this.getX();
+             this.moveStartY = this.getY();

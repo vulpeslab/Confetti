@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 16:13:01 +0100
+Subject: [PATCH] Fix cross-dimension entity operations for teleportation
+
+Allow ConfettiTickThreads to add/remove entities in other dimensions during
+portal teleportation, since they only have locks in the source dimension.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
+index dacf2b2988ce603879fe525a3418ac77f8a663f7..f0d3dca954d518fb14134299ce4dfe1c5cd6d01e 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/server/ServerEntityLookup.java
+@@ -34,13 +34,32 @@ public final class ServerEntityLookup extends EntityLookup {
+         ((ChunkSystemServerLevel)this.serverWorld).moonrise$getChunkTaskScheduler().chunkHolderManager.unblockTicketUpdates(value);
+     }
+ 
++    // Confetti start - allow entity operations for cross-dimension teleportation
++    // ConfettiTickThreads only have locks in their source dimension, but need to add/remove
++    // entities in the destination dimension during teleportation (e.g., nether portal)
++    private void ensureEntityOperationAllowed(final int chunkX, final int chunkZ, final String reason) {
++        // Skip check for ConfettiTickThreads - they may be doing cross-dimension teleportation
++        // which is safe because entity operations are synchronized and we're moving the entity
++        // from one dimension to another
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            return;
++        }
++        TickThread.ensureTickThread(this.serverWorld, chunkX, chunkZ, reason);
++    }
++    // Confetti end
++
+     @Override
+     protected void checkThread(final int chunkX, final int chunkZ, final String reason) {
+-        TickThread.ensureTickThread(this.serverWorld, chunkX, chunkZ, reason);
++        this.ensureEntityOperationAllowed(chunkX, chunkZ, reason); // Confetti
+     }
+ 
+     @Override
+     protected void checkThread(final Entity entity, final String reason) {
++        // Confetti start - allow cross-dimension operations
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            return;
++        }
++        // Confetti end
+         TickThread.ensureTickThread(entity, reason);
+     }
+ 

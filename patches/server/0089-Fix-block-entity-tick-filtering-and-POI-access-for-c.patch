@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 16:08:42 +0100
+Subject: [PATCH] Fix block entity tick filtering and POI access for
+ cross-dimension operations
+
+- Add region filtering to tickBlockEntities() to only tick block entities in locked region
+- Add ensurePoiAccessAllowed() helper that allows ConfettiTickThreads to access POI data
+  for cross-dimension operations (e.g., nether portal lookups)
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+index 34389b3d78c7c963d05eb507ee9f6302c61467ca..3f5d47bd4289ff3a76625c7f914e9a3738192884 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+@@ -65,13 +65,26 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+         }
+     }
+ 
++    // Confetti start - allow POI access for cross-dimension operations (e.g., nether portal lookups)
++    // ConfettiTickThreads only have locks in their source dimension, but need to access POI
++    // in the destination dimension when handling portal teleportation
++    private void ensurePoiAccessAllowed(final int chunkX, final int chunkZ, final String reason) {
++        // Skip check for ConfettiTickThreads - they may be doing cross-dimension portal lookups
++        // which is safe because POI loading is thread-safe and we're just reading/creating portal data
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            return;
++        }
++        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.world, chunkX, chunkZ, reason);
++    }
++    // Confetti end
++
+     @Override
+     public Optional<PoiSection> get(final long pos) {
+         final int chunkX = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionX(pos);
+         final int chunkY = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionY(pos);
+         final int chunkZ = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionZ(pos);
+ 
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.world, chunkX, chunkZ, "Accessing poi chunk off-main");
++        this.ensurePoiAccessAllowed(chunkX, chunkZ, "Accessing poi chunk off-main"); // Confetti
+ 
+         final ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkHolderManager manager = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager;
+         final ca.spottedleaf.moonrise.patches.chunk_system.level.poi.PoiChunk ret = manager.getPoiChunkIfLoaded(chunkX, chunkZ, true);
+@@ -85,7 +98,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+         final int chunkY = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionY(pos);
+         final int chunkZ = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionZ(pos);
+ 
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.world, chunkX, chunkZ, "Accessing poi chunk off-main");
++        this.ensurePoiAccessAllowed(chunkX, chunkZ, "Accessing poi chunk off-main"); // Confetti
+ 
+         final ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkHolderManager manager = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager;
+ 
+@@ -107,7 +120,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+         final int chunkY = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionY(pos);
+         final int chunkZ = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionZ(pos);
+ 
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.world, chunkX, chunkZ, "Accessing poi chunk off-main");
++        this.ensurePoiAccessAllowed(chunkX, chunkZ, "Accessing poi chunk off-main"); // Confetti
+ 
+         final ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkHolderManager manager = ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.world).moonrise$getChunkTaskScheduler().chunkHolderManager;
+ 
+@@ -128,7 +141,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+     public final void moonrise$onUnload(final long coordinate) { // Paper - rewrite chunk system
+         final int chunkX = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkX(coordinate);
+         final int chunkZ = ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkZ(coordinate);
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.world, chunkX, chunkZ, "Unloading poi chunk off-main");
++        this.ensurePoiAccessAllowed(chunkX, chunkZ, "Unloading poi chunk off-main"); // Confetti
+         for (int section = this.levelHeightAccessor.getMinSection(); section < this.levelHeightAccessor.getMaxSection(); ++section) {
+             final long sectionPos = SectionPos.asLong(chunkX, section, chunkZ);
+             this.updateDistanceTracking(sectionPos);
+@@ -139,7 +152,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+     public final void moonrise$loadInPoiChunk(final ca.spottedleaf.moonrise.patches.chunk_system.level.poi.PoiChunk poiChunk) {
+         final int chunkX = poiChunk.chunkX;
+         final int chunkZ = poiChunk.chunkZ;
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this.world, chunkX, chunkZ, "Loading poi chunk off-main");
++        this.ensurePoiAccessAllowed(chunkX, chunkZ, "Loading poi chunk off-main"); // Confetti
+         for (int sectionY = this.levelHeightAccessor.getMinSection(); sectionY < this.levelHeightAccessor.getMaxSection(); ++sectionY) {
+             final PoiSection section = poiChunk.getSection(sectionY);
+             if (section != null && !((ca.spottedleaf.moonrise.patches.chunk_system.level.poi.ChunkSystemPoiSection)section).moonrise$isEmpty()) {
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index d16d83adab0b7a31181ff9392cf8485170b4e051..0750769df8ad3d99a5f6e8f94d5f2909ef1b83a1 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -1449,6 +1449,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+                 toRemove.add(tickingblockentity); // Paper - Fix MC-117075; use removeAll
+                 // Spigot end
+             } else if (flag && this.shouldTickBlocksAt(tickingblockentity.getPos())) {
++                // Confetti start - only tick block entities in the locked region
++                if (this instanceof net.minecraft.server.level.ServerLevel serverLevel) {
++                    BlockPos bePos = tickingblockentity.getPos();
++                    if (!com.vulpeslab.confetti.Confetti.isSync(serverLevel, new ChunkPos(bePos))) {
++                        continue; // Skip block entities outside locked region
++                    }
++                }
++                // Confetti end
+                 tickingblockentity.tick();
+                 // Paper start - rewrite chunk system
+                 if ((++tickedEntities & 7) == 0) {

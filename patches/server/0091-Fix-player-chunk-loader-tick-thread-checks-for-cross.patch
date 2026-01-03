@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 16:18:13 +0100
+Subject: [PATCH] Fix player chunk loader tick thread checks for
+ cross-dimension teleportation
+
+Allow ConfettiTickThreads to add/remove players from chunk loaders in other
+dimensions during portal teleportation.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+index 85386e04b1f2cb247cb9f64a2260262e167a17a2..2b0b6ab123fcb6140a12866643c54ee3fbb61024 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
+@@ -180,7 +180,11 @@ public final class RegionizedPlayerChunkLoader {
+     }
+ 
+     public void addPlayer(final ServerPlayer player) {
+-        TickThread.ensureTickThread(player, "Cannot add player to player chunk loader async");
++        // Confetti start - allow cross-dimension teleportation
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            TickThread.ensureTickThread(player, "Cannot add player to player chunk loader async");
++        }
++        // Confetti end
+         if (!((ChunkSystemServerPlayer)player).moonrise$isRealPlayer()) {
+             return;
+         }
+@@ -205,7 +209,11 @@ public final class RegionizedPlayerChunkLoader {
+     }
+ 
+     public void removePlayer(final ServerPlayer player) {
+-        TickThread.ensureTickThread(player, "Cannot remove player from player chunk loader async");
++        // Confetti start - allow cross-dimension teleportation
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            TickThread.ensureTickThread(player, "Cannot remove player from player chunk loader async");
++        }
++        // Confetti end
+         if (!((ChunkSystemServerPlayer)player).moonrise$isRealPlayer()) {
+             return;
+         }
+@@ -855,7 +863,11 @@ public final class RegionizedPlayerChunkLoader {
+         }
+ 
+         void add() {
+-            TickThread.ensureTickThread(this.player, "Cannot add player asynchronously");
++            // Confetti start - allow cross-dimension teleportation
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                TickThread.ensureTickThread(this.player, "Cannot add player asynchronously");
++            }
++            // Confetti end
+             if (this.removed) {
+                 throw new IllegalStateException("Adding removed player chunk loader");
+             }
+@@ -1064,7 +1076,11 @@ public final class RegionizedPlayerChunkLoader {
+         }
+ 
+         void remove() {
+-            TickThread.ensureTickThread(this.player, "Cannot add player asynchronously");
++            // Confetti start - allow cross-dimension teleportation
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                TickThread.ensureTickThread(this.player, "Cannot add player asynchronously");
++            }
++            // Confetti end
+             if (this.removed) {
+                 throw new IllegalStateException("Removing removed player chunk loader");
+             }

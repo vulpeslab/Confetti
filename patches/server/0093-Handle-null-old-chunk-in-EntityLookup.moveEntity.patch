@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 16:32:34 +0100
+Subject: [PATCH] Handle null old chunk in EntityLookup.moveEntity()
+
+During cross-dimension teleportation, the old chunk entity slices may be null.
+Add null checks to prevent NPE.
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
+index ad59f9d43afb8a71fb9adf103111b1c49e4b0d92..9d8abb75ed75383bf58a3a0b8197cc83a7a11c1f 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/EntityLookup.java
+@@ -537,9 +537,13 @@ public abstract class EntityLookup implements LevelEntityGetter<Entity> {
+             final ChunkEntitySlices old = this.getChunk(sectionX, sectionZ);
+             final ChunkEntitySlices slices = this.getOrCreateChunk(newSectionX, newSectionZ);
+ 
+-            if (!old.removeEntity(entity, sectionY)) {
++            // Confetti start - handle null old chunk (can happen during cross-dimension teleportation)
++            if (old == null) {
++                LOGGER.debug("Old chunk entity slices is null for entity " + entity + " at (" + sectionX + "," + sectionY + "," + sectionZ + ") - may be a cross-dimension teleport");
++            } else if (!old.removeEntity(entity, sectionY)) {
+                 LOGGER.warn("Could not remove entity " + entity + " from its old chunk section (" + sectionX + "," + sectionY + "," + sectionZ + ") since it was not contained in the section");
+             }
++            // Confetti end
+ 
+             if (!slices.addEntity(entity, newSectionY)) {
+                 LOGGER.warn("Could not add entity " + entity + " to its new chunk section (" + newSectionX + "," + newSectionY + "," + newSectionZ + ") as it is already contained in the section");
+@@ -549,7 +553,7 @@ public abstract class EntityLookup implements LevelEntityGetter<Entity> {
+             ((ChunkSystemEntity)entity).moonrise$setSectionY(newSectionY);
+             ((ChunkSystemEntity)entity).moonrise$setSectionZ(newSectionZ);
+ 
+-            if (old.isEmpty()) {
++            if (old != null && old.isEmpty()) { // Confetti - null check
+                 this.onEmptySlices(sectionX, sectionZ);
+             }
+ 
