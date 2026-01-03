@@ -5,7 +5,7 @@
 **Confetti is in public beta.** Most features work for most players most of
 the time, however things can occasionally break.
 
-1.20.6 [Purpur](https://github.com/PurpurMC/Purpur) fork that brings vertical scaling to Minecraft.
+[Purpur](https://github.com/PurpurMC/Purpur) 1.21 fork that brings vertical scaling to Minecraft through multithreaded region-based ticking.
 
 Confetti:
 
@@ -53,7 +53,7 @@ try {
 
 Add the following into your build.gradle:
 
-```
+```groovy
 repositories {
   maven {
     url "https://repo.clojars.org/"
@@ -61,13 +61,13 @@ repositories {
 }
 
 dependencies {
-  compile "com.vulpeslab.confetti:confetti-api:1.20.6-R0.1-SNAPSHOT"
+  compileOnly "com.vulpeslab.confetti:confetti-api:1.21-R0.1-SNAPSHOT"
 }
 ```
 
 Or in your pom.xml:
 
-```
+```xml
 <repositories>
     <repository>
         <id>clojars</id>
@@ -78,7 +78,7 @@ Or in your pom.xml:
     <dependency>
         <groupId>com.vulpeslab.confetti</groupId>
         <artifactId>confetti-api</artifactId>
-        <version>1.20.6-R0.1-SNAPSHOT</version>
+        <version>1.21-R0.1-SNAPSHOT</version>
     </dependency>
 </dependencies>
 ```
@@ -112,5 +112,9 @@ All code is licensed under [GPLv3](LICENSE.txt).
 
 ### Acknowledgements
 
-Confetti uses PaperMC's paperweight framework found
-[here](https://github.com/PaperMC/paperweight).
+Confetti is built on the shoulders of giants:
+
+- **[ShreddedPaper](https://github.com/MultiPaper/ShreddedPaper)** - Confetti was originally forked from ShreddedPaper before taking its own path. We're grateful for their pioneering work on multithreaded Minecraft servers.
+- **[PaperMC](https://github.com/PaperMC/Paper)** - For the Paper server and the paperweight build framework.
+- **[PurpurMC](https://github.com/PurpurMC/Purpur)** - Our upstream server fork that provides additional features and optimizations.
+- **[Folia](https://github.com/PaperMC/Folia)** - For establishing the regionized multithreading API that plugins can target.
