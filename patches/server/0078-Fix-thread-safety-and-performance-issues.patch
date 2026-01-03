@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 10:24:52 +0100
+Subject: [PATCH] Fix thread-safety and performance issues
+
+1. Add synchronized to PoiManager villageDistanceTracker methods to fix
+   ArrayIndexOutOfBoundsException in LongArrayFIFOQueue when multiple
+   ConfettiTickThreads access sectionsToVillage concurrently.
+
+2. Replace managedBlock world tick wait with polling approach using
+   CompletableFuture.allOf(). The previous managedBlock caused 10+ second
+   hangs because it expected tasks in the Server thread queue while our
+   actual work happens on ConfettiTickThreads. The new approach:
+   - Combines all futures with allOf()
+   - Polls for completion with 1ms timeout
+   - Processes server tasks between polls
+   - Avoids blocking the watchdog timer
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index ca1f933d7d7efc9eca76eeb84a0e9017313ee5ac..f114726019178125f970bf6b706dd82b02c49bc4 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1869,9 +1869,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+ 
+         // Confetti start - tick worlds async
+         ((io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler) Bukkit.getGlobalRegionScheduler()).tick(); // Run global region scheduler async to world ticking
+-        for (CompletableFuture<Void> future : futures) {
+-            this.managedBlock(future::isDone);
+-            future.join();
++        
++        // Wait for all world tick futures to complete while still processing server tasks
++        CompletableFuture<Void> allFutures = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
++        while (!allFutures.isDone()) {
++            // Poll and process pending tasks to keep the server responsive
++            this.pollTaskInternal();
++            // Brief wait to avoid busy-spinning
++            if (!allFutures.isDone()) {
++                try {
++                    allFutures.get(1, java.util.concurrent.TimeUnit.MILLISECONDS);
++                } catch (java.util.concurrent.TimeoutException ignored) {
++                    // Expected - just continue the loop
++                } catch (java.util.concurrent.ExecutionException | InterruptedException e) {
++                    throw new RuntimeException("World tick failed", e);
++                }
++            }
+         }
+         // Confetti end - tick worlds async
+ 
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+index a908bf1dc5e821dcf6981a8c21076fb0bdc6516d..34389b3d78c7c963d05eb507ee9f6302c61467ca 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+@@ -57,7 +57,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+         return POI_DATA_SOURCE - level;
+     }
+ 
+-    private void updateDistanceTracking(long section) {
++    private synchronized void updateDistanceTracking(long section) { // Confetti - synchronized for thread safety
+         if (this.isVillageCenter(section)) {
+             this.villageDistanceTracker.setSource(section, POI_DATA_SOURCE);
+         } else {
+@@ -358,7 +358,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+         return this.getOrLoad(SectionPos.asLong(pos)).map(poiSet -> poiSet.getFreeTickets(pos)).orElse(0);
+     }
+ 
+-    public int sectionsToVillage(SectionPos pos) {
++    public synchronized int sectionsToVillage(SectionPos pos) { // Confetti - synchronized for thread safety
+         this.villageDistanceTracker.propagateUpdates(); // Paper - rewrite chunk system
+         return convertBetweenLevels(this.villageDistanceTracker.getLevel(ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkSectionKey(pos))); // Paper - rewrite chunk system
+     }
+@@ -373,7 +373,7 @@ public class PoiManager extends SectionStorage<PoiSection> implements ca.spotted
+     }
+ 
+     @Override
+-    public void tick(BooleanSupplier shouldKeepTicking) {
++    public synchronized void tick(BooleanSupplier shouldKeepTicking) { // Confetti - synchronized for thread safety
+         this.villageDistanceTracker.propagateUpdates(); // Paper - rewrite chunk system
+     }
+ 
