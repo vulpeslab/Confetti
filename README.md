@@ -112,5 +112,9 @@ All code is licensed under [GPLv3](LICENSE.txt).
 
 ### Acknowledgements
 
-Confetti uses PaperMC's paperweight framework found
-[here](https://github.com/PaperMC/paperweight).
+Confetti is built on the shoulders of giants:
+
+- **[ShreddedPaper](https://github.com/MultiPaper/ShreddedPaper)** - Confetti was originally forked from ShreddedPaper before taking its own path. We're grateful for their pioneering work on multithreaded Minecraft servers.
+- **[PaperMC](https://github.com/PaperMC/Paper)** - For the Paper server and the paperweight build framework.
+- **[PurpurMC](https://github.com/PurpurMC/Purpur)** - Our upstream server fork that provides additional features and optimizations.
+- **[Folia](https://github.com/PaperMC/Folia)** - For establishing the regionized multithreading API that plugins can target.
