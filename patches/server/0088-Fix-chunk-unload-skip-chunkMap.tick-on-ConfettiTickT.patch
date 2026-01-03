@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 15:12:30 +0100
+Subject: [PATCH] Fix chunk unload: skip chunkMap.tick() on ConfettiTickThread
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 035716417d369679937234997e788a19d86e6a3b..e6620a4332f66ed61fda8a2b35b7686cf95ae15c 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -415,13 +415,23 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+             ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getPlayerChunkLoader().tick(); // Paper - rewrite chunk system
+             future = future.thenCompose(v -> this.tickChunks()); // Confetti - run async
+             //this.level.timings.chunks.stopTiming(); // Paper - timings // Purpur
+-            future = future.thenRun(() -> this.chunkMap.tick()); // Confetti - run async
++            // Confetti start - skip chunkMap.tick() on ConfettiTickThread
++            // chunkMap.tick() calls processUnloads() which requires main thread
++            // The main thread will call chunkMap.tick() in runDistanceManagerUpdates()
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                future = future.thenRun(() -> this.chunkMap.tick());
++            }
++            // Confetti end
+         }
+ 
+         future = future.thenRun(() -> { // Confetti - run async
+         //this.level.timings.doChunkUnload.startTiming(); // Spigot // Purpur
+         //this.level.getProfiler().popPush("unload"); // Purpur
+-        this.chunkMap.tick(shouldKeepTicking);
++        // Confetti start - skip chunkMap.tick() on ConfettiTickThread
++        if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            this.chunkMap.tick(shouldKeepTicking);
++        }
++        // Confetti end
+         //this.level.timings.doChunkUnload.stopTiming(); // Spigot // Purpur
+         //this.level.getProfiler().pop(); // Purpur
+         this.clearCache();

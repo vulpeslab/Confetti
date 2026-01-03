@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 14:47:00 +0100
+Subject: [PATCH] Skip distance manager updates on ConfettiTickThread to avoid
+ thread check failures
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 6b4ee31495f541ea63488f0d48e1670e86c38178..81ed505582d92fbd6639f62f4bf788328f595552 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -770,7 +770,13 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+             // Paper start - rewrite chunk system
+             final ServerChunkCache serverChunkCache = ServerChunkCache.this;
+             // Confetti start - ensure all task types get a chance to run
+-            boolean ret = serverChunkCache.runDistanceManagerUpdates();
++            // Skip distance manager updates when on a ConfettiTickThread to avoid thread check failures
++            // The distance manager updates can change chunk status for chunks outside the locked region,
++            // which fails the ensureTickThread check in NewChunkHolder.handleFullStatusChange
++            boolean ret = false;
++            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                ret = serverChunkCache.runDistanceManagerUpdates();
++            }
+             ret |= super.pollTask();
+             ret |= ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)serverChunkCache.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
+             return ret;

@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 14:56:36 +0100
+Subject: [PATCH] Fix chunk status updates: don't process full updates from
+ ConfettiTickThread
+
+
+diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+index c2227d3a8146bc2b53f971974d333bd7b44c7d1b..218876f4270a070bce1859fa7d9dc3349474d3fc 100644
+--- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
++++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+@@ -1330,7 +1330,13 @@ public final class ChunkHolderManager {
+         final boolean isTickThread = TickThread.isTickThread();
+ 
+         boolean ret = false;
+-        final boolean canProcessFullUpdates = processFullUpdates & isTickThread;
++        // Confetti start - don't process full updates from ConfettiTickThread
++        // ConfettiTickThreads can only safely process updates for chunks in their locked region,
++        // but handleFullStatusChange iterates through ALL pending updates which may include chunks
++        // outside the locked region. Defer full updates to the main thread instead.
++        final boolean canProcessFullUpdates = processFullUpdates & isTickThread
++            & !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread();
++        // Confetti end
+         final boolean canProcessScheduling = scheduledTasks == null;
+ 
+         if (this.ticketLevelPropagator.hasPendingUpdates()) {

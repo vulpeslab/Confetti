@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 15:03:46 +0100
+Subject: [PATCH] Fix mid-tick tasks: ConfettiTickThread should only run base
+ task queue
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 81ed505582d92fbd6639f62f4bf788328f595552..035716417d369679937234997e788a19d86e6a3b 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -769,14 +769,16 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         public boolean pollTask() {
+             // Paper start - rewrite chunk system
+             final ServerChunkCache serverChunkCache = ServerChunkCache.this;
+-            // Confetti start - ensure all task types get a chance to run
+-            // Skip distance manager updates when on a ConfettiTickThread to avoid thread check failures
+-            // The distance manager updates can change chunk status for chunks outside the locked region,
+-            // which fails the ensureTickThread check in NewChunkHolder.handleFullStatusChange
+-            boolean ret = false;
+-            if (!com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
+-                ret = serverChunkCache.runDistanceManagerUpdates();
++            // Confetti start - avoid thread check failures on ConfettiTickThread
++            // ConfettiTickThreads should not process chunk system tasks during mid-tick:
++            // 1. runDistanceManagerUpdates() can change chunk status for chunks outside locked region
++            // 2. executeMainThreadTask() runs chunk generation tasks that require main thread (PoiChunk.load, etc.)
++            // Both trigger ensureTickThread checks that fail on ConfettiTickThread.
++            // Instead, just run super.pollTask() to process the base task queue.
++            if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++                return super.pollTask();
+             }
++            boolean ret = serverChunkCache.runDistanceManagerUpdates();
+             ret |= super.pollTask();
+             ret |= ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)serverChunkCache.level).moonrise$getChunkTaskScheduler().executeMainThreadTask();
+             return ret;

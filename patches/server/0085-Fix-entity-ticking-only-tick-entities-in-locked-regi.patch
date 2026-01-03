@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 14:50:59 +0100
+Subject: [PATCH] Fix entity ticking: only tick entities in locked region,
+ allow cross-region movement
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 03e894fda7e625b1541158d7e13e4d7a3fbdbfcf..44f2e7099aad0475394bea183d60564889d2de40 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -742,6 +742,11 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+             org.spigotmc.ActivationRange.activateEntities(this); // Spigot
+             //this.timings.entityTick.startTiming(); // Spigot // Purpur
+             this.entityTickList.forEach((entity) -> {
++                // Confetti start - only tick entities in the locked region
++                if (!com.vulpeslab.confetti.Confetti.isSync(this, entity.chunkPosition())) {
++                    return; // Skip entities outside locked region
++                }
++                // Confetti end
+                 entity.activatedPriorityReset = false; // Pufferfish - DAB
+                 if (!entity.isRemoved()) {
+                     if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index e5449723d5d2a3f4c791082151166d0e2518f362..44a7545cfd421602ef331a1866ab709b15c6fb3f 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -1158,8 +1158,8 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+         final Vec3 originalMovement = movement; // Paper - Expose pre-collision velocity
+         // Paper start - detailed watchdog information
+         ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread(this, "Cannot move an entity off-main"); // Confetti - check source region
+-        BlockPos newPos = new BlockPos((int) (this.getX() + movement.x), (int) (this.getY() + movement.y), (int) (this.getZ() + movement.z)); // Confetti - check destination
+-        ca.spottedleaf.moonrise.common.util.TickThread.ensureTickThread((ServerLevel) this.level, newPos, "Cannot move an entity into off-main"); // Confetti - check destination region
++        // Confetti - removed destination check: entities can legitimately move across region boundaries
++        // The entity will be tracked by the new region in subsequent ticks
+         synchronized (this.posLock) {
+             this.moveStartX = this.getX();
+             this.moveStartY = this.getY();
