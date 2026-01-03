@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 22:55:32 +0100
+Subject: [PATCH] Fix chest interaction and End crystal spawning
+
+- Level.getBlockEntity(): Allow Server thread to access block entities safely using getChunkIfLoaded
+- ImposterProtoChunk.addEntity(): Add entities to ServerLevel directly since LevelChunk.addEntity() is empty
+
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 0750769df8ad3d99a5f6e8f94d5f2909ef1b83a1..be45b19f5d281cf35aa7d615bdabc722248f5919 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -1593,7 +1593,26 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+         }
+         // Paper end - Perf: Optimize capturedTileEntities lookup
+         // CraftBukkit end
+-        return this.isOutsideBuildHeight(blockposition) ? null : (!this.isClientSide && !com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread() ? null : this.getChunkAt(blockposition).getBlockEntity(blockposition, LevelChunk.EntityCreationType.IMMEDIATE)); // Paper - rewrite chunk system // Confetti - use isConfettiTickThread
++        // Confetti start - allow server thread to access block entities safely
++        if (this.isOutsideBuildHeight(blockposition)) {
++            return null;
++        }
++        if (this.isClientSide) {
++            return this.getChunkAt(blockposition).getBlockEntity(blockposition, LevelChunk.EntityCreationType.IMMEDIATE);
++        }
++        // On ConfettiTickThread: use getChunkAt (safe, we hold the region lock)
++        if (com.vulpeslab.confetti.threading.ConfettiTickThread.isConfettiTickThread()) {
++            return this.getChunkAt(blockposition).getBlockEntity(blockposition, LevelChunk.EntityCreationType.IMMEDIATE);
++        }
++        // On Server thread: use getChunkIfLoaded (safe, doesn't trigger sync loads)
++        net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
++        if (server != null && Thread.currentThread() == server.getRunningThread()) {
++            LevelChunk chunk = this.getChunkIfLoaded(blockposition);
++            return chunk != null ? chunk.getBlockEntity(blockposition, LevelChunk.EntityCreationType.IMMEDIATE) : null;
++        }
++        // Other threads: return null to prevent unsafe access
++        return null;
++        // Confetti end
+     }
+ 
+     public void setBlockEntity(BlockEntity blockEntity) {
+diff --git a/src/main/java/net/minecraft/world/level/chunk/ImposterProtoChunk.java b/src/main/java/net/minecraft/world/level/chunk/ImposterProtoChunk.java
+index d7d332d8ba3442887e80d2c3d7bddb9de2674c2d..69ccc764174c9ed8f99de51387ce8a5170a84cd4 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/ImposterProtoChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/ImposterProtoChunk.java
+@@ -137,7 +137,14 @@ public class ImposterProtoChunk extends ProtoChunk implements ca.spottedleaf.moo
+     @Override
+     public void addEntity(Entity entity) {
+         if (this.allowWrites) {
+-            this.wrapped.addEntity(entity);
++            // Confetti start - LevelChunk.addEntity() is empty, so we need to add to the world directly
++            // This happens during feature generation when the chunk is already a LevelChunk (e.g., End crystals on pillars)
++            if (this.wrapped.getLevel() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
++                serverLevel.addFreshEntity(entity);
++            } else {
++                this.wrapped.addEntity(entity); // Fallback to original behavior
++            }
++            // Confetti end
+         }
+     }
+ 
