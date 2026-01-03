@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sat, 3 Jan 2026 01:04:52 +0100
+Subject: [PATCH] Never force sync chunk loads in StructureManager to prevent
+ deadlocks
+
+ConfettiTickThreads can also deadlock each other when doing sync chunk loads.
+Changed to never force load chunks in structure checks - just return empty
+results if the chunk isn't already loaded.
+
+diff --git a/src/main/java/net/minecraft/world/level/StructureManager.java b/src/main/java/net/minecraft/world/level/StructureManager.java
+index ea3221f924ea0e9151ba4fd73989261379f081e5..62f3beea90abb9dc0cf0c0a31dfca563f9e07ee6 100644
+--- a/src/main/java/net/minecraft/world/level/StructureManager.java
++++ b/src/main/java/net/minecraft/world/level/StructureManager.java
+@@ -53,14 +53,13 @@ public class StructureManager {
+         return this.startsForStructure(pos, predicate, null);
+     }
+     public List<StructureStart> startsForStructure(ChunkPos pos, Predicate<Structure> predicate, @Nullable ServerLevelAccessor levelAccessor) {
+-        // Confetti start - Don't force sync chunk load from non-tick threads
+-        final boolean forceLoad = ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
+-        ChunkAccess chunk = (levelAccessor == null ? this.level : levelAccessor).getChunk(pos.x, pos.z, ChunkStatus.STRUCTURE_REFERENCES, forceLoad);
++        // Confetti start - Never force sync chunk load to avoid deadlocks
++        ChunkAccess chunk = (levelAccessor == null ? this.level : levelAccessor).getChunk(pos.x, pos.z, ChunkStatus.STRUCTURE_REFERENCES, false);
+         if (chunk == null) {
+             return ImmutableList.of();
+         }
+         Map<Structure, LongSet> map = chunk.getAllReferences();
+-        // Confetti end - Don't force sync chunk load from non-tick threads
++        // Confetti end - Never force sync chunk load to avoid deadlocks
+         // Paper end - Fix swamp hut cat generation deadlock
+         Builder<StructureStart> builder = ImmutableList.builder();
+ 
+@@ -75,32 +74,28 @@ public class StructureManager {
+     }
+ 
+     public List<StructureStart> startsForStructure(SectionPos sectionPos, Structure structure) {
+-        // Confetti start - Don't force sync chunk load from non-tick threads
+-        final boolean forceLoad = ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
+-        ChunkAccess chunk = this.level.getChunk(sectionPos.x(), sectionPos.z(), ChunkStatus.STRUCTURE_REFERENCES, forceLoad);
++        // Confetti start - Never force sync chunk load to avoid deadlocks
++        ChunkAccess chunk = this.level.getChunk(sectionPos.x(), sectionPos.z(), ChunkStatus.STRUCTURE_REFERENCES, false);
+         if (chunk == null) {
+             return ImmutableList.of();
+         }
+         LongSet longSet = chunk.getReferencesForStructure(structure);
+-        // Confetti end - Don't force sync chunk load from non-tick threads
++        // Confetti end - Never force sync chunk load to avoid deadlocks
+         Builder<StructureStart> builder = ImmutableList.builder();
+         this.fillStartsForStructure(structure, longSet, builder::add);
+         return builder.build();
+     }
+ 
+     public void fillStartsForStructure(Structure structure, LongSet structureStartPositions, Consumer<StructureStart> consumer) {
+-        // Confetti start - Don't force sync chunk load from non-tick threads
+-        final boolean forceLoad = ca.spottedleaf.moonrise.common.util.TickThread.isTickThread();
+-        // Confetti end - Don't force sync chunk load from non-tick threads
+         for (long l : structureStartPositions) {
+             SectionPos sectionPos = SectionPos.of(new ChunkPos(l), this.level.getMinSection());
+-            // Confetti start - Don't force sync chunk load from non-tick threads
+-            ChunkAccess chunk = this.level.getChunk(sectionPos.x(), sectionPos.z(), ChunkStatus.STRUCTURE_STARTS, forceLoad);
++            // Confetti start - Never force sync chunk load to avoid deadlocks
++            ChunkAccess chunk = this.level.getChunk(sectionPos.x(), sectionPos.z(), ChunkStatus.STRUCTURE_STARTS, false);
+             if (chunk == null) {
+                 continue;
+             }
+             StructureStart structureStart = this.getStartForStructure(sectionPos, structure, chunk);
+-            // Confetti end - Don't force sync chunk load from non-tick threads
++            // Confetti end - Never force sync chunk load to avoid deadlocks
+             if (structureStart != null && structureStart.isValid()) {
+                 consumer.accept(structureStart);
+             }
