@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sun, 4 Jan 2026 01:55:08 +0100
+Subject: [PATCH] Fix VoidDamageHeightMigration crash - init PurpurConfig
+ before Paper config transformations
+
+
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index 2bb5326e52049d02171e01ab4cf6f7fa118fd6c6..6c6814df9e3337db60ea3396e0c2bb9302fc03c9 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -223,6 +223,14 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         org.spigotmc.SpigotConfig.init((java.io.File) this.options.valueOf("spigot-settings"));
+         org.spigotmc.SpigotConfig.registerCommands();
+         // Spigot end
++        // Purpur start - must init before Paper config transformations which use PurpurConfig
++        try {
++            org.purpurmc.purpur.PurpurConfig.init((java.io.File) options.valueOf("purpur-settings"));
++        } catch (Exception e) {
++            DedicatedServer.LOGGER.error("Unable to load server configuration", e);
++            return false;
++        }
++        // Purpur end
+         io.papermc.paper.util.ObfHelper.INSTANCE.getClass(); // Paper - load mappings for stacktrace deobf and etc.
+         // Paper start - initialize global and world-defaults configuration
+         this.paperConfigurations.initializeGlobalConfiguration(this.registryAccess());
+@@ -240,15 +248,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         io.papermc.paper.command.PaperCommands.registerCommands(this); // Paper - setup /paper command
+         this.server.spark.registerCommandBeforePlugins(this.server); // Paper - spark
+         com.destroystokyo.paper.Metrics.PaperMetrics.startMetrics(); // Paper - start metrics
+-        // Purpur start
+-        try {
+-            org.purpurmc.purpur.PurpurConfig.init((java.io.File) options.valueOf("purpur-settings"));
+-        } catch (Exception e) {
+-            DedicatedServer.LOGGER.error("Unable to load server configuration", e);
+-            return false;
+-        }
+-        org.purpurmc.purpur.PurpurConfig.registerCommands();
+-        // Purpur end
++        org.purpurmc.purpur.PurpurConfig.registerCommands(); // Purpur
+         ConfettiCommands.registerCommands(this); // Confetti
+         com.destroystokyo.paper.VersionHistoryManager.INSTANCE.getClass(); // Paper - load version history now
+         gg.pufferfish.pufferfish.PufferfishConfig.load(); // Pufferfish
