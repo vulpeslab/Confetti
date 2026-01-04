@@ -111,49 +111,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate changelog
-        id: changelog
+      - name: Generate release notes
+        env:
+          VERSION: ${{ steps.final.outputs.version }}
+          MC_VERSION: ${{ steps.final.outputs.mc_version }}
+          BUILD: ${{ steps.final.outputs.build }}
+          JAR_NAME: ${{ steps.artifact.outputs.jar_name }}
+          SHA256: ${{ steps.artifact.outputs.sha256 }}
         run: |
-          # Get previous tag for this MC version
-          MC_VERSION="${{ steps.final.outputs.mc_version }}"
-          CURRENT_TAG="v${{ steps.final.outputs.version }}"
+          CURRENT_TAG="v${VERSION}"
           PREV_TAG=$(git tag -l "v${MC_VERSION}-build.*" | grep -v "$CURRENT_TAG" | sort -V | tail -1 || echo "")
 
+          # Write release notes to file
+          echo "## Confetti ${VERSION}" > release_notes.md
+          echo "" >> release_notes.md
+          echo "**Minecraft Version:** ${MC_VERSION}" >> release_notes.md
+          echo "**Build:** ${BUILD}" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Changes" >> release_notes.md
+
+          # Generate changelog
           if [ -n "$PREV_TAG" ]; then
             echo "Generating changelog from $PREV_TAG to $CURRENT_TAG"
-            CHANGELOG=$(git log --pretty=format:"- %s" "$PREV_TAG".."$CURRENT_TAG" --no-merges | head -50)
+            git log --pretty=format:"- %s" "$PREV_TAG".."$CURRENT_TAG" --no-merges | head -30 >> release_notes.md
           else
             echo "No previous tag found, using recent commits"
-            CHANGELOG=$(git log --pretty=format:"- %s" -20 --no-merges)
+            git log --pretty=format:"- %s" -15 --no-merges >> release_notes.md
           fi
 
-          # Escape for GitHub Actions
-          CHANGELOG="${CHANGELOG//'%'/'%25'}"
-          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
-          CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
-          echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          # Add footer
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Checksums" >> release_notes.md
+          echo "**SHA-256:** \`${SHA256}\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Installation" >> release_notes.md
+          echo "1. Download \`${JAR_NAME}\`" >> release_notes.md
+          echo "2. Place in your server directory" >> release_notes.md
+          echo "3. Run with \`java -jar ${JAR_NAME}\`" >> release_notes.md
+
+          echo "=== Release notes ==="
+          cat release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.final.outputs.version }}
           name: Confetti ${{ steps.final.outputs.version }}
-          body: |
-            ## Confetti ${{ steps.final.outputs.version }}
-
-            **Minecraft Version:** ${{ steps.final.outputs.mc_version }}
-            **Build:** ${{ steps.final.outputs.build }}
-
-            ### Changes
-            ${{ steps.changelog.outputs.changelog }}
-
-            ### Checksums
-            **SHA-256:** `${{ steps.artifact.outputs.sha256 }}`
-
-            ### Installation
-            1. Download `${{ steps.artifact.outputs.jar_name }}`
-            2. Place in your server directory
-            3. Run with `java -jar ${{ steps.artifact.outputs.jar_name }}`
+          body_path: release_notes.md
           files: ${{ steps.artifact.outputs.jar_path }}
           draft: false
           prerelease: false
