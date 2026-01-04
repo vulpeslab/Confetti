@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sun, 4 Jan 2026 01:47:08 +0100
+Subject: [PATCH] Port to 1.21.1: Fix API changes and compilation errors
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 42ef0b27b69c3dae6f87be424a9425686ddb380e..d928c89e6d90ee1aa8cb7139aea0aca40e3289eb 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -328,7 +328,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     public volatile Thread shutdownThread; // Paper
+     public volatile boolean abnormalExit = false; // Paper
+     public static final long SERVER_INIT = System.nanoTime(); // Paper - Lag compensation
+-    public gg.pufferfish.pufferfish.util.AsyncExecutor mobSpawnExecutor = new gg.pufferfish.pufferfish.util.AsyncExecutor("MobSpawning"); // Pufferfish - optimize mob spawning
+ 
+     public static <S extends MinecraftServer> S spin(Function<Thread, S> serverFactory) {
+         AtomicReference<S> atomicreference = new AtomicReference();
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 44f2e7099aad0475394bea183d60564889d2de40..679b941e7aa56f0dc0ac416c6f7bcdb652f2e249 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -548,7 +548,7 @@ public class ServerLevel extends Level implements WorldGenLevel, ca.spottedleaf.
+         this.serverLevelData.setWorld(this);
+ 
+         if (biomeProvider != null) {
+-            BiomeSource worldChunkManager = new CustomWorldChunkManager(this.getWorld(), biomeProvider, this.server.registryAccess().registryOrThrow(Registries.BIOME));
++            BiomeSource worldChunkManager = new CustomWorldChunkManager(this.getWorld(), biomeProvider, this.server.registryAccess().registryOrThrow(Registries.BIOME), chunkgenerator.getBiomeSource()); // Paper - add vanillaBiomeProvider
+             if (chunkgenerator instanceof NoiseBasedChunkGenerator cga) {
+                 chunkgenerator = new NoiseBasedChunkGenerator(worldChunkManager, cga.settings);
+             } else if (chunkgenerator instanceof FlatLevelSource cpf) {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 57619a049a3ad5d25f3039d70f0092b1cdb91a94..d4c132d9751ee3baf6c460ae9d530693dbab5b0c 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -973,8 +973,10 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     public void checkBelowWorld() {
++        if (!this.level.getWorld().isVoidDamageEnabled()) return; // Paper - check if void damage is enabled on the world
++
+         // Paper start - Configurable nether ceiling damage
+-        if (this.getY() < (double) (this.level.getMinBuildHeight() + level().purpurConfig.voidDamageHeight) || (this.level.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER // Purpur
++        if (this.getY() < (double) (this.level.getMinBuildHeight() + this.level.getWorld().getVoidDamageMinBuildHeightOffset())  || (this.level.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER // Paper - use configured min build height offset
+             && this.level.paperConfig().environment.netherCeilingVoidDamageHeight.test(v -> this.getY() >= v)
+             && (!(this instanceof Player player) || !player.getAbilities().invulnerable))) {
+             // Paper end - Configurable nether ceiling damage
+@@ -2931,9 +2933,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             this(stack.getItem(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(stack), dropConsumer);
+         }
+ 
+-        public void runConsumer(final org.bukkit.World fallbackWorld, final Location fallbackLoc) {
++        public void runConsumer(final java.util.function.Consumer<org.bukkit.inventory.ItemStack> fallback) {
+             if (this.dropConsumer == null || org.bukkit.craftbukkit.inventory.CraftItemType.bukkitToMinecraft(this.stack.getType()) != this.item) {
+-                fallbackWorld.dropItem(fallbackLoc, this.stack);
++                fallback.accept(this.stack);
+             } else {
+                 this.dropConsumer.accept(org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(this.stack));
+             }
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index 78c5e84e544d2c3e81c1d39de28b37503c4d68ce..8163fadf1d7d1eaf7c7926e8aedc2689c7b5d0f3 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -185,7 +185,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+     private static final double MAX_LINE_OF_SIGHT_TEST_RANGE = 128.0D;
+     protected static final int LIVING_ENTITY_FLAG_IS_USING = 1;
+     protected static final int LIVING_ENTITY_FLAG_OFF_HAND = 2;
+-    protected static final int LIVING_ENTITY_FLAG_SPIN_ATTACK = 4;
++    public static final int LIVING_ENTITY_FLAG_SPIN_ATTACK = 4;
+     protected static final EntityDataAccessor<Byte> DATA_LIVING_ENTITY_FLAGS = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.BYTE);
+     public static final EntityDataAccessor<Float> DATA_HEALTH_ID = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.FLOAT);
+     private static final EntityDataAccessor<List<ParticleOptions>> DATA_EFFECT_PARTICLES = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.PARTICLES);
+@@ -2734,7 +2734,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
+     @Override
+     protected void onBelowWorld() {
+-        this.hurt(this.damageSources().fellOutOfWorld(), (float) level().purpurConfig.voidDamageDealt); // Purpur
++        this.hurt(this.damageSources().fellOutOfWorld(), this.level().getWorld().getVoidDamageAmount()); // Paper - use configured void damage amount
+     }
+ 
+     protected void updateSwingTime() {
+@@ -4129,7 +4129,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
+     }
+ 
+-    protected void setLivingEntityFlag(int mask, boolean value) {
++    public void setLivingEntityFlag(int mask, boolean value) {
+         int j = (Byte) this.entityData.get(LivingEntity.DATA_LIVING_ENTITY_FLAGS);
+ 
+         if (value) {
+diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
+index ee4e408e1d0128fabc84703451445abe4947d8b5..41aeb44a62d602e95504b5a75437ddb9b0d78f21 100644
+--- a/src/main/java/net/minecraft/world/entity/Mob.java
++++ b/src/main/java/net/minecraft/world/entity/Mob.java
+@@ -911,20 +911,24 @@ public abstract class Mob extends LivingEntity implements EquipmentUser, Leashab
+             Player entityhuman = this.level().findNearbyPlayer(this, -1.0D, EntitySelector.PLAYER_AFFECTS_SPAWNING); // Paper - Affects Spawning API
+ 
+             if (entityhuman != null) {
+-                double d0 = entityhuman.distanceToSqr((Entity) this);
+-                int i = this.level().paperConfig().entities.spawning.despawnRanges.get(this.getType().getCategory()).hard(); // Paper - Configurable despawn distances
+-                int j = i * i;
+-
+-                if (d0 > (double) j && this.removeWhenFarAway(d0)) {
++                // Paper start - Configurable despawn distances
++                final io.papermc.paper.configuration.WorldConfiguration.Entities.Spawning.DespawnRangePair despawnRangePair = this.level().paperConfig().entities.spawning.despawnRanges.get(this.getType().getCategory());
++                final io.papermc.paper.configuration.type.DespawnRange.Shape shape = this.level().paperConfig().entities.spawning.despawnRangeShape;
++                final double dy = Math.abs(entityhuman.getY() - this.getY());
++                final double dySqr = Math.pow(dy, 2);
++                final double dxSqr = Math.pow(entityhuman.getX() - this.getX(), 2);
++                final double dzSqr = Math.pow(entityhuman.getZ() - this.getZ(), 2);
++                final double distanceSquared = dxSqr + dzSqr + dySqr;
++                // Despawn if hard/soft limit is exceeded
++                if (despawnRangePair.hard().shouldDespawn(shape, dxSqr, dySqr, dzSqr, dy) && this.removeWhenFarAway(distanceSquared)) {
+                     this.discard(EntityRemoveEvent.Cause.DESPAWN); // CraftBukkit - add Bukkit remove cause
+                 }
+-
+-                int k = this.level().paperConfig().entities.spawning.despawnRanges.get(this.getType().getCategory()).soft(); // Paper - Configurable despawn distances
+-                int l = k * k;
+-
+-                if (this.noActionTime > 600 && this.random.nextInt(800) == 0 && d0 > (double) l && this.removeWhenFarAway(d0)) {
+-                    this.discard(EntityRemoveEvent.Cause.DESPAWN); // CraftBukkit - add Bukkit remove cause
+-                } else if (d0 < (double) l) {
++                if (despawnRangePair.soft().shouldDespawn(shape, dxSqr, dySqr, dzSqr, dy)) {
++                    if (this.noActionTime > 600 && this.random.nextInt(800) == 0 && this.removeWhenFarAway(distanceSquared)) {
++                        this.discard(EntityRemoveEvent.Cause.DESPAWN); // CraftBukkit - add Bukkit remove cause
++                    }
++                } else {
++                // Paper end - Configurable despawn distances
+                     this.noActionTime = 0;
+                 }
+             }
+diff --git a/src/main/java/net/minecraft/world/entity/ambient/Bat.java b/src/main/java/net/minecraft/world/entity/ambient/Bat.java
+index f6adcfad06938cd121a962df013e85c112751f65..36e5a6462675ceb3cef236c451321b1656d9fcc0 100644
+--- a/src/main/java/net/minecraft/world/entity/ambient/Bat.java
++++ b/src/main/java/net/minecraft/world/entity/ambient/Bat.java
+@@ -322,10 +322,6 @@ public class Bat extends AmbientCreature {
+     private static final int ONE_HOUR = 20 * 60 * 60;
+     private static int lastSpookyCheck = -ONE_HOUR;
+     public static boolean isHalloweenSeason(Level level) { return level.purpurConfig.forceHalloweenSeason || isHalloween(); } // Purpur
+-    // Pufferfish start - only check for spooky season once an hour
+-    private static boolean isSpookySeason = false;
+-    private static final int ONE_HOUR = 20 * 60 * 60;
+-    private static int lastSpookyCheck = -ONE_HOUR;
+     private static boolean isHalloween() {
+         if (net.minecraft.server.MinecraftServer.currentTick - lastSpookyCheck > ONE_HOUR) {
+         LocalDate localdate = LocalDate.now();

@@ -35,7 +35,7 @@ index 2c279854bdf214538380fa354e4298ec4bd9ac4e..b1c6fa02905066fc189332fb4e620a48
 +    // Confetti end
  }
 diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
-index cacdf7550d7e11993b3a7efa9e4774cbbe3e7947..66168cf7cc384b5bce4fb6df1830d8778c0b4331 100644
+index 47602ed18c53e0cd6ecc99afc21423c4f4361f8e..731133bf6ac12f93d51546a4d7b2b80af38e05a1 100644
 --- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 +++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 @@ -27,6 +27,7 @@ import java.util.Iterator;
@@ -473,10 +473,10 @@ index efc0c1acc8239dd7b00211a1d3bfd3fc3b2c810c..8a78a070aac0ee78dd59ddabfae62e11
  
      public void getEntitiesWithoutDragonParts(final Entity except, final AABB box, final List<Entity> into, final Predicate<? super Entity> predicate) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index c1627213177cfa59c5816c64ac8e94666b77d052..d1e644f4b749db22f565a943a943f9b613c3f177 100644
+index 3818190f8e6aac39d8a8e67d111d5f59ba0822c1..963d4e3651b37d4060ab927f0f07c22943829c0f 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -472,6 +472,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -475,6 +475,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
      private int sectionY = Integer.MIN_VALUE;
      private int sectionZ = Integer.MIN_VALUE;
      private final ThreadLocal<Boolean> updatingSectionStatus = ThreadLocal.withInitial(() -> false); // Confetti - ThreadLocal for thread safety
@@ -484,7 +484,7 @@ index c1627213177cfa59c5816c64ac8e94666b77d052..d1e644f4b749db22f565a943a943f9b6
  
      @Override
      public final boolean moonrise$isHardColliding() {
-@@ -528,6 +529,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -531,6 +532,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          this.updatingSectionStatus.set(to); // Confetti - ThreadLocal
      }
  

@@ -78,10 +78,10 @@ index 0000000000000000000000000000000000000000..62f7adcfb0823c19d2af727fa7da8229
 +    }
 +}
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index b233f8a4ddd20415e81d92c3d21945ab9d12c305..850a5647eb94d9a164a106333ac4fb4c733b6aa6 100644
+index 41f6925c54a992a4320758104ac39cde692fd33d..34bc95e034ebd24f0a345a66852956032ddc6371 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -1318,6 +1318,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1322,6 +1322,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
  
              } finally { seenByLock.unlock(); } // ShreededPaper - seenBy thread safety
@@ -122,7 +122,7 @@ index 8dae6929a9194d3916f3b949907131d56b7d5e96..b2211668ce08e168e9696a61ce51bda8
              }
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 1b1008ffd544dcddc31238e10c06df0d7aa68793..c3b70c66f42073d9680a3197b47b5c4dd08f3a6e 100644
+index 33b7f0f14c826e9baa8b562a852cd4d46882622c..9a9ef95e6bdba46e4befa4e1091323dcbf5386c2 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -72,6 +72,7 @@ import net.minecraft.server.MinecraftServer;
@@ -133,7 +133,7 @@ index 1b1008ffd544dcddc31238e10c06df0d7aa68793..c3b70c66f42073d9680a3197b47b5c4d
  import net.minecraft.server.level.ClientInformation;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
-@@ -1199,6 +1200,7 @@ public abstract class PlayerList {
+@@ -1209,6 +1210,7 @@ public abstract class PlayerList {
      }
  
      public void broadcast(@Nullable net.minecraft.world.entity.player.Player player, double x, double y, double z, double distance, ResourceKey<Level> worldKey, Packet<?> packet) {

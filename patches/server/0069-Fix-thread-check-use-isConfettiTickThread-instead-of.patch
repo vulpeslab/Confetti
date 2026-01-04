@@ -103,10 +103,10 @@ index 3f895fc0b058bbf312203fb85a8947d3bda278ae..cf48a32a0462204e39689bc3be960ea4
                          blockState = this.collisionGetter.getBlockState(this.pos);
                      // Confetti end
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 33d16abf46053de51e4d62c9bece24b042075aed..d16d83adab0b7a31181ff9392cf8485170b4e051 100644
+index a9a10ceaaf4206fbedea7650ffbee3bfede7977d..8f1c2d793ceb5d8723d27e2d7c371f0aff9abc3e 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -1585,7 +1585,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1602,7 +1602,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
          }
          // Paper end - Perf: Optimize capturedTileEntities lookup
          // CraftBukkit end

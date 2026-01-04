@@ -182,7 +182,7 @@ index d912076a3f66540c22ef64077efb89694fa14005..75553e9846810454bc3a270b6e279fdb
          }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 350c3c1af30f2a584b0ff853198bf56c63711cf1..f14f89220ed40f64597e8aa998ed4c30936b4b80 100644
+index e6ea63e2eaa1a7bf9a28d677a8b6443daa500aa8..d68799ca54a7992a414646a109058d90e7a1bf36 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.floats.FloatArraySet;
@@ -193,7 +193,7 @@ index 350c3c1af30f2a584b0ff853198bf56c63711cf1..f14f89220ed40f64597e8aa998ed4c30
  import java.util.ArrayList;
  import java.util.Arrays;
  import java.util.HashSet;
-@@ -592,7 +593,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -595,7 +596,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          this.nextStep = 1.0F;
          this.random = world == null || world.purpurConfig.entitySharedRandom ? SHARED_RANDOM : RandomSource.create(); // Paper - Share random for entities to make them more random // Purpur
          this.remainingFireTicks = -this.getFireImmuneTicks();

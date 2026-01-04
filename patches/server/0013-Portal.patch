@@ -355,7 +355,7 @@ index 0000000000000000000000000000000000000000..4e73af3a8bac379d7e01203eddc7c85f
 +
 +}
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index e1fc3c20cae14d8cb0727fb8f99d00c7ee23a7fe..b73a8ff02e547cb20aee12b38ed590a9131526b0 100644
+index 4f72ce384f4c0dbae98effa89aed5c3bb802e635..d5878384d71c31a5bca24b55dca01d6eb5e9c776 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -221,8 +221,8 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
@@ -422,19 +422,19 @@ index 0000000000000000000000000000000000000000..7b235de2b362d48f620b95f69cb9785d
 + 
 +         if (optional.isPresent() || !canCreatePortal) { // CraftBukkit
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ae882927f355a239fd7ffeffbdfc1f9bf10f671a..4defb73aff9907f884320af039a509084e3eb0a3 100644
+index e7719b0344a6bc78b81fcce85657163a43d46bdf..bd1bed6e5070186f6a169cca55b3d639798ee33a 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -3884,7 +3884,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3897,7 +3897,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
  
      }
  
 -    protected void removeAfterChangingDimensions() {
 +    public void removeAfterChangingDimensions() { // Confetti - make public
          this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
-         if (this instanceof Leashable leashable) {
+         if (this instanceof Leashable leashable && leashable.isLeashed()) { // Paper - only call if it is leashed
              // Paper start - Expand EntityUnleashEvent
-@@ -3920,6 +3920,19 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3933,6 +3933,19 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          }
          return new CraftPortalEvent(event);
      }

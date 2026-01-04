@@ -5,7 +5,7 @@ Subject: [PATCH] Ensure worlds are loaded on the global scheduler
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 33808b1b21c656672c5e5a57ef40668cf44ebf04..9c871774fc65789bc41ea9d03545912a19d05f3b 100644
+index 2da3f80170e1303c04b6bf72fa3df8ef4480d855..69b9de9bf12bc4a8280a164adc98313eefcb1b23 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -885,6 +885,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -18,10 +18,10 @@ index 33808b1b21c656672c5e5a57ef40668cf44ebf04..9c871774fc65789bc41ea9d03545912a
          // CraftBukkit end
  
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index c72f928c8fa5533800505488bae8284f7abc794f..8149cb89f7b715364fa67211ec6465f1f49a1fed 100644
+index 0218475c1607d620c778ad2f0c1997e536d7f751..b5dd59ae55b9f0584bae0c7e3959b3754ff85c7f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -1289,6 +1289,8 @@ public final class CraftServer implements Server {
+@@ -1291,6 +1291,8 @@ public final class CraftServer implements Server {
          Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
          //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
          Preconditions.checkArgument(creator != null, "WorldCreator cannot be null");

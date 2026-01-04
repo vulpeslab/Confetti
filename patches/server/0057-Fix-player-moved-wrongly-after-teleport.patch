@@ -5,10 +5,10 @@ Subject: [PATCH] Fix player moved wrongly after teleport
 
 
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 926ba5c3a0f5279fa41a6e24acfd92d43b06a684..eddd7d921111ad8427629efc365ef724ea9bcbcc 100644
+index 4963a564c82c96d7bd196ac336fbefe51dd70723..1201d6e64e481007b6b8a3e01dcac5b39a3bdad3 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -1776,6 +1776,19 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+@@ -1846,6 +1846,19 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
          this.lastPitch = f1;
          // CraftBukkit end
  

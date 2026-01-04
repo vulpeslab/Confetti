@@ -165,7 +165,7 @@ index 53ffefd925878b67cd78486faed07ecc257e1101..00000000000000000000000000000000
 - 
 -     // CraftBukkit start
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-index 7c06b284a6cc74c0b31f8921706c7796dcc4e402..e29a31badc3499ddab38c5fd7a925f273de0c130 100644
+index 28731f0c5b0ba63fa8d5ce3ee580bf314a844f92..8fa1162f699b7393fbca7f7521ab8090b1619db5 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 @@ -425,7 +425,7 @@ public class ServerPlayerGameMode {
@@ -189,7 +189,7 @@ index 7c06b284a6cc74c0b31f8921706c7796dcc4e402..e29a31badc3499ddab38c5fd7a925f27
                      org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockDropItemEvent(bblock, state, this.player, itemsToDrop); // Paper - capture all item additions to the world
                  }
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index f6e5f18e2d70261eb4e0bea9818ae59e953f455d..9d7089d9db5bf86c0cb917e0e192f551bad5c3f1 100644
+index 9d9af312037c96c7773a456e37e6425f7004e73a..fc53a4127a9c6053ca8465c366e073b7a0402b98 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
 @@ -423,29 +423,31 @@ public final class ItemStack implements DataComponentHolder {
@@ -360,7 +360,7 @@ index 0000000000000000000000000000000000000000..191b18949bcf2fd5c304e6400a052f80
 +                     placeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockMultiPlaceEvent(world, entityhuman, enumhand, blocks, blockposition.getX(), blockposition.getY(), blockposition.getZ());
 +                 } else if (blocks.size() == 1 && item != Items.POWDER_SNOW_BUCKET) { // Paper - Fix cancelled powdered snow bucket placement
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 15768105efeebff01c0b5de18fcb1b02a1ea7aa6..5fece4d6dd317d3f4ec89124987ecec2f2b47d42 100644
+index 687a7390dffe21f4631431cf1214a59159fa24e6..e9474c668a90334f120e24949a1ae5496de31a7e 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
@@ -477,7 +477,7 @@ index 15768105efeebff01c0b5de18fcb1b02a1ea7aa6..5fece4d6dd317d3f4ec89124987ecec2
              if (previous != null) {
                  return previous.getHandle();
              }
-@@ -1576,7 +1579,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1593,7 +1596,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
      public BlockEntity getBlockEntity(BlockPos blockposition, boolean validate) {
          // Paper start - Perf: Optimize capturedTileEntities lookup
          net.minecraft.world.level.block.entity.BlockEntity blockEntity;
@@ -486,7 +486,7 @@ index 15768105efeebff01c0b5de18fcb1b02a1ea7aa6..5fece4d6dd317d3f4ec89124987ecec2
              return blockEntity;
          }
          // Paper end - Perf: Optimize capturedTileEntities lookup
-@@ -1589,8 +1592,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1606,8 +1609,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
  
          if (!this.isOutsideBuildHeight(blockposition)) {
              // CraftBukkit start
@@ -526,10 +526,10 @@ index 17c994a39a1b99cc7727e328ce7493d534247a21..c6e525c5c2a57a44bd261ccf0e371e07
              }
              // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/world/level/block/Block.java b/src/main/java/net/minecraft/world/level/block/Block.java
-index 58c6002bc9d326477ebacfece4bb2bc50389fe87..42c9e3c056da7c0c84346125def2f5f3389c4383 100644
+index 4ff7e3693305069e7fad185802a3b0481ab70a4a..9d44ae252863c266de1d1a5a62194860ee327949 100644
 --- a/src/main/java/net/minecraft/world/level/block/Block.java
 +++ b/src/main/java/net/minecraft/world/level/block/Block.java
-@@ -413,8 +413,8 @@ public class Block extends BlockBehaviour implements ItemLike {
+@@ -412,8 +412,8 @@ public class Block extends BlockBehaviour implements ItemLike {
  
              entityitem.setDefaultPickUpDelay();
              // CraftBukkit start
@@ -648,10 +648,10 @@ index a5fd8227d3e82ba714c37dac65572a9999aa1fb9..ec1e58a93c3b7b2b6b280161ecf84e86
              tileentity = (BlockEntity) this.blockEntities.get(pos);
          }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index baac0c373d337d4b68d4dc748ec8476510143273..e13acf8f8f0794ddc23139ce4e416a552508c1a3 100644
+index 0921894dbc0d81b943827ecda6e6befdbfd715f5..33ef9133f85f14f5c5e424b3af113fbbcd257479 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-@@ -782,13 +782,15 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -828,13 +828,15 @@ public class CraftWorld extends CraftRegionAccessor implements World {
  
      @Override
      public boolean generateTree(Location loc, TreeType type, BlockChangeDelegate delegate) {
@@ -672,7 +672,7 @@ index baac0c373d337d4b68d4dc748ec8476510143273..e13acf8f8f0794ddc23139ce4e416a55
                  BlockPos position = ((CraftBlockState) blockstate).getPosition();
                  net.minecraft.world.level.block.state.BlockState oldBlock = this.world.getBlockState(position);
                  int flag = ((CraftBlockState) blockstate).getFlag();
-@@ -796,10 +798,10 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -842,10 +844,10 @@ public class CraftWorld extends CraftRegionAccessor implements World {
                  net.minecraft.world.level.block.state.BlockState newBlock = this.world.getBlockState(position);
                  this.world.notifyAndUpdatePhysics(position, null, oldBlock, newBlock, newBlock, flag, 512);
              }

@@ -243,7 +243,7 @@ index ab093b0e8ac6f762921eb1d15f5217345c4eba05..1f3daf19c6201fc1302d8496deb94ee8
      }
  }
 diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
-index 87d2b3ec165e2e9e4bdbedd7adddaa2130ed507b..cb4d7802bd4460bad62566955cdd213a6be7095d 100644
+index 5c7f2471a0b15ac2e714527296ad2aa7291999eb..8603119c36b899c0f56674532b888cf8956abab4 100644
 --- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 +++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 @@ -25,6 +25,7 @@ import java.util.ArrayList;
@@ -283,7 +283,7 @@ index 87d2b3ec165e2e9e4bdbedd7adddaa2130ed507b..cb4d7802bd4460bad62566955cdd213a
      public void updateStatus(final FullChunkStatus status, final EntityLookup lookup) {
          this.status = status;
 diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
-index 203efe5925828be0d69ac08f6c306d11d360a12e..85386e04b1f2cb247cb9f64a2260262e167a17a2 100644
+index 2b23b22d7361af0de5044bcd3aba0ae6e1c70883..4a059c71985ae894db4a2fba04507b30d91ad529 100644
 --- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
 +++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/player/RegionizedPlayerChunkLoader.java
 @@ -339,7 +339,7 @@ public final class RegionizedPlayerChunkLoader {
@@ -822,10 +822,10 @@ index cb308808906a8cdb127df8284e106e00553473ca..5bc68ca91350bad96bb6963ca86d8538
              }
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59d7c9dc7d 100644
+index 466c15201069a023de009a5bafc42c4014be3d82..1e256a82d50a82061b2176c895be46bc68406181 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -248,7 +248,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -252,7 +252,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          }
          final ServerPlayer[] backingSet = inRange.getRawDataUnchecked();
          for (int i = 0, len = inRange.size(); i < len; i++) {
@@ -836,7 +836,7 @@ index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59
          }
      }
      // Paper start - per player mob count backoff
-@@ -264,7 +266,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -268,7 +270,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          }
          final ServerPlayer[] backingSet = inRange.getRawDataUnchecked();
          for (int i = 0, len = inRange.size(); i < len; i++) {
@@ -847,7 +847,7 @@ index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59
          }
      }
      // Paper end - per player mob count backoff
-@@ -1130,13 +1134,13 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1134,13 +1138,13 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          public final ServerEntity serverEntity;
          final Entity entity;
          private final int range;
@@ -864,7 +864,7 @@ index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59
  
          @Override
          public final void moonrise$tick(final ca.spottedleaf.moonrise.common.misc.NearbyPlayers.TrackedChunk chunk) {
-@@ -1171,7 +1175,19 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1175,7 +1179,19 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
  
              for (int i = 0, len = players.size(); i < len; ++i) {
                  final ServerPlayer player = playersRaw[i];
@@ -885,7 +885,7 @@ index d04ddeaefad1a79be217d71aceab4bdfa135d3a5..3c4da22b7ec69154c76379c58e8d1d59
              }
  
              if (!fullTrackerUpdate) return; // Confetti - trackerFullUpdateFrequency
-@@ -1181,6 +1197,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1185,6 +1201,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  seenByLock.lock(); try { // Confetti - seenBy thread safety
                  for (final ServerPlayerConnection conn : new java.util.ArrayList<>(this.seenBy)) {
                      final ServerPlayer player = conn.getPlayer();
@@ -1062,10 +1062,10 @@ index 137fe86e33d63c629d69072ee7cbc15cdef1a4d8..80da7213a3dc11cbefb1d2e4c18e6fb4
      }
  }
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 6b9901d28cd250dbfd38d537ca0f1298216beb52..e4e775c7952b820b6780cf4f5cac519749adce38 100644
+index f2ce773a9e8c8906f938082dc95c12f34a127256..229b6fe62b50e01fe5549a0b9aae7d8613570fb5 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -470,7 +470,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -473,7 +473,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
      private int sectionX = Integer.MIN_VALUE;
      private int sectionY = Integer.MIN_VALUE;
      private int sectionZ = Integer.MIN_VALUE;
@@ -1074,7 +1074,7 @@ index 6b9901d28cd250dbfd38d537ca0f1298216beb52..e4e775c7952b820b6780cf4f5cac5197
  
      @Override
      public final boolean moonrise$isHardColliding() {
-@@ -519,12 +519,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -522,12 +522,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
  
      @Override
      public final boolean moonrise$isUpdatingSectionStatus() {
@@ -1089,7 +1089,7 @@ index 6b9901d28cd250dbfd38d537ca0f1298216beb52..e4e775c7952b820b6780cf4f5cac5197
      }
  
      @Override
-@@ -4786,7 +4786,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -4851,7 +4851,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
      }
      public final void setPosRaw(double x, double y, double z, boolean forceBoundingBoxUpdate) {
          // Paper start - rewrite chunk system
@@ -1112,7 +1112,7 @@ index d05b1e129eee07434d162e1b949fd5633418ef66..5a3d375fe67b9beb374c4600d02959c5
              }
  
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index 9d7089d9db5bf86c0cb917e0e192f551bad5c3f1..e70e16e76657dfc92fbe2ead70c93024ab02315c 100644
+index fc53a4127a9c6053ca8465c366e073b7a0402b98..955c4355a415ef2d3efcd1a119df0a1a0599ffea 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
 @@ -511,7 +511,7 @@ public final class ItemStack implements DataComponentHolder {
@@ -1156,7 +1156,7 @@ index 4b8cebb321eddc852b4ec7def7f51d781f67927b..daf536781cf66a7f33a9f751b8beba97
              }
  
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 5fece4d6dd317d3f4ec89124987ecec2f2b47d42..33d16abf46053de51e4d62c9bece24b042075aed 100644
+index e9474c668a90334f120e24949a1ae5496de31a7e..a9a10ceaaf4206fbedea7650ffbee3bfede7977d 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -168,6 +168,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
@@ -1168,7 +1168,7 @@ index 5fece4d6dd317d3f4ec89124987ecec2f2b47d42..33d16abf46053de51e4d62c9bece24b0
      // Paper start - add paper world config
      private final io.papermc.paper.configuration.WorldConfiguration paperConfig;
 diff --git a/src/main/java/net/minecraft/world/level/NaturalSpawner.java b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
-index acc5f03fb1d8160fd066f6b6f768985a1a407198..8ab37d7a26958931723820edbca0d16b4241e57b 100644
+index 02e1378bb2cef6138d06b9b67fde73f35f7c9128..8efa5c7b84fa7f9a70cd9a8b7bc1371ca3dd9376 100644
 --- a/src/main/java/net/minecraft/world/level/NaturalSpawner.java
 +++ b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
 @@ -163,7 +163,9 @@ public final class NaturalSpawner {
@@ -1183,7 +1183,7 @@ index acc5f03fb1d8160fd066f6b6f768985a1a407198..8ab37d7a26958931723820edbca0d16b
                  }
                  difference = (minDiff == Integer.MAX_VALUE) ? 0 : minDiff;
 diff --git a/src/main/java/net/minecraft/world/level/block/DispenserBlock.java b/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
-index f6edfea463b3725d3a79aca38825e86dbf82175c..2013bd02dd2d0950d10069edc7978b7becf176a9 100644
+index e1021d8be840f378568f28639c259182055c78ac..cff6d863438e6129adbc60dfae81522971314c5d 100644
 --- a/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
 @@ -52,6 +52,7 @@ public class DispenserBlock extends BaseEntityBlock {
@@ -1194,7 +1194,7 @@ index f6edfea463b3725d3a79aca38825e86dbf82175c..2013bd02dd2d0950d10069edc7978b7b
  
      @Override
      public MapCodec<? extends DispenserBlock> codec() {
-@@ -111,7 +112,7 @@ public class DispenserBlock extends BaseEntityBlock {
+@@ -110,7 +111,7 @@ public class DispenserBlock extends BaseEntityBlock {
  
                  if (idispensebehavior != DispenseItemBehavior.NOOP) {
                      if (!org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockPreDispenseEvent(world, pos, itemstack, i)) return; // Paper - Add BlockPreDispenseEvent
@@ -1309,7 +1309,7 @@ index c131734cad123a35456d18f8a161f77a4ac9ac99..f9773d754a75637f25851cf0e3a6d941
  
      public static int getColorForPower(int powerLevel) {
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
-index cd0e43f4c53a746dd6183a8406269f9b11ad3571..3b5e68550012f4b6bf6e884946fc3830e9eb0a5c 100644
+index a7b6c20afd9ec3fe61d2bdf42f96398c8d6751cc..afab3f181fe60d0376ae7aef078240082809aea0 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 @@ -38,7 +38,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -1321,7 +1321,7 @@ index cd0e43f4c53a746dd6183a8406269f9b11ad3571..3b5e68550012f4b6bf6e884946fc3830
  
      public Timing tickTimer = MinecraftTimings.getTileEntityTimings(this); // Paper
      // CraftBukkit start - data containers
-@@ -232,7 +232,7 @@ public abstract class BlockEntity {
+@@ -245,7 +245,7 @@ public abstract class BlockEntity {
  
      public void setChanged() {
          if (this.level != null) {
@@ -1607,7 +1607,7 @@ index 763b315b1d761bc3bd82d9b847ed3f64fd5ce991..99505f0db7bc36d89b55b5193c73e5d9
          this.usedAuxIds.put("map", i);
          this.setDirty();
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 7a53a5b5490e6b00b9f755fb3e18fb38f4bc1252..14fec7f7ea98914c355f885f29f32e3bfb2e5d35 100644
+index 769d283cd98cba829262e45020ce3936c484938a..5b7c917b6a1f277d070164947f6b5fcff5e7cd38 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -12,6 +12,7 @@ import java.util.List;
@@ -1804,10 +1804,10 @@ index a6d62abd3102770652f914b9d697c6d3c2533cfc..21644aa1d0f86e5d07f9edc30c679471
          //profilerFiller.push("collect"); // Purpur
          this.collectTicks(time, maxTicks, null); // Purpur
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 198a86fc9b8c4dba8c8de27bccc4de65690b84de..1f578e73f3c33e2e1b2fb789e954c576f840d504 100644
+index 858c6c860d9b8aaa1d3f9f77a9e410726239d7cc..652bfb1cf2b811775be3cc8a0a64e12655675ffc 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-@@ -960,7 +960,7 @@ public class CraftEventFactory {
+@@ -962,7 +962,7 @@ public class CraftEventFactory {
          return CraftEventFactory.handleBlockSpreadEvent(world, source, target, block, 2);
      }
  
@@ -1816,7 +1816,7 @@ index 198a86fc9b8c4dba8c8de27bccc4de65690b84de..1f578e73f3c33e2e1b2fb789e954c576
  
      public static boolean handleBlockSpreadEvent(LevelAccessor world, BlockPos source, BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag) {
          // Suppress during worldgen
-@@ -972,7 +972,7 @@ public class CraftEventFactory {
+@@ -974,7 +974,7 @@ public class CraftEventFactory {
          CraftBlockState state = CraftBlockStates.getBlockState(world, target, flag);
          state.setData(block);
  
@@ -1825,7 +1825,7 @@ index 198a86fc9b8c4dba8c8de27bccc4de65690b84de..1f578e73f3c33e2e1b2fb789e954c576
          Bukkit.getPluginManager().callEvent(event);
  
          if (!event.isCancelled()) {
-@@ -2219,7 +2219,7 @@ public class CraftEventFactory {
+@@ -2235,7 +2235,7 @@ public class CraftEventFactory {
          CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemStack.copyWithCount(1));
  
          org.bukkit.event.block.BlockDispenseEvent event = new org.bukkit.event.block.BlockDispenseEvent(bukkitBlock, craftItem.clone(), CraftVector.toBukkit(to));

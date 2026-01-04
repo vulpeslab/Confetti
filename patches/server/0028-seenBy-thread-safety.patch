@@ -5,7 +5,7 @@ Subject: [PATCH] seenBy thread safety
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf3bfce3dc 100644
+index 1883abec14e05f8eb2e865446b4d81091b1aa5e0..573d4c7c144bb4a991fa41255d9a277f6e0ca8f9 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -41,6 +41,7 @@ import java.util.concurrent.CompletableFuture;
@@ -16,7 +16,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
  import java.util.function.BooleanSupplier;
  import java.util.function.Consumer;
  import java.util.function.IntFunction;
-@@ -1100,6 +1101,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1104,6 +1105,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          final Entity entity;
          private final int range;
          SectionPos lastSectionPos;
@@ -24,7 +24,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
          public final Set<ServerPlayerConnection> seenBy = new it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet<>(); // Paper - Perf: optimise map impl
  
          // Paper start - optimise entity tracker
-@@ -1135,17 +1137,20 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1139,17 +1141,20 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
  
              if (lastChunkUpdate != currChunkUpdate || lastTrackedChunk != chunk) {
                  // need to purge any players possible not in the chunk list
@@ -45,7 +45,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
              boolean foundToRemove = false;
              for (final ServerPlayerConnection conn : this.seenBy) {
                  if (!ca.spottedleaf.moonrise.common.util.TickThread.isTickThreadFor(conn.getPlayer())) {
-@@ -1164,12 +1169,14 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1168,12 +1173,14 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                      this.removePlayer(player);
                  }
              }
@@ -60,7 +60,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
              if (this.seenBy.isEmpty()) {
                  return;
              }
-@@ -1177,6 +1184,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1181,6 +1188,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  ServerPlayer player = conn.getPlayer();
                  this.removePlayer(player);
              }
@@ -68,7 +68,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
          }
          // Paper end - optimise entity tracker
  
-@@ -1196,6 +1204,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1200,6 +1208,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          }
  
          public void broadcast(Packet<?> packet) {
@@ -76,7 +76,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
              Iterator iterator = this.seenBy.iterator();
  
              while (iterator.hasNext()) {
-@@ -1204,6 +1213,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1208,6 +1217,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  serverplayerconnection.send(packet);
              }
  
@@ -84,7 +84,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
          }
  
          public void broadcastAndSend(Packet<?> packet) {
-@@ -1215,6 +1225,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1219,6 +1229,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          }
  
          public void broadcastRemoved() {
@@ -92,7 +92,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
              Iterator iterator = this.seenBy.iterator();
  
              while (iterator.hasNext()) {
-@@ -1223,14 +1234,17 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1227,14 +1238,17 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  this.serverEntity.removePairing(serverplayerconnection.getPlayer());
              }
  
@@ -110,7 +110,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
          }
  
          public void updatePlayer(ServerPlayer player) {
-@@ -1261,6 +1275,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1266,6 +1280,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                      flag = false;
                  }
                  // CraftBukkit end
@@ -118,7 +118,7 @@ index 30137c5d6a5416e9ccd95934d162ebc72516f37d..ff4759cab05e9af6d877d8976c7795cf
                  if (flag) {
                      if (this.seenBy.add(player.connection)) {
                          // Paper start - entity tracking events
-@@ -1273,6 +1288,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1278,6 +1293,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  } else if (this.seenBy.remove(player.connection)) {
                      this.serverEntity.removePairing(player);
                  }

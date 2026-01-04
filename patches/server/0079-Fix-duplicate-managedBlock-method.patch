@@ -5,10 +5,10 @@ Subject: [PATCH] Fix duplicate managedBlock method
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 5264229213aaa8cb93442120b280d37e08592cad..ad415cde4c3119c5fcef6c5665c2c4431f795448 100644
+index 9072b1c71d089f18c9226c3c9429fd01310d7250..42ef0b27b69c3dae6f87be424a9425686ddb380e 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1505,9 +1505,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1513,9 +1513,14 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
      @Override
      public void managedBlock(BooleanSupplier stopCondition) {
@@ -26,7 +26,7 @@ index 5264229213aaa8cb93442120b280d37e08592cad..ad415cde4c3119c5fcef6c5665c2c443
      }
  
      protected void waitUntilNextTick() {
-@@ -1517,18 +1522,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1525,18 +1530,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          });
      }
  

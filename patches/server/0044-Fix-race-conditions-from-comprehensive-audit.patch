@@ -11,7 +11,7 @@ Subject: [PATCH] Fix race conditions from comprehensive audit
 - SimpleCriterionTrigger: Already fixed players with ConcurrentHashMap
 
 diff --git a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
-index cb4d7802bd4460bad62566955cdd213a6be7095d..f8293a7e851d66f502acb5aafa034d6b9bc7497f 100644
+index 8603119c36b899c0f56674532b888cf8956abab4..84ff14e1391c3e10184dbe98f7cd50beade17e43 100644
 --- a/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 +++ b/src/main/java/ca/spottedleaf/moonrise/patches/chunk_system/level/entity/ChunkEntitySlices.java
 @@ -25,6 +25,7 @@ import java.util.ArrayList;
@@ -161,7 +161,7 @@ index fcdd7df6eb460f244a33e6484c6b0e2f53bce06e..35772110e9318df46a2729dbc0b5879b
              LootContext lootContext = null; // EntityPredicate.createContext(player, player); // Paper - Perf: lazily create LootContext for criterions
              List<CriterionTrigger.Listener<T>> list = null;
 diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
-index e7a9ab3c6798f1424f9ecc6e93e289c17c19c041..fc87e3cfff1221a6cbaf3463ce972870f17c776a 100644
+index 702ae75bcf0e6768619511133ab44baf2386f621..8cd8a173ac262ef974c32faf23bffa5072e99ab8 100644
 --- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
 +++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
 @@ -80,7 +80,7 @@ public class PlayerAdvancements {
@@ -240,7 +240,7 @@ index e7a9ab3c6798f1424f9ecc6e93e289c17c19c041..fc87e3cfff1221a6cbaf3463ce972870
  
          if (advancementprogress == null) {
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 5d50eef79406c7bc547bef74cdefae27eef4cbb6..1416cb74b851b344a95afb657d0b53b8c2124cd8 100644
+index 1d6c242d8074e1ab212210c75410d5bd30610de4..241eb01dd800629afd9fd13b9db3b4db643f0920 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -138,7 +138,7 @@ public abstract class PlayerList {
@@ -262,7 +262,7 @@ index 5d50eef79406c7bc547bef74cdefae27eef4cbb6..1416cb74b851b344a95afb657d0b53b8
  
      public PlayerList(MinecraftServer server, LayeredRegistryAccess<RegistryLayer> registryManager, PlayerDataStorage saveHandler, int maxPlayers) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e4e775c7952b820b6780cf4f5cac519749adce38..350c3c1af30f2a584b0ff853198bf56c63711cf1 100644
+index 229b6fe62b50e01fe5549a0b9aae7d8613570fb5..e6ea63e2eaa1a7bf9a28d677a8b6443daa500aa8 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -310,7 +310,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
@@ -274,7 +274,7 @@ index e4e775c7952b820b6780cf4f5cac519749adce38..350c3c1af30f2a584b0ff853198bf56c
      private Level level;
      public double xo;
      public double yo;
-@@ -599,7 +599,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -602,7 +602,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          this.packetPositionCodec = new VecDeltaCodec();
          this.uuid = Mth.createInsecureUUID(this.random);
          this.stringUUID = this.uuid.toString();

@@ -17,10 +17,10 @@ Subject: [PATCH] Fix thread-safety and performance issues
    - Avoids blocking the watchdog timer
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index ca1f933d7d7efc9eca76eeb84a0e9017313ee5ac..f114726019178125f970bf6b706dd82b02c49bc4 100644
+index d3576fae8a780064709d41f1b59d942d4849faeb..286adee64acdb91a83e041ff8033ad745595d4de 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1869,9 +1869,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1877,9 +1877,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          // Confetti start - tick worlds async
          ((io.papermc.paper.threadedregions.scheduler.FoliaGlobalRegionScheduler) Bukkit.getGlobalRegionScheduler()).tick(); // Run global region scheduler async to world ticking

@@ -5,10 +5,10 @@ Subject: [PATCH] Only apply item gravity if not on ground
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
-index 499646ad26d148953abf241d90e053870fedb708..c1ba0da44b40d75cbe76698c69810261397bcefb 100644
+index ffc754aa6ed61f62a0c94e9117f3008d24c0c163..f249c19cc58057f69da0d3068be1abb765b7e037 100644
 --- a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
-@@ -177,7 +177,7 @@ public class ItemEntity extends Entity implements TraceableEntity {
+@@ -175,7 +175,7 @@ public class ItemEntity extends Entity implements TraceableEntity {
              } else if (this.isInLava() && this.getFluidHeight(FluidTags.LAVA) > 0.10000000149011612D) {
                  this.setUnderLavaMovement();
              } else {

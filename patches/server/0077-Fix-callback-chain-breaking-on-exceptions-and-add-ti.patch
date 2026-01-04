@@ -62,10 +62,10 @@ index 212360c13391213f6528f9cf2d05fe207d6231b0..12f968cc968a22bfdedc5ffadff930c5
                  }
              }
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index f114726019178125f970bf6b706dd82b02c49bc4..c7544bddccddb4fd071543506740b3ebaa4d6db8 100644
+index 286adee64acdb91a83e041ff8033ad745595d4de..3bab4447de37ded07dc5ab730eeaaad9007b00f2 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1872,15 +1872,35 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1880,15 +1880,35 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          
          // Wait for all world tick futures to complete while still processing server tasks
          CompletableFuture<Void> allFutures = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));

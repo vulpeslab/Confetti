@@ -7,10 +7,10 @@ Subject: [PATCH] Fix chest interaction and End crystal spawning
 - ImposterProtoChunk.addEntity(): Add entities to ServerLevel directly since LevelChunk.addEntity() is empty
 
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 0750769df8ad3d99a5f6e8f94d5f2909ef1b83a1..be45b19f5d281cf35aa7d615bdabc722248f5919 100644
+index 134ad87eb0cb2bcfe5f8c9c645b2922cf0994cf8..e917de629bd5bf6da10afc7fa6867b578518e95e 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -1593,7 +1593,26 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
+@@ -1610,7 +1610,26 @@ public abstract class Level implements LevelAccessor, AutoCloseable, ca.spottedl
          }
          // Paper end - Perf: Optimize capturedTileEntities lookup
          // CraftBukkit end

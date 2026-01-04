@@ -1,7 +1,7 @@
 # Confetti - AI Agent Context
 
 ## Project Overview
-**Confetti** is a high-performance Minecraft server fork (based on Purpur 1.21) that implements vertical scaling through multithreaded region-based ticking. Similar to Folia but uses a different approach to chunk management and locking.
+**Confetti** is a high-performance Minecraft server fork (based on Purpur 1.21.1) that implements vertical scaling through multithreaded region-based ticking. Similar to Folia but uses a different approach to chunk management and locking.
 
 ## Architecture
 Multi-threaded Purpur fork enabling vertical scaling. Chunks are grouped into **regions** (default 8x8 chunks), and regions are locked during ticking to prevent race conditions between threads. Code executes on chunk's thread, not a main thread.
@@ -50,7 +50,7 @@ Output jar: `build/libs/confetti-paperclip-*-mojmap.jar`
 - **Language:** Java 21+
 - **Build System:** Gradle (using the Paperweight framework)
 - **Base Upstream:** Purpur -> Paper -> Spigot -> Bukkit
-- **Platform:** Minecraft 1.21
+- **Platform:** Minecraft 1.21.1
 
 ### Prerequisites
 - JDK 21 or higher
@@ -100,4 +100,4 @@ java -Dbot.count=150 -Dbot.ip=127.0.0.1 -jar minecraft-stress-test-1.0.0-SNAPSHO
 ```
 
 ## Version Info
-Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.21-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
+Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.21.1-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.

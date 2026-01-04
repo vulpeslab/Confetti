@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: UnlimitedBytes <admin@unlimitedbytes.ovh>
+Date: Sun, 4 Jan 2026 01:37:55 +0100
+Subject: [PATCH] Update spark-paper to available version 1.10.119-SNAPSHOT
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 74e4183a3075a446b1d91772fbaebe29d833b689..99145023a27be3a5841491e7d761008ae96313a7 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -86,7 +86,7 @@ dependencies {
+     // Paper end - Remap reflection
+     // Paper start - spark
+     implementation("me.lucko:spark-api:0.1-20240720.200737-2")
+-    implementation("me.lucko:spark-paper:1.10.105-SNAPSHOT")
++    implementation("me.lucko:spark-paper:1.10.119-SNAPSHOT")
+     // Paper end - spark
+ }
+ 

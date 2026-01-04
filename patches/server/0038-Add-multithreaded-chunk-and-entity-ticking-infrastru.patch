@@ -843,10 +843,10 @@ index 0000000000000000000000000000000000000000..12d7cb9719a8fadd93d2c5abeeacf842
 +    }
 +}
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 1f87a1e4621a9dc3614111821b9439326b2a302a..ca1f933d7d7efc9eca76eeb84a0e9017313ee5ac 100644
+index bd23db5e0283d9c5627424a0cbff276c3a763c01..d3576fae8a780064709d41f1b59d942d4849faeb 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1768,7 +1768,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1776,7 +1776,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          this.server.getScheduler().mainThreadHeartbeat(this.tickCount); // CraftBukkit
          //MinecraftTimings.bukkitSchedulerTimer.stopTiming(); // Spigot // Paper // Purpur
          // Paper start - Folia scheduler API
@@ -855,7 +855,7 @@ index 1f87a1e4621a9dc3614111821b9439326b2a302a..ca1f933d7d7efc9eca76eeb84a0e9017
          getAllLevels().forEach(level -> {
              for (final Entity entity : level.moonrise$getEntityLookup().getAllCopy()) { // Paper - rewrite chunk system
                  if (entity.isRemoved()) {
-@@ -1821,6 +1821,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1829,6 +1829,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
          this.isIteratingOverLevels = true; // Paper - Throw exception on world create while being ticked
          Iterator iterator = this.getAllLevels().iterator(); // Paper - Throw exception on world create while being ticked; move down
@@ -863,7 +863,7 @@ index 1f87a1e4621a9dc3614111821b9439326b2a302a..ca1f933d7d7efc9eca76eeb84a0e9017
          while (iterator.hasNext()) {
              ServerLevel worldserver = (ServerLevel) iterator.next();
              worldserver.hasPhysicsEvent = org.bukkit.event.block.BlockPhysicsEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper - BlockPhysicsEvent
-@@ -1846,7 +1847,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1854,7 +1855,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              try {
                  //worldserver.timings.doTick.startTiming(); // Spigot // Purpur
@@ -876,7 +876,7 @@ index 1f87a1e4621a9dc3614111821b9439326b2a302a..ca1f933d7d7efc9eca76eeb84a0e9017
                  //worldserver.timings.doTick.stopTiming(); // Spigot // Purpur
              } catch (Throwable throwable) {
                  CrashReport crashreport = CrashReport.forThrowable(throwable, "Exception ticking world");
-@@ -1857,10 +1863,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1865,10 +1871,18 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
  
              //this.profiler.pop(); // Purpur
              //this.profiler.pop(); // Purpur
@@ -897,7 +897,7 @@ index 1f87a1e4621a9dc3614111821b9439326b2a302a..ca1f933d7d7efc9eca76eeb84a0e9017
          // MinecraftTimings.connectionTimer.startTiming(); // Spigot // Paper // Purpur
          this.getConnection().tick();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdfa135d3a5 100644
+index 34bc95e034ebd24f0a345a66852956032ddc6371..466c15201069a023de009a5bafc42c4014be3d82 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -148,7 +148,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
@@ -910,7 +910,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
      private final Long2ByteMap chunkTypeCache;
      private final Long2LongMap chunkSaveCooldowns;
      // Paper - rewrite chunk system
-@@ -188,7 +189,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -192,7 +193,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          this.toDrop = new LongOpenHashSet();
          this.tickingGenerated = new AtomicInteger();
          this.playerMap = new PlayerMap();
@@ -920,7 +920,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
          this.chunkTypeCache = new Long2ByteOpenHashMap();
          this.chunkSaveCooldowns = new Long2LongOpenHashMap();
          // Paper - rewrite chunk system
-@@ -853,9 +855,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -857,9 +859,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
      public void addEntity(Entity entity) {
          org.spigotmc.AsyncCatcher.catchOp("entity track"); // Spigot
          // Paper start - ignore and warn about illegal addEntity calls instead of crashing server
@@ -932,7 +932,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
              return;
          }
          // Paper end - ignore and warn about illegal addEntity calls instead of crashing server
-@@ -868,24 +870,25 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -872,24 +874,25 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              if (i != 0) {
                  int j = entitytypes.updateInterval();
  
@@ -961,7 +961,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
  
                          while (objectiterator.hasNext()) {
                              ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) objectiterator.next();
-@@ -905,7 +908,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -909,7 +912,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          org.spigotmc.AsyncCatcher.catchOp("entity untrack"); // Spigot
          if (entity instanceof ServerPlayer entityplayer) {
              this.updatePlayerStatus(entityplayer, false);
@@ -970,7 +970,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
  
              while (objectiterator.hasNext()) {
                  ChunkMap.TrackedEntity playerchunkmap_entitytracker = (ChunkMap.TrackedEntity) objectiterator.next();
-@@ -914,9 +917,10 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -918,9 +921,10 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
          }
  
@@ -982,7 +982,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
              playerchunkmap_entitytracker1.broadcastRemoved();
          }
  
-@@ -956,6 +960,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -960,6 +964,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
      // Paper end - optimise entity tracker
  
      protected void tick() {
@@ -1007,7 +1007,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
          // Paper start - optimise entity tracker
          if (true) {
              this.newTrackerTick();
-@@ -966,7 +988,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -970,7 +992,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
  
          List<ServerPlayer> list = Lists.newArrayList();
          List<ServerPlayer> list1 = this.level.players();
@@ -1016,7 +1016,7 @@ index 850a5647eb94d9a164a106333ac4fb4c733b6aa6..d04ddeaefad1a79be217d71aceab4bdf
          //this.level.timings.tracker1.startTiming(); // Paper // Purpur
  
          ChunkMap.TrackedEntity playerchunkmap_entitytracker;
-@@ -995,7 +1017,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -999,7 +1021,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          //this.level.timings.tracker1.stopTiming(); // Paper // Purpur
  
          if (!list.isEmpty()) {
@@ -1388,10 +1388,10 @@ index 3eca135ac88221098c29ec5d1e8fadf5441a445e..a9d67dd15b1000972bfc04f5ad8b9bdb
      }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 33b56febc5c0cceb01cabb030b97654d7a4d6bcd..6b9901d28cd250dbfd38d537ca0f1298216beb52 100644
+index ff729616ee8e8f70acf60672aa92c3abdb26427b..f2ce773a9e8c8906f938082dc95c12f34a127256 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -555,6 +555,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -558,6 +558,12 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          }
      }
      // Paper end - optimise entity tracker

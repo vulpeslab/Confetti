@@ -472,7 +472,7 @@ index 42df50c96e78100ab49afcf35b4c8d142223ad41..7858d7927ad55a5f8d915291cd1c1a6c
  import org.bukkit.Warning;
  import org.bukkit.event.Event;
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index bd070fa65b46c4f58bdd014497c20e39e60e8f94..1f87a1e4621a9dc3614111821b9439326b2a302a 100644
+index eac370a3fef38b927352d907895fb2baeea57e28..bd23db5e0283d9c5627424a0cbff276c3a763c01 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -885,8 +885,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -501,7 +501,7 @@ index b2211668ce08e168e9696a61ce51bda8e61f15df..3eca135ac88221098c29ec5d1e8fadf5
  import net.minecraft.world.level.dimension.LevelStem;
  import net.minecraft.world.level.dimension.end.EndDragonFight;
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 689c9832b3ef911ecc1f08e2ba266e7b791a570e..33b56febc5c0cceb01cabb030b97654d7a4d6bcd 100644
+index a9104a329195351be11f12af39b7bfcee0d92b94..ff729616ee8e8f70acf60672aa92c3abdb26427b 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -58,6 +58,7 @@ import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
@@ -512,7 +512,7 @@ index 689c9832b3ef911ecc1f08e2ba266e7b791a570e..33b56febc5c0cceb01cabb030b97654d
  import net.minecraft.network.syncher.EntityDataAccessor;
  import net.minecraft.network.syncher.EntityDataSerializers;
  import net.minecraft.network.syncher.SyncedDataHolder;
-@@ -3938,7 +3939,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -3951,7 +3952,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
  
      // Confetti start - add getExitPortal method
      public Optional<BlockUtil.FoundRectangle> getExitPortal(ServerLevel worldserver, BlockPos blockposition, boolean flag, WorldBorder worldborder, int searchRadius, boolean canCreatePortal, int createRadius) {
@@ -598,7 +598,7 @@ index 022e9675d2297cc379e636214d941ef72376d324..ccd4e54dd856153e60f30ee210b1576d
  
      private static Vec3 findExitPortalXZPosTentative(ServerLevel world, BlockPos pos) {
 diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-index 94e8408904116e2c0aa7eece864f2f416e7ad0b1..27748abc1b790dd5ae4b207ea6cec5ee9a9c8342 100644
+index a7faf75f7d826ae792fe91636c5ff17ff95a1036..a46d91a6f2d7fb26a8f5c497b51031949318621a 100644
 --- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 @@ -14,7 +14,7 @@ import java.util.Optional;
@@ -611,10 +611,10 @@ index 94e8408904116e2c0aa7eece864f2f416e7ad0b1..27748abc1b790dd5ae4b207ea6cec5ee
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtAccounter;
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 8149cb89f7b715364fa67211ec6465f1f49a1fed..50d233364a015ae12097044fec8fb4b806876bfe 100644
+index b5dd59ae55b9f0584bae0c7e3959b3754ff85c7f..e687a21807b9b66becbc7646a3334176ef3b0522 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -1289,8 +1289,8 @@ public final class CraftServer implements Server {
+@@ -1291,8 +1291,8 @@ public final class CraftServer implements Server {
          Preconditions.checkState(this.console.getAllLevels().iterator().hasNext(), "Cannot create additional worlds on STARTUP");
          //Preconditions.checkState(!this.console.isIteratingOverLevels, "Cannot create a world while worlds are being ticked"); // Paper - Cat - Temp disable. We'll see how this goes.
          Preconditions.checkArgument(creator != null, "WorldCreator cannot be null");
@@ -625,7 +625,7 @@ index 8149cb89f7b715364fa67211ec6465f1f49a1fed..50d233364a015ae12097044fec8fb4b8
  
          String name = creator.name();
          ChunkGenerator generator = creator.generator();
-@@ -2586,6 +2586,13 @@ public final class CraftServer implements Server {
+@@ -2588,6 +2588,13 @@ public final class CraftServer implements Server {
          return ca.spottedleaf.moonrise.common.util.TickThread.isTickThread(); // Paper - rewrite chunk system
      }
  

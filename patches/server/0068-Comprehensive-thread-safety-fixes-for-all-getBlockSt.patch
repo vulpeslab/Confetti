@@ -16,7 +16,7 @@ Server thread is NOT a TickThread, so isTickThread() properly identifies when
 we need to use non-blocking *IfLoaded variants.
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 9631e0582f9b478c3a0b65bcb619b01fb1f638e2..01ba1420fbe3ee567d36ed23c0b163af2d99475c 100644
+index 3b0e1ee19498ba3922559635dbf02489b0e60e0e..d22a808e4d00881704c67d6f9332e0276da1c08f 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -1313,7 +1313,10 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
@@ -43,7 +43,7 @@ index 9631e0582f9b478c3a0b65bcb619b01fb1f638e2..01ba1420fbe3ee567d36ed23c0b163af
              boolean flag3 = iblockdata1.getBlock().isPossibleToRespawnInThis(iblockdata1);
  
              return flag2 && flag3 ? Optional.of(new ServerPlayer.RespawnPosAngle(new Vec3((double) pos.getX() + 0.5D, (double) pos.getY() + 0.1D, (double) pos.getZ() + 0.5D), spawnAngle, false, false)) : Optional.empty(); // CraftBukkit
-@@ -1554,7 +1560,11 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+@@ -1553,7 +1559,11 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
  
      @Override
      public Either<net.minecraft.world.entity.player.Player.BedSleepingProblem, Unit> startSleepInBed(BlockPos blockposition, boolean force) {
@@ -56,7 +56,7 @@ index 9631e0582f9b478c3a0b65bcb619b01fb1f638e2..01ba1420fbe3ee567d36ed23c0b163af
          Either<net.minecraft.world.entity.player.Player.BedSleepingProblem, Unit> bedResult = this.getBedResult(blockposition, enumdirection);
  
          if (bedResult.left().orElse(null) == net.minecraft.world.entity.player.Player.BedSleepingProblem.OTHER_PROBLEM) {
-@@ -1681,7 +1691,10 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
+@@ -1680,7 +1690,10 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
          if (!this.touchingUnloadedChunk()) {
              this.checkSupportingBlock(onGround, new Vec3(xDifference, yDifference, zDifference));
              BlockPos blockposition = this.getOnPosLegacy();
@@ -68,117 +68,11 @@ index 9631e0582f9b478c3a0b65bcb619b01fb1f638e2..01ba1420fbe3ee567d36ed23c0b163af
  
              if (this.spawnExtraParticlesOnFall && onGround && this.fallDistance > 0.0F) {
                  Vec3 vec3d = blockposition.getCenter().add(0.0D, 0.5D, 0.0D);
-diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index eddd7d921111ad8427629efc365ef724ea9bcbcc..a8a825b87abd857277cb951b5c0b48ea40bea15a 100644
---- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-+++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -148,6 +148,7 @@ import net.minecraft.world.entity.ExperienceOrb;
- import net.minecraft.world.entity.HasCustomInventoryScreen;
- import net.minecraft.world.entity.LivingEntity;
- import net.minecraft.world.entity.Mob;
-+import net.minecraft.world.level.chunk.LevelChunk; // Confetti
- import net.minecraft.world.entity.MoverType;
- import net.minecraft.world.entity.PlayerRideableJumping;
- import net.minecraft.world.entity.RelativeMovement;
-@@ -713,7 +714,28 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
-     }
- 
-     private boolean noBlocksAround(Entity entity) {
--        return entity.level().getBlockStates(entity.getBoundingBox().inflate(0.0625D).expandTowards(0.0D, -0.55D, 0.0D)).allMatch(BlockBehaviour.BlockStateBase::isAir);
-+        // Confetti start - manually check blocks to avoid sync chunk loading
-+        AABB box = entity.getBoundingBox().inflate(0.0625D).expandTowards(0.0D, -0.55D, 0.0D);
-+        int minX = Mth.floor(box.minX);
-+        int maxX = Mth.floor(box.maxX);
-+        int minY = Mth.floor(box.minY);
-+        int maxY = Mth.floor(box.maxY);
-+        int minZ = Mth.floor(box.minZ);
-+        int maxZ = Mth.floor(box.maxZ);
-+        
-+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-+        for (int x = minX; x <= maxX; x++) {
-+            for (int y = minY; y <= maxY; y++) {
-+                for (int z = minZ; z <= maxZ; z++) {
-+                    pos.set(x, y, z);
-+                    BlockState state = entity.level().getBlockStateIfLoaded(pos);
-+                    if (state == null) return false; // Can't verify, assume not safe
-+                    if (!state.isAir()) return false;
-+                }
-+            }
-+        }
-+        return true;
-+        // Confetti end
-     }
- 
-     @Override
-@@ -895,7 +917,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
- 
-             if (commandblocklistenerabstract != null) {
-                 CommandBlockEntity.Mode tileentitycommand_type = tileentitycommand.getMode();
--                BlockState iblockdata = this.player.level().getBlockState(blockposition);
-+                // Confetti start - use thread-safe variant
-+                BlockState iblockdata = this.player.level().getBlockStateIfLoaded(blockposition);
-+                if (iblockdata == null) return;
-+                // Confetti end
-                 Direction enumdirection = (Direction) iblockdata.getValue(CommandBlock.FACING);
-                 BlockState iblockdata1;
- 
-@@ -916,7 +941,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
-                 if (iblockdata3 != iblockdata) {
-                     this.player.level().setBlock(blockposition, iblockdata3, 2);
-                     tileentity.setBlockState(iblockdata3);
--                    this.player.level().getChunkAt(blockposition).setBlockEntity(tileentity);
-+                    // Confetti start - use thread-safe variant
-+                    LevelChunk chunk = this.player.level().getChunkIfLoaded(blockposition);
-+                    if (chunk != null) chunk.setBlockEntity(tileentity);
-+                    // Confetti end
-                 }
- 
-                 commandblocklistenerabstract.setCommand(s);
-@@ -1025,7 +1053,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
-         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.serverLevel());
-         if (this.player.canUseGameMasterBlocks()) {
-             BlockPos blockposition = packet.getPos();
--            BlockState iblockdata = this.player.level().getBlockState(blockposition);
-+            // Confetti start - use thread-safe variant
-+            BlockState iblockdata = this.player.level().getBlockStateIfLoaded(blockposition);
-+            if (iblockdata == null) return;
-+            // Confetti end
-             BlockEntity tileentity = this.player.level().getBlockEntity(blockposition);
- 
-             if (tileentity instanceof StructureBlockEntity) {
-@@ -1083,7 +1114,10 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
-         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.serverLevel());
-         if (this.player.canUseGameMasterBlocks()) {
-             BlockPos blockposition = packet.getPos();
--            BlockState iblockdata = this.player.level().getBlockState(blockposition);
-+            // Confetti start - use thread-safe variant
-+            BlockState iblockdata = this.player.level().getBlockStateIfLoaded(blockposition);
-+            if (iblockdata == null) return;
-+            // Confetti end
-             BlockEntity tileentity = this.player.level().getBlockEntity(blockposition);
- 
-             if (tileentity instanceof JigsawBlockEntity) {
-@@ -1959,7 +1993,14 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
-                     int i = this.player.level().getMaxBuildHeight();
- 
-                     if (blockposition.getY() < i) {
--                        if (this.awaitingPositionFromClient == null && (worldserver.mayInteract(this.player, blockposition) || (worldserver.paperConfig().spawn.allowUsingSignsInsideSpawnProtection && worldserver.getBlockState(blockposition).getBlock() instanceof net.minecraft.world.level.block.SignBlock))) { // Paper - Allow using signs inside spawn protection
-+                        // Confetti start - use thread-safe variant for sign check
-+                        boolean canInteract = this.awaitingPositionFromClient == null && worldserver.mayInteract(this.player, blockposition);
-+                        if (!canInteract && worldserver.paperConfig().spawn.allowUsingSignsInsideSpawnProtection) {
-+                            BlockState signState = worldserver.getBlockStateIfLoaded(blockposition);
-+                            canInteract = signState != null && signState.getBlock() instanceof net.minecraft.world.level.block.SignBlock;
-+                        }
-+                        if (canInteract) { // Paper - Allow using signs inside spawn protection
-+                        // Confetti end
-                             InteractionResult enuminteractionresult = this.player.gameMode.useItemOn(this.player, worldserver, itemstack, enumhand, movingobjectpositionblock);
- 
-                             if (enuminteractionresult.consumesAction()) {
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 1416cb74b851b344a95afb657d0b53b8c2124cd8..246cefc0ab803ce3054b196b84fca2769b4945d0 100644
+index 241eb01dd800629afd9fd13b9db3b4db643f0920..673b18c4077a97b1722fabca57fac79499cbacc2 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -899,15 +899,17 @@ public abstract class PlayerList {
+@@ -903,15 +903,17 @@ public abstract class PlayerList {
          entityplayer1.setHealth(entityplayer1.getHealth());
          if (!flag) {
              BlockPos blockposition = BlockPos.containing(dimensiontransition.pos());

@@ -12,10 +12,45 @@ These methods now use getFluidIfLoaded on server levels to prevent deadlocks.
 If the chunk is not loaded, the fluid check is safely skipped.
 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index d1e644f4b749db22f565a943a943f9b613c3f177..6f0c2d5099b7724493cbf84db562c0a7b19896ca 100644
+index 963d4e3651b37d4060ab927f0f07c22943829c0f..6f0c2d5099b7724493cbf84db562c0a7b19896ca 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -1951,7 +1951,16 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -435,9 +435,6 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     private UUID originWorld;
+     public boolean freezeLocked = false; // Paper - Freeze Tick Lock API
+     public boolean fixedPose = false; // Paper - Expand Pose API
+-    public boolean activatedPriorityReset = false; // Pufferfish - DAB
+-    public int activatedPriority = gg.pufferfish.pufferfish.PufferfishConfig.maximumActivationPrio; // Pufferfish - DAB (golf score)
+-    public final BlockPos.MutableBlockPos cachedBlockPos = new BlockPos.MutableBlockPos(); // Pufferfish - reduce entity allocations
+     public @Nullable Boolean immuneToFire = null; // Purpur - Fire immune API
+ 
+     public void setOrigin(@javax.annotation.Nonnull Location location) {
+@@ -890,12 +887,6 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     public void tick() {
+-        // Pufferfish start - entity TTL
+-        if (type != EntityType.PLAYER && type.ttl >= 0 && this.tickCount >= type.ttl) {
+-            discard(org.bukkit.event.entity.EntityRemoveEvent.Cause.DISCARD); // Purpur
+-            return;
+-        }
+-        // Pufferfish end - entity TTL
+         this.baseTick();
+     }
+ 
+@@ -982,10 +973,8 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     public void checkBelowWorld() {
+-        if (!this.level.getWorld().isVoidDamageEnabled()) return; // Paper - check if void damage is enabled on the world
+-
+         // Paper start - Configurable nether ceiling damage
+-        if (this.getY() < (double) (this.level.getMinBuildHeight() + this.level.getWorld().getVoidDamageMinBuildHeightOffset())  || (this.level.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER // Paper - use configured min build height offset
++        if (this.getY() < (double) (this.level.getMinBuildHeight() + level().purpurConfig.voidDamageHeight) || (this.level.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER // Purpur
+             && this.level.paperConfig().environment.netherCeilingVoidDamageHeight.test(v -> this.getY() >= v)
+             && (!(this instanceof Player player) || !player.getAbilities().invulnerable))) {
+             // Paper end - Configurable nether ceiling damage
+@@ -1962,7 +1951,16 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          if (this.isSwimming()) {
              this.setSwimming(this.isSprinting() && this.isInWater() && !this.isPassenger());
          } else {
@@ -33,7 +68,7 @@ index d1e644f4b749db22f565a943a943f9b613c3f177..6f0c2d5099b7724493cbf84db562c0a7
          }
  
      }
-@@ -2002,7 +2011,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -2013,7 +2011,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          }
  
          BlockPos blockposition = BlockPos.containing(this.getX(), d0, this.getZ());
@@ -53,23 +88,189 @@ index d1e644f4b749db22f565a943a943f9b613c3f177..6f0c2d5099b7724493cbf84db562c0a7
          double d1 = (double) ((float) blockposition.getY() + fluid.getHeight(this.level(), blockposition));
  
          if (d1 > d0) {
-@@ -4577,12 +4597,18 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -2860,9 +2869,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+             this(stack.getItem(), org.bukkit.craftbukkit.inventory.CraftItemStack.asCraftMirror(stack), dropConsumer);
+         }
+ 
+-        public void runConsumer(final java.util.function.Consumer<org.bukkit.inventory.ItemStack> fallback) {
++        public void runConsumer(final org.bukkit.World fallbackWorld, final Location fallbackLoc) {
+             if (this.dropConsumer == null || org.bukkit.craftbukkit.inventory.CraftItemType.bukkitToMinecraft(this.stack.getType()) != this.item) {
+-                fallback.accept(this.stack);
++                fallbackWorld.dropItem(fallbackLoc, this.stack);
+             } else {
+                 this.dropConsumer.accept(org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(this.stack));
+             }
+@@ -3829,25 +3838,23 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                 }
+                 to = teleEvent.getTo();
+                 // Paper start - Call EntityPortalExitEvent
+-                if (this.portalProcess != null) { // if in a portal
+-                    CraftEntity bukkitEntity = this.getBukkitEntity();
+-                    Vec3 velocity = teleportTarget.speed();
+-                    org.bukkit.event.entity.EntityPortalExitEvent event = new org.bukkit.event.entity.EntityPortalExitEvent(
+-                        bukkitEntity,
+-                        bukkitEntity.getLocation(), to.clone(),
+-                        bukkitEntity.getVelocity(), org.bukkit.craftbukkit.util.CraftVector.toBukkit(velocity)
+-                    );
+-                    event.callEvent();
+-
+-                    if (!event.isCancelled() && event.getTo() != null) {
+-                        to = event.getTo().clone();
+-                        velocity = org.bukkit.craftbukkit.util.CraftVector.toNMS(event.getAfter());
+-                    }
+-                    teleportTarget = new DimensionTransition(((CraftWorld) to.getWorld()).getHandle(), CraftLocation.toVec3D(to), velocity, to.getYaw(), to.getPitch(), teleportTarget.missingRespawnBlock(), teleportTarget.postDimensionTransition(), teleportTarget.cause());
+-                }
++                CraftEntity bukkitEntity = this.getBukkitEntity();
++                Vec3 velocity = teleportTarget.speed();
++                org.bukkit.event.entity.EntityPortalExitEvent event = new org.bukkit.event.entity.EntityPortalExitEvent(
++                    bukkitEntity,
++                    bukkitEntity.getLocation(), to.clone(),
++                    bukkitEntity.getVelocity(), org.bukkit.craftbukkit.util.CraftVector.toBukkit(velocity)
++                );
++                event.callEvent();
+                 if (this.isRemoved()) {
+                     return null;
+                 }
++
++                if (!event.isCancelled() && event.getTo() != null) {
++                    to = event.getTo().clone();
++                    velocity = org.bukkit.craftbukkit.util.CraftVector.toNMS(event.getAfter());
++                }
++                teleportTarget = new DimensionTransition(((CraftWorld) to.getWorld()).getHandle(), CraftLocation.toVec3D(to), velocity, to.getYaw(), to.getPitch(), teleportTarget.missingRespawnBlock(), teleportTarget.postDimensionTransition(), teleportTarget.cause());
+                 // Paper end - Call EntityPortalExitEvent
+                 // CraftBukkit end
+                 ServerLevel worldserver1 = teleportTarget.newLevel();
+@@ -3874,8 +3881,8 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                 if (entity2 != null) {
+                     if (this != entity2) {
+                         // Paper start - Fix item duplication and teleport issues
+-                        if (this instanceof Leashable leashable) {
+-                            leashable.dropLeash(true, true); // Paper drop lead
++                        if (this instanceof Mob) {
++                            ((Mob) this).dropLeash(true, true); // Paper drop lead
+                         }
+                         // Paper end - Fix item duplication and teleport issues
+                         entity2.restoreFrom(this);
+@@ -3923,7 +3930,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     public void removeAfterChangingDimensions() { // Confetti - make public
+         this.setRemoved(Entity.RemovalReason.CHANGED_DIMENSION, null); // CraftBukkit - add Bukkit remove cause
+-        if (this instanceof Leashable leashable && leashable.isLeashed()) { // Paper - only call if it is leashed
++        if (this instanceof Leashable leashable) {
+             // Paper start - Expand EntityUnleashEvent
+             final EntityUnleashEvent event = new EntityUnleashEvent(this.getBukkitEntity(), UnleashReason.UNKNOWN, false); // CraftBukkit
+             event.callEvent();
+@@ -4574,80 +4581,37 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     // Purpur end
+ 
+     public boolean updateFluidHeightAndDoFluidPushing(TagKey<Fluid> tag, double speed) {
+-        if (false && this.touchingUnloadedChunk()) { // Pufferfish - cost of a lookup here is the same cost as below, so skip
++        if (this.touchingUnloadedChunk()) {
+             return false;
+         } else {
+             AABB axisalignedbb = this.getBoundingBox().deflate(0.001D);
+-            // Pufferfish start - rename
+-            int minBlockX = Mth.floor(axisalignedbb.minX);
+-            int maxBlockX = Mth.ceil(axisalignedbb.maxX);
+-            int minBlockY = Mth.floor(axisalignedbb.minY);
+-            int maxBlockY = Mth.ceil(axisalignedbb.maxY);
+-            int minBlockZ = Mth.floor(axisalignedbb.minZ);
+-            int maxBlockZ = Mth.ceil(axisalignedbb.maxZ);
+-            // Pufferfish end
++            int i = Mth.floor(axisalignedbb.minX);
++            int j = Mth.ceil(axisalignedbb.maxX);
++            int k = Mth.floor(axisalignedbb.minY);
++            int l = Mth.ceil(axisalignedbb.maxY);
++            int i1 = Mth.floor(axisalignedbb.minZ);
++            int j1 = Mth.ceil(axisalignedbb.maxZ);
+             double d1 = 0.0D;
+             boolean flag = this.isPushedByFluid();
+             boolean flag1 = false;
              Vec3 vec3d = Vec3.ZERO;
              int k1 = 0;
              BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+-
+-            // Pufferfish start - based off CollisionUtil.getCollisionsForBlocksOrWorldBorder
+-            final int minSection = ca.spottedleaf.moonrise.common.util.WorldUtil.getMinSection(this.level());
+-            final int maxSection = ca.spottedleaf.moonrise.common.util.WorldUtil.getMaxSection(this.level());
+-            final int minBlock = minSection << 4;
+-            final int maxBlock = (maxSection << 4) | 15;
+-
+-            // special cases:
+-            if (minBlockY > maxBlock || maxBlockY < minBlock) {
+-                // no point in checking
+-                return false;
+-            }
+-
+-            int minYIterate = Math.max(minBlock, minBlockY);
+-            int maxYIterate = Math.min(maxBlock, maxBlockY);
+-
+-            int minChunkX = minBlockX >> 4;
+-            int maxChunkX = maxBlockX >> 4;
+-
+-            int minChunkZ = minBlockZ >> 4;
+-            int maxChunkZ = maxBlockZ >> 4;
+-
+-            for (int currChunkZ = minChunkZ; currChunkZ <= maxChunkZ; ++currChunkZ) {
+-                int minZ = currChunkZ == minChunkZ ? minBlockZ & 15 : 0; // coordinate in chunk
+-                int maxZ = currChunkZ == maxChunkZ ? maxBlockZ & 15 : 16; // coordinate in chunk
+-
+-                for (int currChunkX = minChunkX; currChunkX <= maxChunkX; ++currChunkX) {
+-                    int minX = currChunkX == minChunkX ? minBlockX & 15 : 0; // coordinate in chunk
+-                    int maxX = currChunkX == maxChunkX ? maxBlockX & 15 : 16; // coordinate in chunk
+-
+-                    net.minecraft.world.level.chunk.ChunkAccess chunk = this.level().getChunkIfLoadedImmediately(currChunkX, currChunkZ);
+-                    if (chunk == null) {
+-                        return false; // if we're touching an unloaded chunk then it's false
+-                    }
+-
+-                    net.minecraft.world.level.chunk.LevelChunkSection[] sections = chunk.getSections();
+-
+-                    for (int currY = minYIterate; currY < maxYIterate; ++currY) {
+-                        net.minecraft.world.level.chunk.LevelChunkSection section = sections[(currY >> 4) - minSection];
+-
+-                        if (section == null || section.hasOnlyAir() || section.fluidStateCount == 0) { // if no fluids, nothing in this section
+-                            // empty
+-                            // skip to next section
+-                            currY = (currY & ~(15)) + 15; // increment by 15: iterator loop increments by the extra one
+-                            continue;
+-                        }
+-
+-                        net.minecraft.world.level.chunk.PalettedContainer<BlockState> blocks = section.states;
+-
+-                        for (int currZ = minZ; currZ < maxZ; ++currZ) {
+-                            for (int currX = minX; currX < maxX; ++currX) {
+-                                FluidState fluid = blocks.get(currX & 15, currY & 15, currZ & 15).getFluidState();
 +            // Confetti start - use getFluidIfLoaded to prevent deadlocks in multithreaded environment
 +            final boolean useIfLoaded = this.level() instanceof net.minecraft.server.level.ServerLevel;
 +            // Confetti end
- 
-             for (int l1 = i; l1 < j; ++l1) {
-                 for (int i2 = k; i2 < l; ++i2) {
-                     for (int j2 = i1; j2 < j1; ++j2) {
-                         blockposition_mutableblockposition.set(l1, i2, j2);
--                        FluidState fluid = this.level().getFluidState(blockposition_mutableblockposition);
++
++            for (int l1 = i; l1 < j; ++l1) {
++                for (int i2 = k; i2 < l; ++i2) {
++                    for (int j2 = i1; j2 < j1; ++j2) {
++                        blockposition_mutableblockposition.set(l1, i2, j2);
 +                        // Confetti start - use getFluidIfLoaded to prevent deadlocks
 +                        FluidState fluid = useIfLoaded ? this.level().getFluidIfLoaded(blockposition_mutableblockposition) : this.level().getFluidState(blockposition_mutableblockposition);
 +                        if (fluid == null) continue; // Chunk not loaded, skip
 +                        // Confetti end
  
                          if (fluid.is(tag)) {
-                             double d2 = (double) ((float) i2 + fluid.getHeight(this.level(), blockposition_mutableblockposition));
+-                            blockposition_mutableblockposition.set((currChunkX << 4) + currX, currY, (currChunkZ << 4) + currZ);
+-                            double d2 = (double) ((float) currY + fluid.getHeight(this.level(), blockposition_mutableblockposition));
++                            double d2 = (double) ((float) i2 + fluid.getHeight(this.level(), blockposition_mutableblockposition));
+ 
+                             if (d2 >= axisalignedbb.minY) {
+                                 flag1 = true;
+@@ -4669,12 +4633,9 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                                 // CraftBukkit end
+                             }
+                         }
+-                            }
+-                        }
+                     }
+                 }
+             }
+-            // Pufferfish end
+ 
+             if (vec3d.length() > 0.0D) {
+                 if (k1 > 0) {

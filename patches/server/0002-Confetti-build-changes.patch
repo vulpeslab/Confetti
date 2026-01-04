@@ -4,30 +4,6 @@ Date: Mon, 15 Nov 2021 02:34:43 +1000
 Subject: [PATCH] Confetti build changes
 
 
-diff --git a/build.gradle.kts b/build.gradle.kts
-index f839d03b429195aec1a0044426ad8b0497240314..cf67a958aedee0dac8b33e12e23d3e02148dccdc 100644
---- a/build.gradle.kts
-+++ b/build.gradle.kts
-@@ -96,14 +96,14 @@ tasks.jar {
-         val gitBranch = git("rev-parse", "--abbrev-ref", "HEAD").getText().trim() // Paper
-         attributes(
-             "Main-Class" to "org.bukkit.craftbukkit.Main",
--            "Implementation-Title" to "Purpur", // Purpur
-+            "Implementation-Title" to "Confetti", // Purpur // Confetti
-             "Implementation-Version" to implementationVersion,
-             "Implementation-Vendor" to date, // Paper
--            "Specification-Title" to "Purpur", // Purpur
-+            "Specification-Title" to "Confetti", // Purpur // Confetti
-             "Specification-Version" to project.version,
--            "Specification-Vendor" to "Purpur Team", // Purpur
--            "Brand-Id" to "purpurmc:purpur", // Purpur
--            "Brand-Name" to "Purpur", // Purpur
-+            "Specification-Vendor" to "Confetti Team", // Purpur // Confetti
-+            "Brand-Id" to "confetti:confetti", // Purpur // Confetti
-+            "Brand-Name" to "Confetti", // Purpur // Confetti
-             "Build-Number" to (build ?: ""),
-             "Build-Time" to Instant.now().toString(),
-             "Git-Branch" to gitBranch, // Paper
 diff --git a/build.gradle.kts.rej b/build.gradle.kts.rej
 new file mode 100644
 index 0000000000000000000000000000000000000000..6a30e45fbc2a4eff679859edd5c850162fe725df
@@ -112,10 +88,10 @@ index 6d36fc6d8e22d9b68dea3830f6ecc8763184c343..b3e2c841d91d7de4881b9c3dd8ea8450
              }
          } catch (final IOException e) {
 diff --git a/src/main/java/com/destroystokyo/paper/console/PaperConsole.java b/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
-index 3cb56595822799926a8141e60a42f5d1edfc6de5..06cc8757ba6dd73481c1e7a1e8ce9e2abd2c18f1 100644
+index 90b3526479320064378f2cde6c2f2b8e48a59ba6..f2d59d66aa71294afc3c92e4f8068a578c406b0c 100644
 --- a/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
 +++ b/src/main/java/com/destroystokyo/paper/console/PaperConsole.java
-@@ -17,7 +17,7 @@ public final class PaperConsole extends SimpleTerminalConsole {
+@@ -20,7 +20,7 @@ public final class PaperConsole extends SimpleTerminalConsole {
      @Override
      protected LineReader buildReader(LineReaderBuilder builder) {
          builder
@@ -125,13 +101,13 @@ index 3cb56595822799926a8141e60a42f5d1edfc6de5..06cc8757ba6dd73481c1e7a1e8ce9e2a
                  .completer(new ConsoleCommandCompleter(this.server))
                  .option(LineReader.Option.COMPLETE_IN_WORD, true);
 diff --git a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
-index a6e5950b5875cafd734300cdfbf58f5d3736f3c8..5692817d2f12a96d19c602e2167a08ee1fa40f2f 100644
+index 3099c21ee589acf6edff5903a23673adf489024f..69a65b9ec2d5b2b77c8b17308715862e920613d4 100644
 --- a/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
 +++ b/src/main/java/io/papermc/paper/ServerBuildInfoImpl.java
-@@ -31,7 +31,7 @@ public record ServerBuildInfoImpl(
-     private static final String ATTRIBUTE_GIT_COMMIT = "Git-Commit";
+@@ -32,7 +32,7 @@ public record ServerBuildInfoImpl(
  
      private static final String BRAND_PAPER_NAME = "Paper";
+     private static final String BRAND_PUFFERFISH_NAME = "Pufferfish"; // Purpur
 -    private static final String BRAND_PURPUR_NAME = "Purpur"; // Purpur
 +    private static final String BRAND_PURPUR_NAME = "Confetti"; // Purpur // Confetti
  

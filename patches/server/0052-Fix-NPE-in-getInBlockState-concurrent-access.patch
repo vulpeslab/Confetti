@@ -8,10 +8,10 @@ Subject: [PATCH] Fix NPE in getInBlockState concurrent access
 - Use getInBlockStateSafe() in all block state checks that could NPE in concurrent contexts
 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index f14f89220ed40f64597e8aa998ed4c30936b4b80..c1627213177cfa59c5816c64ac8e94666b77d052 100644
+index d68799ca54a7992a414646a109058d90e7a1bf36..3818190f8e6aac39d8a8e67d111d5f59ba0822c1 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -1916,7 +1916,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -1927,7 +1927,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
      }
  
      public boolean isInBubbleColumn() {
@@ -20,7 +20,7 @@ index f14f89220ed40f64597e8aa998ed4c30936b4b80..c1627213177cfa59c5816c64ac8e9466
      }
  
      public boolean isInWaterOrRain() {
-@@ -4688,6 +4688,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+@@ -4753,6 +4753,13 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
          return this.inBlockState;
      }
  

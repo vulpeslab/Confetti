@@ -5,7 +5,7 @@
 **Confetti is in public beta.** Most features work for most players most of
 the time, however things can occasionally break.
 
-[Purpur](https://github.com/PurpurMC/Purpur) 1.21 fork that brings vertical scaling to Minecraft through multithreaded region-based ticking.
+[Purpur](https://github.com/PurpurMC/Purpur) 1.21.1 fork that brings vertical scaling to Minecraft through multithreaded region-based ticking.
 
 Confetti:
 
@@ -61,7 +61,7 @@ repositories {
 }
 
 dependencies {
-  compileOnly "com.vulpeslab.confetti:confetti-api:1.21-R0.1-SNAPSHOT"
+  compileOnly "com.vulpeslab.confetti:confetti-api:1.21.1-R0.1-SNAPSHOT"
 }
 ```
 
@@ -78,7 +78,7 @@ Or in your pom.xml:
     <dependency>
         <groupId>com.vulpeslab.confetti</groupId>
         <artifactId>confetti-api</artifactId>
-        <version>1.21-R0.1-SNAPSHOT</version>
+        <version>1.21.1-R0.1-SNAPSHOT</version>
     </dependency>
 </dependencies>
 ```

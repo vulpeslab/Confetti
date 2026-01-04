@@ -36,10 +36,10 @@ index 0000000000000000000000000000000000000000..d991df9523676ab7ba90f45ecae3ea9d
 +}
 \ No newline at end of file
 diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
-index 4a870c63cf240c4fa89534bf3ec1b06393efb967..6c3846695dfb84f7c2659dc2bc85249fabd82274 100644
+index 3a71f8fe73a2309f57cb06dedf204d3e37b46b03..af4ae78f80634d1797e269b2eff02288298e5def 100644
 --- a/src/main/java/org/bukkit/Bukkit.java
 +++ b/src/main/java/org/bukkit/Bukkit.java
-@@ -2905,6 +2905,14 @@ public final class Bukkit {
+@@ -2916,6 +2916,14 @@ public final class Bukkit {
          return server.isOwnedByCurrentRegion(entity);
      }
      // Paper end - Folia region threading API
@@ -55,10 +55,10 @@ index 4a870c63cf240c4fa89534bf3ec1b06393efb967..6c3846695dfb84f7c2659dc2bc85249f
      @NotNull
      public static Server.Spigot spigot() {
 diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
-index 1d594c256200d46882fafce5d2b33e60f0fa3a59..6773c708593399745688b5f415b138d55c3a6028 100644
+index eb29794f6ca2efc9cde4dd1685822f9a3a73f3b9..d420fe1eef88d8970b9dc226afb51612e4caed64 100644
 --- a/src/main/java/org/bukkit/Server.java
 +++ b/src/main/java/org/bukkit/Server.java
-@@ -2555,6 +2555,12 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+@@ -2566,6 +2566,12 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
       */
      boolean isOwnedByCurrentRegion(@NotNull Entity entity);
      // Paper end - Folia region threading API

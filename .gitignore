@@ -58,3 +58,4 @@ confetti.jar
 # Test Server
 test-server/
 !test-server/start.sh
+minecraft-stress-test-1.0.0-SNAPSHOT-jar-with-dependencies.jar

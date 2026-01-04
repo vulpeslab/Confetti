@@ -180,7 +180,7 @@ index a4de3e130cf9615b068fa671f717ad84784edb11..9284fff729589d99bbc373c40e68b159
      }
  
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 94bdf8a7803002da1bb570c20b6b80bcf9e364de..c3e3208be72ea03ae9b666d3e982b30116b78711 100644
+index b6a50c379067b2737d7c317c57230691f7c46452..51f021cbca35bd4d9a493222be08425b6de6c4b6 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
 @@ -631,7 +631,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
@@ -205,10 +205,10 @@ index 01efbc507b3d58f13f78ee286f93df40cdc3f0cb..e66422016d7c3ce76aae2d696e4d43fa
  import net.minecraft.util.thread.BlockableEventLoop;
  
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index c7544bddccddb4fd071543506740b3ebaa4d6db8..b4cd75f5e6fd1eb68f6758fb6be5fcf71308014c 100644
+index 3bab4447de37ded07dc5ab730eeaaad9007b00f2..9072b1c71d089f18c9226c3c9429fd01310d7250 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1518,6 +1518,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1526,6 +1526,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      @Override
@@ -226,7 +226,7 @@ index c7544bddccddb4fd071543506740b3ebaa4d6db8..b4cd75f5e6fd1eb68f6758fb6be5fcf7
      public void waitForTasks() {
          boolean flag = this.isTickTimeLoggingEnabled();
          long i = flag ? Util.getNanos() : 0L;
-@@ -1553,25 +1564,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1561,25 +1572,22 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      private boolean pollTaskInternal() {
@@ -264,7 +264,7 @@ index c7544bddccddb4fd071543506740b3ebaa4d6db8..b4cd75f5e6fd1eb68f6758fb6be5fcf7
      }
  
      public void doRunTask(TickTask ticktask) { // CraftBukkit - decompile error
-@@ -1622,7 +1630,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1630,7 +1638,6 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
      }
  
      public void tickServer(BooleanSupplier shouldKeepTicking) {
@@ -272,7 +272,7 @@ index c7544bddccddb4fd071543506740b3ebaa4d6db8..b4cd75f5e6fd1eb68f6758fb6be5fcf7
          long i = Util.getNanos();
  
          // Paper start - move oversleep into full server tick
-@@ -1877,30 +1884,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1885,30 +1892,12 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          while (!allFutures.isDone()) {
              // Poll and process pending tasks to keep the server responsive
              this.pollTaskInternal();

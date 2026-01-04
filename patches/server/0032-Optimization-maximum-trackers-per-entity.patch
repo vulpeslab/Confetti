@@ -5,7 +5,7 @@ Subject: [PATCH] Optimization: maximum trackers per entity
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index ff4759cab05e9af6d877d8976c7795cf3bfce3dc..b233f8a4ddd20415e81d92c3d21945ab9d12c305 100644
+index 573d4c7c144bb4a991fa41255d9a277f6e0ca8f9..41f6925c54a992a4320758104ac39cde692fd33d 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -10,6 +10,7 @@ import com.google.common.collect.Queues;
@@ -57,7 +57,7 @@ index ff4759cab05e9af6d877d8976c7795cf3bfce3dc..b233f8a4ddd20415e81d92c3d21945ab
  import org.slf4j.Logger;
  
  // CraftBukkit start
-@@ -1128,13 +1136,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1132,13 +1140,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              this.lastChunkUpdate = currChunkUpdate;
              this.lastTrackedChunk = chunk;
  
@@ -83,7 +83,7 @@ index ff4759cab05e9af6d877d8976c7795cf3bfce3dc..b233f8a4ddd20415e81d92c3d21945ab
              if (lastChunkUpdate != currChunkUpdate || lastTrackedChunk != chunk) {
                  // need to purge any players possible not in the chunk list
                  seenByLock.lock(); try { // Confetti - seenBy thread safety
-@@ -1195,6 +1214,91 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1199,6 +1218,91 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              this.lastSectionPos = SectionPos.of((EntityAccess) entity);
          }
  
@@ -176,7 +176,7 @@ index ff4759cab05e9af6d877d8976c7795cf3bfce3dc..b233f8a4ddd20415e81d92c3d21945ab
              return object instanceof ChunkMap.TrackedEntity ? ((ChunkMap.TrackedEntity) object).entity.getId() == this.entity.getId() : false;
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index b73a8ff02e547cb20aee12b38ed590a9131526b0..94b0c8dc2b3488c6086759bf115743c74d5fe02a 100644
+index d5878384d71c31a5bca24b55dca01d6eb5e9c776..8d2bc1c7fbfb8fa270a256972813c9b2769980e7 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -254,6 +254,7 @@ public class ServerPlayer extends net.minecraft.world.entity.player.Player imple
