@@ -110,7 +110,9 @@ gh workflow run Release --ref <branch>
 gh workflow run Release --ref <branch> -f bump_version=false
 ```
 
-**Important:** The workflow defaults to `bump_version=true`. For initial releases where `gradle.properties` already has `build.1`, you MUST use `-f bump_version=false` to avoid skipping to `build.2`.
+**Important notes:**
+- The workflow defaults to `bump_version=true`. For initial releases where `gradle.properties` already has `build.1`, you MUST use `-f bump_version=false` to avoid skipping to `build.2`.
+- Release notes are written to a file (`release_notes.md`) and passed via `body_path` to the GitHub release action. Never use inline `body` with multiline content in GitHub Actions - newlines get URL-encoded as `%0A` and won't render correctly.
 
 ## Version Info
 Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.21.1-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
