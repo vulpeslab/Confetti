@@ -99,5 +99,18 @@ To test under load, use the Minecraft Stress Test tool:
 java -Dbot.count=150 -Dbot.ip=127.0.0.1 -jar minecraft-stress-test-1.0.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 
+## Release Workflow
+To release a new version via GitHub Actions:
+
+```bash
+# For subsequent releases (increments build number automatically):
+gh workflow run Release --ref <branch>
+
+# For FIRST release of a new MC version (use existing build.1 in gradle.properties):
+gh workflow run Release --ref <branch> -f bump_version=false
+```
+
+**Important:** The workflow defaults to `bump_version=true`. For initial releases where `gradle.properties` already has `build.1`, you MUST use `-f bump_version=false` to avoid skipping to `build.2`.
+
 ## Version Info
 Maven coordinates: `com.vulpeslab.confetti:confetti-api:1.21.1-R0.1-SNAPSHOT` from Clojars. Base Purpur commit in `gradle.properties`.
